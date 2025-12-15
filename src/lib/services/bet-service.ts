@@ -24,6 +24,7 @@ export interface Bet {
     closesAt: any;
     eventDate?: any; // New field for actual event time
     totalPool: number;
+    wagerCount?: number; // Total number of bets placed
     options?: BetOption[]; // For CHOICE
     rangeMin?: number; // For RANGE
     rangeMax?: number; // For RANGE
@@ -131,8 +132,8 @@ export async function placeWager(
 ) {
     const betRef = doc(db, "leagues", leagueId, "bets", betId);
     const memberRef = doc(db, "leagues", leagueId, "members", user.uid);
-    const wagersRef = collection(betRef, "wagers");
-    const newWagerRef = doc(wagersRef);
+    // Use user.uid as the document ID to enforce 1 bet per player and align with frontend fetching
+    const newWagerRef = doc(db, "leagues", leagueId, "bets", betId, "wagers", user.uid);
 
     await runTransaction(db, async (transaction) => {
         const betSnap = await transaction.get(betRef);
@@ -169,9 +170,10 @@ export async function placeWager(
             placedAt: serverTimestamp()
         };
 
-        // Update Bet Pool
+        // Update Bet Pool & Count
         const betUpdates: any = {
-            totalPool: increment(amount)
+            totalPool: increment(amount),
+            wagerCount: increment(1)
         };
 
         if (bet.type === "CHOICE" && typeof selection === "string" && bet.options) {
@@ -358,6 +360,14 @@ export interface DashboardBetInfo {
     question: string;
     status: string;
     closesAt: any;
+    // Extended fields for display
+    type?: BetType;
+    options?: BetOption[];
+    totalPool?: number;
+    rangeUnit?: string;
+    rangeMin?: number;
+    rangeMax?: number;
+    matchDetails?: { homeTeam: string; awayTeam: string; date: string; };
 }
 
 export interface DashboardBetWithWager extends DashboardBetInfo {
@@ -450,6 +460,13 @@ export async function getUserDashboardStats(user: User, leagues: League[]): Prom
                 question: bet.question,
                 status: bet.status,
                 closesAt: bet.closesAt,
+                type: bet.type,
+                options: bet.options,
+                totalPool: bet.totalPool,
+                rangeUnit: bet.rangeUnit,
+                rangeMin: bet.rangeMin,
+                rangeMax: bet.rangeMax,
+                matchDetails: bet.matchDetails,
                 wager: userWager ? {
                     amount: userWager.amount,
                     selection: userWager.selection,

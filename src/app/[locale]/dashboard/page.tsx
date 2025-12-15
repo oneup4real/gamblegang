@@ -12,7 +12,8 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { motion } from "framer-motion";
 import { getUserDashboardStats, DashboardBetWithWager, DashboardStats, dismissBet, clearDismissedSection } from "@/lib/services/bet-service";
-import { Gamepad2, Gavel, TrendingUp, Target, Award, Activity, ExternalLink, ChevronDown, ChevronUp } from "lucide-react";
+import { Gamepad2, Gavel, TrendingUp, Target, Award, Activity, ExternalLink, ChevronDown, ChevronUp, Ticket as TicketIcon } from "lucide-react";
+import { BetTicket } from "@/components/bet-ticket";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, BarChart, Bar } from 'recharts';
 import { format, subDays } from "date-fns";
 
@@ -596,6 +597,11 @@ export default function DashboardPage() {
                                                                         {bet.status}
                                                                     </span>
                                                                     <span className="text-xs text-gray-500 font-bold">{bet.leagueName}</span>
+                                                                    {bet.wager && (
+                                                                        <span className="flex items-center gap-1 text-[10px] font-black uppercase bg-purple-100 text-purple-700 px-2 py-0.5 rounded border border-purple-300">
+                                                                            <TicketIcon className="h-3 w-3" /> Ticket
+                                                                        </span>
+                                                                    )}
                                                                 </div>
                                                                 <p className="font-black text-lg truncate">{bet.question}</p>
                                                                 {bet.closesAt && (
@@ -640,6 +646,43 @@ export default function DashboardPage() {
 
                                                     {isBetExpanded && (
                                                         <div className="border-t-2 border-black p-4 bg-white">
+
+                                                            {/* Show Ticket if Wager exists */}
+                                                            {bet.wager && (
+                                                                <div className="mb-6 flex justify-center">
+                                                                    {(() => {
+                                                                        let sel = String(bet.wager.selection);
+                                                                        let pot = "Pending";
+
+                                                                        // Calculate visual details (Same logic as BetCard)
+                                                                        if (bet.type === "CHOICE" && bet.options) {
+                                                                            const idx = Number(bet.wager.selection);
+                                                                            sel = bet.options[idx]?.text || "Option";
+                                                                            if (bet.options[idx].totalWagered > 0) {
+                                                                                const odds = (bet.totalPool || 0) / bet.options[idx].totalWagered;
+                                                                                pot = `~${(bet.wager.amount * odds).toFixed(0)} pts`;
+                                                                            }
+                                                                        } else if (bet.type === "MATCH" && typeof bet.wager.selection === "object") {
+                                                                            const s = bet.wager.selection as any;
+                                                                            sel = `${s.home} - ${s.away}`;
+                                                                            pot = "Dynamic";
+                                                                        } else if (bet.type === "RANGE") {
+                                                                            sel = `${bet.wager.selection} ${bet.rangeUnit || ""}`;
+                                                                        }
+
+                                                                        return (
+                                                                            <BetTicket
+                                                                                amount={bet.wager.amount}
+                                                                                selectionDisplay={sel}
+                                                                                potential={pot}
+                                                                                // If resolved/won/lost, we could pass status, but BetTicket defaults to ACTIVE/ACCEPTED.
+                                                                                status={bet.wager.status === "WON" ? "WON 🏆" : bet.wager.status === "LOST" ? "LOST" : "ACTIVE"}
+                                                                            />
+                                                                        );
+                                                                    })()}
+                                                                </div>
+                                                            )}
+
                                                             <Link href={`/leagues/${bet.leagueId}`}>
                                                                 <Button className="w-full bg-primary hover:bg-primary/90 text-white font-black border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:translate-y-[-2px] transition-all">
                                                                     View in League <ExternalLink className="ml-2 h-4 w-4" />

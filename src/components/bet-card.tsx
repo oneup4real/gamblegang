@@ -8,6 +8,8 @@ import { Coins, Loader2, Gavel, Wallet, Trophy, BrainCircuit, CheckCircle, Alert
 import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { CoinFlow } from "@/components/animations/coin-flow";
+import { BetTicketAnimation } from "@/components/animations/bet-ticket-animation";
+import { BetTicket } from "@/components/bet-ticket";
 import { AllInModal } from "@/components/all-in-modal";
 import confetti from "canvas-confetti";
 import { useEffect } from "react";
@@ -40,7 +42,8 @@ export function BetCard({ bet, userPoints, userWager, mode, onEdit, onWagerSucce
     const [verifying, setVerifying] = useState(false);
     const [showCoinFlow, setShowCoinFlow] = useState(false);
     const [showAllInModal, setShowAllInModal] = useState(false);
-    const [pendingWagerData, setPendingWagerData] = useState<{ amount: number; prediction: any } | null>(null);
+    const [pendingWagerData, setPendingWagerData] = useState<{ amount: number, prediction: any } | null>(null);
+    const [lastWager, setLastWager] = useState<{ amount: number, potential: string, selectionDisplay: string } | null>(null);
     const [userVote, setUserVote] = useState<"approve" | "reject" | null>(bet.votes?.[user?.uid || ""] || null);
     const [votingLoading, setVotingLoading] = useState(false);
     const [disputeLoading, setDisputeLoading] = useState(false);
@@ -203,6 +206,31 @@ export function BetCard({ bet, userPoints, userWager, mode, onEdit, onWagerSucce
         setLoading(true);
         try {
             await placeWager(bet.leagueId, bet.id, user!, amount, prediction as any);
+            // Prepare ticket data
+            let selectionDisplay = String(prediction);
+            let potentialDisplay = "TBD";
+
+            if (bet.type === "CHOICE" && bet.options) {
+                const idx = Number(prediction);
+                selectionDisplay = bet.options[idx]?.text || "Option";
+                // Estimate based on current odds (approx)
+                if (bet.options[idx].totalWagered > 0) {
+                    const odds = bet.totalPool / bet.options[idx].totalWagered;
+                    potentialDisplay = `~${(amount * odds).toFixed(0)} pts`;
+                }
+            } else if (bet.type === "MATCH") {
+                selectionDisplay = `${prediction.home} - ${prediction.away}`;
+                potentialDisplay = "High Return"; // Dynamic
+            } else if (bet.type === "RANGE") {
+                selectionDisplay = `${prediction} ${bet.rangeUnit || ""}`;
+            }
+
+            setLastWager({
+                amount,
+                selectionDisplay,
+                potential: potentialDisplay
+            });
+
             if (mode === "ZERO_SUM") setWagerAmount("");
             setSelectedOption("");
             setRangeValue("");
@@ -396,7 +424,9 @@ export function BetCard({ bet, userPoints, userWager, mode, onEdit, onWagerSucce
                         </p>
                     )}
                     <p className="text-xs text-muted-foreground mt-1 font-bold">
-                        Pool: {bet.totalPool} pts
+                        {mode === "ZERO_SUM"
+                            ? `Total Pot: ${bet.totalPool} pts`
+                            : `Total Bets: ${bet.wagerCount || 0}`}
                         {bet.eventDate && (
                             <span className="ml-2 bg-yellow-100 text-yellow-800 px-1 border border-black rounded-md">
                                 Kick-off: {new Date(bet.eventDate.seconds * 1000).toLocaleString()}
@@ -429,6 +459,41 @@ export function BetCard({ bet, userPoints, userWager, mode, onEdit, onWagerSucce
                             <span>You Won +{userWager.payout} pts!</span>
                         </motion.div>
                     )}
+                </div>
+            )}
+
+            {/* Active Wager Ticket */}
+            {userWager && (
+                <div className="mb-6 flex justify-center">
+                    {(() => {
+                        let sel = String(userWager.selection);
+                        let pot = "Pending";
+                        if (bet.type === "CHOICE" && bet.options) {
+                            const idx = Number(userWager.selection);
+                            sel = bet.options[idx]?.text || "Option";
+                            if (bet.options[idx].totalWagered > 0) {
+                                const odds = bet.totalPool / bet.options[idx].totalWagered;
+                                pot = `~${(userWager.amount * odds).toFixed(0)} pts`;
+                            }
+                        } else if (bet.type === "MATCH" && typeof userWager.selection === "object") {
+                            // Assuming local shape might differ from strict TS types if using 'any' in places
+                            const s = userWager.selection as any;
+                            sel = `${s.home} - ${s.away}`;
+                            // Use basic 2.0x calculation for display with asterisk
+                            pot = `~${(userWager.amount * 2).toFixed(0)} pts*`;
+                        } else if (bet.type === "RANGE") {
+                            sel = `${userWager.selection} ${bet.rangeUnit || ""}`;
+                        }
+
+                        return (
+                            <BetTicket
+                                amount={userWager.amount}
+                                selectionDisplay={sel}
+                                potential={pot}
+                                explanation={pot.includes("*") ? "* Odds fluctuate based on total pool distribution" : undefined}
+                            />
+                        );
+                    })()}
                 </div>
             )}
 
@@ -619,65 +684,7 @@ export function BetCard({ bet, userPoints, userWager, mode, onEdit, onWagerSucce
                 </div>
             )}
 
-            {/* My Wager Display - GOLDEN TICKET STYLE */}
-            {userWager && (
-                <div className="mt-6 relative mx-auto max-w-sm">
-                    {/* Ticket Perforation Effect */}
-                    <div className="absolute -left-2 top-1/2 -mt-2 h-4 w-4 rounded-full bg-background border-r-2 border-black z-10" />
-                    <div className="absolute -right-2 top-1/2 -mt-2 h-4 w-4 rounded-full bg-background border-l-2 border-black z-10" />
 
-                    <div className="rounded-none border-2 border-black bg-yellow-300 p-0 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] transform rotate-1 hover:rotate-0 transition-transform duration-300">
-                        <div className="border-b-2 border-dashed border-black/50 p-2 flex justify-between items-center bg-yellow-400/50">
-                            <div className="text-[10px] font-black tracking-widest uppercase text-yellow-900 flex items-center gap-1">
-                                <Trophy className="h-3 w-3" /> OFFICIAL WAGER TICKET
-                            </div>
-                            <div className="text-[10px] font-mono font-bold text-black/60">
-                                #{userWager.id.slice(0, 6)}
-                            </div>
-                        </div>
-                        <div className="p-4 flex items-center justify-between">
-                            <div>
-                                <p className="text-xs font-bold text-yellow-800 uppercase tracking-wider mb-1">You Picked</p>
-                                <p className="font-black text-black text-xl leading-none">
-                                    {formatSelection(userWager.selection)}
-                                </p>
-                            </div>
-                            <div className="text-right border-l-2 border-black/10 pl-4">
-                                <p className="text-xs font-bold text-yellow-800 uppercase">Stake</p>
-                                <p className="font-black text-black text-2xl">{userWager.amount}</p>
-                            </div>
-                        </div>
-                        <div className="bg-yellow-100 p-2 border-t-2 border-dashed border-black/50">
-                            {/* Current Odds Display */}
-                            <p className="text-xs font-medium text-yellow-900 mb-1">
-                                Current Odds: <span className="font-black">
-                                    {bet.type === "CHOICE" && bet.options
-                                        ? calculateOdds(bet.totalPool, bet.options[Number(userWager.selection)]?.totalWagered || 1) + "x"
-                                        : bet.type === "MATCH" && typeof userWager.selection === "object" && "home" in userWager.selection
-                                            ? (dynamicMatchOdds[`${userWager.selection.home}-${userWager.selection.away}`] || "2.00") + "x"
-                                            : bet.type === "RANGE"
-                                                ? (dynamicRangeOdds[Number(userWager.selection)] || "2.00") + "x"
-                                                : "2.00x"
-                                    }
-                                </span>
-                            </p>
-                            {/* Return Calculation */}
-                            <p className="text-xs font-medium text-yellow-900">
-                                Est. Return: <span className="font-black">
-                                    {bet.type === "CHOICE" && bet.options
-                                        ? Math.floor(Number(calculateOdds(bet.totalPool, bet.options[Number(userWager.selection)]?.totalWagered || 1)) * userWager.amount).toLocaleString()
-                                        : bet.type === "MATCH" && typeof userWager.selection === "object" && "home" in userWager.selection
-                                            ? Math.floor(Number(dynamicMatchOdds[`${userWager.selection.home}-${userWager.selection.away}`] || "2.00") * userWager.amount).toLocaleString()
-                                            : bet.type === "RANGE"
-                                                ? Math.floor(Number(dynamicRangeOdds[Number(userWager.selection)] || "2.00") * userWager.amount).toLocaleString()
-                                                : (userWager.amount * 2).toLocaleString()
-                                    } pts
-                                </span>
-                            </p>
-                        </div>
-                    </div>
-                </div>
-            )}
 
             {/* DISPUTE BUTTON (For Players during dispute period) */}
             {userWager && bet.disputeDeadline && !bet.disputeActive && bet.status === "PROOFING" && new Date() < bet.disputeDeadline.toDate() && (
@@ -935,6 +942,7 @@ export function BetCard({ bet, userPoints, userWager, mode, onEdit, onWagerSucce
             )}
 
             {showCoinFlow && <CoinFlow onComplete={() => setShowCoinFlow(false)} />}
+            {/* Removed duplicate BetTicketAnimation - Inline ticket is sufficient */}
             <AllInModal
                 isOpen={showAllInModal}
                 amount={pendingWagerData?.amount || 0}
