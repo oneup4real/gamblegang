@@ -1,0 +1,54 @@
+{
+    "Dashboard": {
+        "title": "GambleGang",
+        "yourLeagues": "Deine Ligen",
+        "createLeague": "Liga erstellen",
+        "noLeagues": "Noch keine Ligen",
+        "noLeaguesDesc": "Erstelle eine Liga, um mit deinen Freunden zu wetten.",
+        "signOut": "Abmelden",
+        "settings": "Einstellungen"
+    },
+    "Settings": {
+        "title": "Benutzereinstellungen",
+        "backToDashboard": "Zurück zum Dashboard",
+        "profilePicture": "Profilbild",
+        "uploadImage": "Bild hochladen",
+        "maxSize": "Max. Dateigröße 2MB.",
+        "chooseFromLibrary": "Oder aus der Bibliothek wählen:",
+        "displayName": "Anzeigename (Nickname)",
+        "displayNameDesc": "Dieser Name ist für andere Spieler sichtbar.",
+        "enterNickname": "Gib deinen Nicknamen ein",
+        "language": "Spracheinstellung",
+        "saveChanges": "Änderungen speichern",
+        "saving": "Speichert..."
+    },
+    "Login": {
+        "title": "Willkommen zurück",
+        "description": "Melde dich an, um auf deine Ligen zuzugreifen.",
+        "signInGoogle": "Mit Google anmelden"
+    },
+    "Landing": {
+        "badge": "v1.0 Alpha Zugriff",
+        "title": "GambleGang",
+        "subtitle": "Soziales Wetten für deinen inneren Kreis. Erstelle Ligen, wette auf alles und klettere die Rangliste hoch.",
+        "getStarted": "Loslegen",
+        "signIn": "Anmelden",
+        "features": {
+            "league": {
+                "title": "Ligen-basiert",
+                "desc": "Erstelle private Ligen mit Freunden. Eigene Ränge, eigenes Drama."
+            },
+            "social": {
+                "title": "Soziales Wetten",
+                "desc": "Wette auf Sport, Reality-TV oder wer das Mittagessen bezahlt."
+            },
+            "ai": {
+                "title": "KI-Powered",
+                "desc": "Lass unsere KI faire Quoten generieren und Wetten sofort auswerten."
+            }
+        }
+    },
+    "Common": {
+        "loading": "Laden..."
+    }
+}

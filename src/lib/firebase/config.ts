@@ -15,10 +15,16 @@ const firebaseConfig = {
 };
 
 // Initialize Firebase (singleton pattern)
-const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
+const app = (!getApps().length && firebaseConfig.apiKey)
+    ? initializeApp(firebaseConfig)
+    : (getApps().length ? getApp() : undefined);
 
-export const auth = getAuth(app);
-export const db = getFirestore(app);
-export const storage = getStorage(app);
-export const analytics = typeof window !== "undefined" ? getAnalytics(app) : null;
+// Export services, or throw/mock if app is not initialized
+// We use 'any' to avoid strict type issues during build if app is undefined
+const auth = app ? getAuth(app) : {} as any;
+const db = app ? getFirestore(app) : {} as any;
+const storage = app ? getStorage(app) : {} as any;
+const analytics = (typeof window !== "undefined" && app) ? getAnalytics(app) : null;
+
+export { auth, db, storage, analytics };
 export default app;

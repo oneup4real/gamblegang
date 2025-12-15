@@ -1,0 +1,54 @@
+{
+    "Dashboard": {
+        "title": "GambleGang",
+        "yourLeagues": "Your Leagues",
+        "createLeague": "Create League",
+        "noLeagues": "No leagues yet",
+        "noLeaguesDesc": "Create a league to start betting with your friends.",
+        "signOut": "Sign Out",
+        "settings": "Settings"
+    },
+    "Settings": {
+        "title": "User Settings",
+        "backToDashboard": "Back to Dashboard",
+        "profilePicture": "Profile Picture",
+        "uploadImage": "Upload Image",
+        "maxSize": "Max file size 2MB.",
+        "chooseFromLibrary": "Or choose from library:",
+        "displayName": "Display Name (Nickname)",
+        "displayNameDesc": "This name will be visible to other players.",
+        "enterNickname": "Enter your nickname",
+        "language": "Language Preference",
+        "saveChanges": "Save Changes",
+        "saving": "Saving..."
+    },
+    "Login": {
+        "title": "Welcome Back",
+        "description": "Sign in to access your leagues.",
+        "signInGoogle": "Sign in with Google"
+    },
+    "Landing": {
+        "badge": "v1.0 Alpha Access",
+        "title": "GambleGang",
+        "subtitle": "Social betting for your inner circle. Create leagues, bet on anything, and climb the leaderboard.",
+        "getStarted": "Get Started",
+        "signIn": "Sign In",
+        "features": {
+            "league": {
+                "title": "League Based",
+                "desc": "Create private leagues with your friends. Separate ranks, separate drama."
+            },
+            "social": {
+                "title": "Social Betting",
+                "desc": "Bet on sports, reality TV, or whose turn it is to buy lunch."
+            },
+            "ai": {
+                "title": "AI Powered",
+                "desc": "Let our AI generate balanced odds and resolve ambiguous bets instantly."
+            }
+        }
+    },
+    "Common": {
+        "loading": "Loading..."
+    }
+}

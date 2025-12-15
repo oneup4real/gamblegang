@@ -21,7 +21,7 @@ export async function generateBetIdeas(topic: string) {
 
     try {
         const genAI = new GoogleGenerativeAI(apiKey);
-        const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+        const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
 
         const prompt = `
             Generate 3 creative and distinct betting questions for a social betting league based on the topic: "${topic}".
@@ -47,7 +47,12 @@ export async function generateBetIdeas(topic: string) {
         // Clean up markdown if present
         const cleanText = text.replace(/```json/g, "").replace(/```/g, "").trim();
 
-        return JSON.parse(cleanText);
+        try {
+            return JSON.parse(cleanText);
+        } catch (e) {
+            console.error("Failed to parse AI response:", text);
+            throw e;
+        }
     } catch (error) {
         console.error("AI Generation Error:", error);
         return MOCK_IDEAS; // Fallback
@@ -66,7 +71,7 @@ export async function generateBulkBets(topic: string, timeframe: string, type: "
 
     try {
         const genAI = new GoogleGenerativeAI(apiKey);
-        const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+        const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
 
         const prompt = `
             You are a betting scheduling assistant.
@@ -103,7 +108,13 @@ export async function generateBulkBets(topic: string, timeframe: string, type: "
         const text = response.text();
 
         const cleanText = text.replace(/```json/g, "").replace(/```/g, "").trim();
-        return JSON.parse(cleanText);
+
+        try {
+            return JSON.parse(cleanText);
+        } catch (e) {
+            console.error("Failed to parse AI Bulk response:", text);
+            throw e;
+        }
     } catch (error) {
         console.error("AI Bulk Generation Error:", error);
         return [];
@@ -119,7 +130,7 @@ export async function verifyBetResult(question: string, context?: any) {
 
     try {
         const genAI = new GoogleGenerativeAI(apiKey);
-        const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+        const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
 
         const prompt = `
             Act as a sports/events judge. 

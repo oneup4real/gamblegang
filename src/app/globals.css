@@ -32,90 +32,100 @@
   --radius-md: calc(var(--radius) - 2px);
   --radius-sm: calc(var(--radius) - 4px);
 
-  --font-sans: var(--font-sans), ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
+  --font-comic: var(--font-comic);
+  --font-sans: var(--font-fredoka), ui-sans-serif, system-ui, sans-serif;
 
-  --animate-float: float 6s ease-in-out infinite;
-  --animate-pulse-slow: pulse 4s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  --animate-bounce-hover: bounce-hover 0.5s ease-in-out infinite;
 
-  @keyframes float {
-    0% {
-      transform: translateY(0px);
+  @keyframes bounce-hover {
+
+    0%,
+    100% {
+      transform: translateY(0);
     }
 
     50% {
-      transform: translateY(-20px);
-    }
-
-    100% {
-      transform: translateY(0px);
+      transform: translateY(-5px);
     }
   }
 }
 
 @layer base {
   :root {
-    /* Cyberpunk / Neon Palette (Light Mode - Optional / Not Focus) */
-    --background: 0 0% 100%;
-    --foreground: 240 10% 3.9%;
+    /* Comic / Mobile Game Palette (Light/Default) */
+    --background: 200 100% 95%;
+    /* Light Blue Sky */
+    --foreground: 0 0% 0%;
+    /* Black text */
+
     --card: 0 0% 100%;
-    --card-foreground: 240 10% 3.9%;
+    /* White cards */
+    --card-foreground: 0 0% 0%;
+
     --popover: 0 0% 100%;
-    --popover-foreground: 240 10% 3.9%;
-    --primary: 150 100% 50%;
-    /* Neon Green */
-    --primary-foreground: 240 5.9% 10%;
-    --secondary: 270 100% 60%;
-    /* Neon Purple */
-    --secondary-foreground: 0 0% 98%;
-    --muted: 240 4.8% 95.9%;
-    --muted-foreground: 240 3.8% 46.1%;
-    --accent: 240 4.8% 95.9%;
-    --accent-foreground: 240 5.9% 10%;
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 0 0% 98%;
-    --border: 240 5.9% 90%;
-    --input: 240 5.9% 90%;
-    --ring: 150 100% 50%;
+    --popover-foreground: 0 0% 0%;
+
+    --primary: 210 100% 50%;
+    /* Bright Blue */
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 320 100% 60%;
+    /* Hot Pink */
+    --secondary-foreground: 0 0% 100%;
+
+    --muted: 200 20% 90%;
+    --muted-foreground: 215 20% 40%;
+
+    --accent: 45 100% 50%;
+    /* Yellow */
+    --accent-foreground: 0 0% 0%;
+
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 0 0% 0%;
+    /* Black borders */
+    --input: 0 0% 0%;
+    --ring: 210 100% 50%;
+
     --radius: 1rem;
-    /* More rounded for mobile game feel */
+    /* Rounded corners */
   }
 
-  /* Default to Dark Mode for Cyberpunk aesthetic */
-  :root,
+  /* Dark mode - Dark Comic */
   .dark {
-    --background: 260 50% 10%;
-    /* Deep Purple/Black */
-    --foreground: 0 0% 98%;
+    --background: 220 50% 10%;
+    /* Dark Blue Night */
+    --foreground: 0 0% 100%;
 
-    --card: 260 50% 15%;
-    /* Slightly lighter base */
-    --card-foreground: 0 0% 98%;
+    --card: 222 47% 15%;
+    --card-foreground: 0 0% 100%;
 
-    --popover: 260 50% 12%;
-    --popover-foreground: 0 0% 98%;
+    --popover: 222 47% 15%;
+    --popover-foreground: 0 0% 100%;
 
-    --primary: 160 100% 50%;
-    /* Toxic Green */
-    --primary-foreground: 260 50% 10%;
-    /* Dark text on neon */
+    --primary: 210 100% 60%;
+    /* Cyan/Blue */
+    --primary-foreground: 0 0% 0%;
 
-    --secondary: 290 100% 60%;
-    /* Hot Pink/Purple */
-    --secondary-foreground: 0 0% 98%;
+    --secondary: 320 100% 60%;
+    /* Pink */
+    --secondary-foreground: 0 0% 100%;
 
-    --muted: 260 30% 20%;
-    --muted-foreground: 240 5% 64.9%;
+    --muted: 217 33% 17%;
+    --muted-foreground: 215 20% 65%;
 
-    --accent: 290 80% 20%;
-    --accent-foreground: 0 0% 98%;
+    --accent: 45 100% 50%;
+    /* Yellow */
+    --accent-foreground: 0 0% 0%;
 
-    --destructive: 0 100% 50%;
-    /* Neon Red */
-    --destructive-foreground: 0 85.7% 97.3%;
+    --destructive: 0 62% 30%;
+    --destructive-foreground: 0 0% 100%;
 
-    --border: 260 50% 30%;
-    --input: 260 50% 30%;
-    --ring: 160 100% 50%;
+    --border: 0 0% 20%;
+    /* Dark Grey borders */
+    --input: 0 0% 20%;
+    --ring: 210 100% 60%;
   }
 }
 
@@ -125,31 +135,47 @@
   }
 
   body {
-    @apply bg-background text-foreground antialiased;
-    /* Mesh Gradient Background */
-    background-image:
-      radial-gradient(at 0% 0%, hsla(290, 100%, 40%, 0.15) 0px, transparent 50%),
-      radial-gradient(at 100% 0%, hsla(160, 100%, 40%, 0.15) 0px, transparent 50%),
-      radial-gradient(at 100% 100%, hsla(260, 100%, 40%, 0.15) 0px, transparent 50%),
-      radial-gradient(at 0% 100%, hsla(200, 100%, 40%, 0.15) 0px, transparent 50%);
-    background-attachment: fixed;
+    @apply bg-background text-foreground antialiased font-sans;
+
+    /* Halftone Pattern */
+    background-image: radial-gradient(hsl(var(--primary) / 0.15) 2px, transparent 2px);
+    background-size: 32px 32px;
+    background-color: hsl(var(--background));
   }
 }
 
 @layer utilities {
+  .comic-shadow {
+    box-shadow: 4px 4px 0px 0px hsl(var(--border) / 1);
+    /* Hard shadow */
+  }
+
+  .comic-shadow-sm {
+    box-shadow: 2px 2px 0px 0px hsl(var(--border) / 1);
+  }
+
+  .comic-shadow-lg {
+    box-shadow: 8px 8px 0px 0px hsl(var(--border) / 1);
+  }
+
+  .comic-border {
+    @apply border-2 border-black;
+  }
+
+  .comic-title {
+    font-family: var(--font-comic);
+    letter-spacing: 0.05em;
+    text-shadow: 2px 2px 0px hsl(var(--primary));
+  }
+
+  /* Fun Icon Style */
+  .comic-icon {
+    filter: drop-shadow(2px 2px 0 rgba(0, 0, 0, 1));
+    stroke-width: 2.5px;
+  }
+
   .glass {
-    @apply bg-card/60 backdrop-blur-md border border-white/10 shadow-xl;
-  }
-
-  .glass-hover {
-    @apply hover:bg-card/80 transition-all duration-300;
-  }
-
-  .text-neon {
-    filter: drop-shadow(0 0 8px rgba(255, 255, 255, 0.5));
-  }
-
-  .text-neon-primary {
-    filter: drop-shadow(0 0 10px rgba(0, 255, 128, 0.5));
+    /* Refined glass for comic style */
+    @apply bg-white/10 backdrop-blur-md border border-white/20;
   }
 }

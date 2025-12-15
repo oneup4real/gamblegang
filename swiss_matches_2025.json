@@ -1,0 +1,110 @@
+[
+  {
+    "match_id": "CH_SL_2025_MD19_01",
+    "league": "Swiss Super League",
+    "home_team": "Young Boys",
+    "away_team": "Servette FC",
+    "match_date": "2025-12-20 18:00:00",
+    "bet_type": "MATCH",
+    "predictions": [
+      {
+        "type": "Exact Score",
+        "prediction": "Young Boys 2-1 Servette FC"
+      },
+      {
+        "type": "Winner",
+        "prediction": "Young Boys Win"
+      }
+    ]
+  },
+  {
+    "match_id": "CH_SL_2025_MD19_02",
+    "league": "Swiss Super League",
+    "home_team": "FC Zürich",
+    "away_team": "FC Lugano",
+    "match_date": "2025-12-20 20:30:00",
+    "bet_type": "MATCH",
+    "predictions": [
+      {
+        "type": "Exact Score",
+        "prediction": "FC Zürich 1-1 FC Lugano"
+      },
+      {
+        "type": "Winner",
+        "prediction": "Draw"
+      }
+    ]
+  },
+  {
+    "match_id": "CH_SL_2025_MD19_03",
+    "league": "Swiss Super League",
+    "home_team": "FC St. Gallen 1879",
+    "away_team": "FC Luzern",
+    "match_date": "2025-12-21 14:00:00",
+    "bet_type": "MATCH",
+    "predictions": [
+      {
+        "type": "Exact Score",
+        "prediction": "FC St. Gallen 2-0 FC Luzern"
+      },
+      {
+        "type": "Winner",
+        "prediction": "FC St. Gallen 1879 Win"
+      }
+    ]
+  },
+  {
+    "match_id": "CH_SL_2025_MD19_04",
+    "league": "Swiss Super League",
+    "home_team": "FC Basel 1893",
+    "away_team": "Grasshopper Club Zürich",
+    "match_date": "2025-12-21 16:30:00",
+    "bet_type": "MATCH",
+    "predictions": [
+      {
+        "type": "Exact Score",
+        "prediction": "FC Basel 1-2 Grasshopper Club Zürich"
+      },
+      {
+        "type": "Winner",
+        "prediction": "Grasshopper Club Zürich Win"
+      }
+    ]
+  },
+  {
+    "match_id": "CH_SL_2025_MD19_05",
+    "league": "Swiss Super League",
+    "home_team": "FC Lausanne-Sport",
+    "away_team": "FC Winterthur",
+    "match_date": "2025-12-21 16:30:00",
+    "bet_type": "MATCH",
+    "predictions": [
+      {
+        "type": "Exact Score",
+        "prediction": "FC Lausanne-Sport 0-0 FC Winterthur"
+      },
+      {
+        "type": "Winner",
+        "prediction": "Draw"
+      }
+    ]
+  },
+  {
+    "match_id": "CH_SL_2025_MD19_06",
+    "league": "Swiss Super League",
+    "home_team": "Yverdon Sport FC",
+    "away_team": "FC Sion",
+    "match_date": "2025-12-21 18:30:00",
+    "bet_type": "MATCH",
+    "predictions": [
+      {
+        "type": "Exact Score",
+        "prediction": "Yverdon Sport FC 1-0 FC Sion"
+      },
+      {
+        "type": "Winner",
+        "prediction": "Yverdon Sport FC Win"
+      }
+    ]
+  }
+]

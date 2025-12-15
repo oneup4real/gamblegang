@@ -27,6 +27,14 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     const router = useRouter();
 
     useEffect(() => {
+        // cast to any to check internal property or just check if it has 'currentUser' which real Auth instance has
+        // or check if it matches our mock {}
+        if (!auth || Object.keys(auth).length === 0) {
+            console.error("Firebase Auth not initialized. Missing API Key?");
+            setLoading(false);
+            return;
+        }
+
         const unsubscribe = onAuthStateChanged(auth, async (user) => {
             if (user) {
                 // We import dynamically to avoid circular deps if any or keep clean
@@ -41,6 +49,10 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     }, []);
 
     const signInWithGoogle = async () => {
+        if (!auth || Object.keys(auth).length === 0) {
+            alert("Auth not configured. Check console.");
+            return;
+        }
         const provider = new GoogleAuthProvider();
         try {
             await signInWithPopup(auth, provider);
@@ -51,6 +63,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     };
 
     const logout = async () => {
+        if (!auth || Object.keys(auth).length === 0) return;
         try {
             await signOut(auth);
             router.push("/");
