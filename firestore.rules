@@ -42,5 +42,10 @@ service cloud.firestore {
         }
       }
     }
+
+    // Explicitly allow Collection Group queries for members
+    match /{path=**}/members/{memberId} {
+        allow read: if request.auth != null;
+    }
   }
 }

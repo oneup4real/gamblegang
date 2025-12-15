@@ -33,20 +33,40 @@
   --radius-sm: calc(var(--radius) - 4px);
 
   --font-sans: var(--font-sans), ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
+
+  --animate-float: float 6s ease-in-out infinite;
+  --animate-pulse-slow: pulse 4s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+
+  @keyframes float {
+    0% {
+      transform: translateY(0px);
+    }
+
+    50% {
+      transform: translateY(-20px);
+    }
+
+    100% {
+      transform: translateY(0px);
+    }
+  }
 }
 
 @layer base {
   :root {
+    /* Cyberpunk / Neon Palette (Light Mode - Optional / Not Focus) */
     --background: 0 0% 100%;
     --foreground: 240 10% 3.9%;
     --card: 0 0% 100%;
     --card-foreground: 240 10% 3.9%;
     --popover: 0 0% 100%;
     --popover-foreground: 240 10% 3.9%;
-    --primary: 142.1 76.2% 36.3%;
-    --primary-foreground: 355.7 100% 97.3%;
-    --secondary: 240 4.8% 95.9%;
-    --secondary-foreground: 240 5.9% 10%;
+    --primary: 150 100% 50%;
+    /* Neon Green */
+    --primary-foreground: 240 5.9% 10%;
+    --secondary: 270 100% 60%;
+    /* Neon Purple */
+    --secondary-foreground: 0 0% 98%;
     --muted: 240 4.8% 95.9%;
     --muted-foreground: 240 3.8% 46.1%;
     --accent: 240 4.8% 95.9%;
@@ -55,30 +75,47 @@
     --destructive-foreground: 0 0% 98%;
     --border: 240 5.9% 90%;
     --input: 240 5.9% 90%;
-    --ring: 142.1 76.2% 36.3%;
-    --radius: 0.75rem;
+    --ring: 150 100% 50%;
+    --radius: 1rem;
+    /* More rounded for mobile game feel */
   }
 
+  /* Default to Dark Mode for Cyberpunk aesthetic */
+  :root,
   .dark {
-    --background: 20 14.3% 4.1%;
-    --foreground: 0 0% 95%;
-    --card: 24 9.8% 10%;
-    --card-foreground: 0 0% 95%;
-    --popover: 0 0% 9%;
-    --popover-foreground: 0 0% 95%;
-    --primary: 142.1 70.6% 45.3%;
-    --primary-foreground: 144.9 80.4% 10%;
-    --secondary: 240 3.7% 15.9%;
+    --background: 260 50% 10%;
+    /* Deep Purple/Black */
+    --foreground: 0 0% 98%;
+
+    --card: 260 50% 15%;
+    /* Slightly lighter base */
+    --card-foreground: 0 0% 98%;
+
+    --popover: 260 50% 12%;
+    --popover-foreground: 0 0% 98%;
+
+    --primary: 160 100% 50%;
+    /* Toxic Green */
+    --primary-foreground: 260 50% 10%;
+    /* Dark text on neon */
+
+    --secondary: 290 100% 60%;
+    /* Hot Pink/Purple */
     --secondary-foreground: 0 0% 98%;
-    --muted: 0 0% 15%;
+
+    --muted: 260 30% 20%;
     --muted-foreground: 240 5% 64.9%;
-    --accent: 12 6.5% 15.1%;
+
+    --accent: 290 80% 20%;
     --accent-foreground: 0 0% 98%;
-    --destructive: 0 62.8% 30.6%;
+
+    --destructive: 0 100% 50%;
+    /* Neon Red */
     --destructive-foreground: 0 85.7% 97.3%;
-    --border: 240 3.7% 15.9%;
-    --input: 240 3.7% 15.9%;
-    --ring: 142.4 71.8% 29.2%;
+
+    --border: 260 50% 30%;
+    --input: 260 50% 30%;
+    --ring: 160 100% 50%;
   }
 }
 
@@ -88,6 +125,31 @@
   }
 
   body {
-    @apply bg-background text-foreground;
+    @apply bg-background text-foreground antialiased;
+    /* Mesh Gradient Background */
+    background-image:
+      radial-gradient(at 0% 0%, hsla(290, 100%, 40%, 0.15) 0px, transparent 50%),
+      radial-gradient(at 100% 0%, hsla(160, 100%, 40%, 0.15) 0px, transparent 50%),
+      radial-gradient(at 100% 100%, hsla(260, 100%, 40%, 0.15) 0px, transparent 50%),
+      radial-gradient(at 0% 100%, hsla(200, 100%, 40%, 0.15) 0px, transparent 50%);
+    background-attachment: fixed;
+  }
+}
+
+@layer utilities {
+  .glass {
+    @apply bg-card/60 backdrop-blur-md border border-white/10 shadow-xl;
+  }
+
+  .glass-hover {
+    @apply hover:bg-card/80 transition-all duration-300;
+  }
+
+  .text-neon {
+    filter: drop-shadow(0 0 8px rgba(255, 255, 255, 0.5));
+  }
+
+  .text-neon-primary {
+    filter: drop-shadow(0 0 10px rgba(0, 255, 128, 0.5));
   }
 }

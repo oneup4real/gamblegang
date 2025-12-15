@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { X, Loader2, AlertTriangle, Save, RefreshCw } from "lucide-react";
+import { X, Loader2, AlertTriangle, Save, RefreshCw, Trash } from "lucide-react";
 import { useAuth } from "@/components/auth-provider";
 import { League, updateLeague, resetLeague } from "@/lib/services/league-service";
 
@@ -114,25 +114,62 @@ export function LeagueSettingsModal({ league, isOpen, onClose, onUpdate }: Leagu
                     )}
 
                     {activeTab === "danger" && (
-                        <div className="space-y-4 p-4 border border-red-200 bg-red-50 dark:bg-red-900/10 rounded-lg">
-                            <div className="flex items-start gap-4">
-                                <AlertTriangle className="h-5 w-5 text-red-500 mt-1" />
-                                <div>
-                                    <h4 className="font-bold text-red-700 dark:text-red-400">Reset Season</h4>
-                                    <p className="text-sm text-red-600/80 dark:text-red-400/80 mt-1">
-                                        This will reset all members' points to the starting capital ({league.startCapital}).
-                                        Use this when starting a new season.
-                                    </p>
+                        <div className="space-y-6">
+                            <div className="space-y-4 p-4 border border-red-200 bg-red-50 dark:bg-red-900/10 rounded-lg">
+                                <div className="flex items-start gap-4">
+                                    <AlertTriangle className="h-5 w-5 text-red-500 mt-1" />
+                                    <div>
+                                        <h4 className="font-bold text-red-700 dark:text-red-400">Reset Season</h4>
+                                        <p className="text-sm text-red-600/80 dark:text-red-400/80 mt-1">
+                                            This will reset all members' points to the starting capital ({league.startCapital}).
+                                            Use this when starting a new season.
+                                        </p>
+                                    </div>
                                 </div>
+                                <button
+                                    onClick={handleReset}
+                                    disabled={loading}
+                                    className="flex w-full items-center justify-center rounded-md bg-red-600 py-2 text-sm font-medium text-white shadow hover:bg-red-700 disabled:opacity-50"
+                                >
+                                    {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
+                                    Reset Points
+                                </button>
                             </div>
-                            <button
-                                onClick={handleReset}
-                                disabled={loading}
-                                className="flex w-full items-center justify-center rounded-md bg-red-600 py-2 text-sm font-medium text-white shadow hover:bg-red-700 disabled:opacity-50"
-                            >
-                                {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
-                                Reset Points
-                            </button>
+
+                            <div className="space-y-4 p-4 border border-red-900/50 bg-red-950/30 rounded-lg">
+                                <div className="flex items-start gap-4">
+                                    <AlertTriangle className="h-5 w-5 text-red-500 mt-1" />
+                                    <div>
+                                        <h4 className="font-bold text-red-500">Delete League</h4>
+                                        <p className="text-sm text-red-400/80 mt-1">
+                                            Permanently delete this league and all its data. This action is irreversible.
+                                        </p>
+                                    </div>
+                                </div>
+                                <button
+                                    onClick={async () => {
+                                        if (!confirm("CRITICAL WARNING: Are you sure you want to delete this league? This cannot be undone.")) return;
+                                        if (prompt("To match deletion, type 'DELETE' below:") !== "DELETE") return;
+
+                                        try {
+                                            setLoading(true);
+                                            const { deleteLeague } = await import("@/lib/services/league-service");
+                                            await deleteLeague(league.id);
+                                            alert("League deleted.");
+                                            window.location.href = "/dashboard";
+                                        } catch (e) {
+                                            console.error(e);
+                                            alert("Failed to delete league");
+                                            setLoading(false);
+                                        }
+                                    }}
+                                    disabled={loading}
+                                    className="flex w-full items-center justify-center rounded-md border border-red-500/50 bg-transparent py-2 text-sm font-bold text-red-500 hover:bg-red-500/10 disabled:opacity-50"
+                                >
+                                    {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Trash className="mr-2 h-4 w-4" />}
+                                    Delete League Permanently
+                                </button>
+                            </div>
                         </div>
                     )}
 

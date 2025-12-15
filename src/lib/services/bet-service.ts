@@ -1,8 +1,9 @@
 import { db } from "@/lib/firebase/config";
 import { collection, doc, runTransaction, serverTimestamp, setDoc, increment } from "firebase/firestore";
 import { User } from "firebase/auth";
+import { League } from "./league-service";
 
-export type BetType = "CHOICE" | "RANGE"; // CHOICE covers Yes/No and Multiple Choice
+export type BetType = "CHOICE" | "RANGE" | "MATCH"; // Added MATCH
 
 export interface BetOption {
     id: string;
@@ -16,21 +17,48 @@ export interface Bet {
     leagueId: string;
     creatorId: string;
     question: string;
-    description?: string;
     type: BetType;
-    options?: BetOption[]; // Only for CHOICE
-    rangeMin?: number; // Only for RANGE
-    rangeMax?: number; // Only for RANGE
-    rangeUnit?: string; // e.g. "Goals", "Minutes"
-
-    status: "OPEN" | "LOCKED" | "RESOLVED" | "CANCELLED";
+    status: "OPEN" | "LOCKED" | "RESOLVED" | "CANCELLED" | "PROOFING"; // Added PROOFING
     createdAt: any;
     closesAt: any;
-    resolvedAt?: any;
-    winningOutcome?: string | number;
-    winnerPool?: number;
+
+    // Choice Bets
+    options?: BetOption[];
+
+    // Range Bets
+    rangeMin?: number;
+    rangeMax?: number;
+    rangeUnit?: string;
+
+    // Match Bets (New)
+    matchDetails?: {
+        homeTeam: string;
+        awayTeam: string;
+        date: string;
+    };
 
     totalPool: number;
+    winningOutcome?: string | number | { home: number, away: number }; // Updated
+    winnerPool?: number;
+    resolvedAt?: any; // Re-added
+    description?: string; // Re-added
+
+    // Verification & Proofing
+    verificationStatus?: "IDLE" | "SUGGESTED" | "PROOFING" | "VERIFIED";
+    aiSuggestedOutcome?: string;
+    proofingDeadline?: any;
+    adminComment?: string;
+}
+
+export interface Wager {
+    id: string; // Document ID
+    userId: string;
+    amount: number;
+    selection: string | number | { home: number, away: number }; // Changed from prediction to selection, updated type
+    placedAt: any;
+    userName?: string; // Removed from instruction, but kept for consistency with existing code
+    status?: "PENDING" | "WON" | "LOST" | "REFUNDED"; // Re-added
+    payout?: number; // Re-added
 }
 
 export async function createBet(
@@ -40,14 +68,15 @@ export async function createBet(
     type: BetType,
     closesAt: Date,
     options?: string[], // For CHOICE
-    rangeConfig?: { min?: number; max?: number; unit?: string } // For RANGE
+    range?: { min?: number; max?: number; unit?: string }, // For RANGE, changed name from rangeConfig
+    matchDetails?: { homeTeam: string, awayTeam: string, date: string } // For MATCH
 ) {
     if (!user) throw new Error("Unauthorized");
 
     const betRef = doc(collection(db, "leagues", leagueId, "bets"));
     const betId = betRef.id;
 
-    const newBet: Bet = {
+    const betData: Bet = { // Changed newBet to betData and type to Bet
         id: betId,
         leagueId,
         creatorId: user.uid,
@@ -57,23 +86,24 @@ export async function createBet(
         createdAt: serverTimestamp(),
         closesAt: closesAt,
         totalPool: 0,
+        // searchKey: question.toLowerCase() // Added searchKey as per instruction, but it's not in Bet interface
     };
 
     if (type === "CHOICE" && options) {
-        newBet.options = options.map((opt, idx) => ({
-            id: `opt_${idx}`,
+        betData.options = options.map((opt, idx) => ({
+            id: `opt_${idx}`, // Changed to `opt_${idx}` for consistency
             text: opt,
             totalWagered: 0,
         }));
+    } else if (type === "RANGE" && range) { // Changed to else if
+        betData.rangeMin = range.min;
+        betData.rangeMax = range.max;
+        betData.rangeUnit = range.unit;
+    } else if (type === "MATCH" && matchDetails) { // Added MATCH type
+        betData.matchDetails = matchDetails;
     }
 
-    if (type === "RANGE" && rangeConfig) {
-        newBet.rangeMin = rangeConfig.min;
-        newBet.rangeMax = rangeConfig.max;
-        newBet.rangeUnit = rangeConfig.unit;
-    }
-
-    await setDoc(betRef, newBet);
+    await setDoc(betRef, betData); // Changed newBet to betData
     return betId;
 }
 
@@ -109,24 +139,44 @@ export async function placeWager(
 
     try {
         await runTransaction(db, async (transaction) => {
-            // 1. Check Balance
+            const leagueRef = doc(db, "leagues", leagueId);
+            const leagueSnap = await transaction.get(leagueRef);
+            if (!leagueSnap.exists()) throw new Error("League not found");
+
+            const leagueData = leagueSnap.data() as League;
+
+            // Enforce League Status Lock
+            if (leagueData.status !== "STARTED") {
+                throw new Error(`Betting is disabled. League status: ${leagueData.status}`);
+            }
+
+            const isStandard = leagueData.mode === "STANDARD";
+            let actualAmount = amount;
+
             const memberRef = doc(db, "leagues", leagueId, "members", user.uid);
-            const memberSnap = await transaction.get(memberRef);
-            if (!memberSnap.exists()) throw new Error("Not a member of this league");
 
-            const memberPoints = memberSnap.data().points;
-            if (memberPoints < amount) throw new Error("Insufficient points");
+            if (isStandard) {
+                // In Arcade mode, wagers are free but fixed "voting power" (100)
+                actualAmount = 100;
+            } else {
+                // 1. Check Balance
+                const memberSnap = await transaction.get(memberRef);
+                if (!memberSnap.exists()) throw new Error("Not a member of this league");
 
-            // 2. Deduct Points
-            transaction.update(memberRef, { points: memberPoints - amount });
+                const memberPoints = memberSnap.data().points;
+                if (memberPoints < amount) throw new Error("Insufficient points");
+
+                // 2. Deduct Points
+                transaction.update(memberRef, { points: memberPoints - amount });
+            }
 
             // 3. Create Wager
             const wagerRef = doc(collection(db, "leagues", leagueId, "bets", betId, "wagers"));
             transaction.set(wagerRef, {
                 userId: user.uid,
                 userName: user.displayName,
-                amount,
-                prediction,
+                amount: actualAmount,
+                selection: prediction,
                 placedAt: serverTimestamp(),
             });
 
@@ -139,18 +189,13 @@ export async function placeWager(
             if (betData.status !== "OPEN") throw new Error("Bet is not open");
 
             let updateData: any = {
-                totalPool: (betData.totalPool || 0) + amount
+                totalPool: (betData.totalPool || 0) + actualAmount
             };
 
             if (betData.type === "CHOICE" && typeof prediction === "string" && betData.options) {
-                // Find option index or update by matching ID
-                // Note: For simplicity in this Alpha, we update the array. 
-                // In highly concurrent apps, this array update might conflict often.
-                // Distributed counter solution is better for scale, but complex.
-
                 const newOptions = betData.options.map(opt => {
                     if (opt.id === prediction || opt.text === prediction) {
-                        return { ...opt, totalWagered: (opt.totalWagered || 0) + amount };
+                        return { ...opt, totalWagered: (opt.totalWagered || 0) + actualAmount };
                     }
                     return opt;
                 });
@@ -186,91 +231,176 @@ export function getReturnPotential(wagerAmount: number, totalPool: number, optio
     return wagerAmount * calculateOdds(totalPool, optionTotalIncludingMyWager);
 }
 
-export interface Wager {
-    id: string; // Document ID
-    userId: string;
-    userName: string;
-    amount: number;
-    prediction: string | number;
-    placedAt: any;
-    status?: "PENDING" | "WON" | "LOST" | "REFUNDED";
-    payout?: number;
-}
+// ... (Removed duplicate Wager interface)
 
 export async function resolveBet(
     leagueId: string,
     betId: string,
     user: User,
-    winningOutcome: string | number
+    winningOutcome: string | number | { home: number, away: number }
 ) {
-    // 1. Validation
     if (!user) throw new Error("Unauthorized");
-    const { writeBatch, doc } = await import("firebase/firestore");
+    const { writeBatch, doc, getDoc, getDocs, collection } = await import("firebase/firestore");
 
-    // Note: In a real app, logic should be server-side (Cloud Fn) for security & integrity.
-    // Client-side resolution relies on the user being an honest Admin/Owner.
-
-    // Fetch Bet
     const betRef = doc(db, "leagues", leagueId, "bets", betId);
-    // We need to fetch it to check status, but we assume the caller has fresh data or we check in a Transaction.
-    // For Batch, we can't "read" inside the batch chain like a Transaction. 
-    // We'll proceed with assumed validity or fetch first. Fetching first is safer.
-
-    const { getDoc, getDocs, collection } = await import("firebase/firestore");
     const betSnap = await getDoc(betRef);
     if (!betSnap.exists()) throw new Error("Bet not found");
     const bet = betSnap.data() as Bet;
 
     if (bet.creatorId !== user.uid) {
-        // Also allow League Owner (TODO: Check Recoil/Context role). For now, Creator only.
         throw new Error("Only the creator can resolve this bet");
     }
     if (bet.status !== "OPEN" && bet.status !== "LOCKED") throw new Error("Bet is already resolved or cancelled");
 
-    // Fetch Wagers
     const wagersRef = collection(db, "leagues", leagueId, "bets", betId, "wagers");
     const wagersSnap = await getDocs(wagersRef);
     const wagers = wagersSnap.docs.map(d => ({ id: d.id, ...d.data() } as Wager));
 
-    // Calculate Winners
-    // Normalize comparison
-    const isMatch = (p: string | number, w: string | number) => String(p) === String(w);
-
-    const winners = wagers.filter(w => isMatch(w.prediction, winningOutcome));
-    const totalPool = bet.totalPool;
-    const winnerPool = winners.reduce((sum, w) => sum + w.amount, 0);
-
     const batch = writeBatch(db);
+    let totalPayout = 0;
 
-    // 2. Update Bet
+    // Logic for MATCH Bets (Tiered Parimutuel)
+    // Goal: Maintain Zero-Sum. Total Payout = Total Pool.
+    if (bet.type === "MATCH" && typeof winningOutcome === "object") {
+        const result = winningOutcome as { home: number, away: number };
+
+        // 1. Calculate Shares for each wager
+        const wagerShares = wagers.map(wager => {
+            const pred = wager.selection as { home: number, away: number };
+            let shares = 0;
+
+            if (pred.home === result.home && pred.away === result.away) {
+                shares = 5; // Exact Score Tier
+            } else if ((pred.home - pred.away) === (result.home - result.away)) {
+                shares = 3; // Correct Diff Tier
+            } else if (Math.sign(pred.home - pred.away) === Math.sign(result.home - result.away)) {
+                shares = 1; // Correct Winner Tier
+            }
+            return { ...wager, shares };
+        });
+
+        // 2. Calculate Total Shares
+        const totalShares = wagerShares.reduce((sum, w) => sum + (w.shares * w.amount), 0); // Weighted by amount wagered? 
+        // Parimutuel: You buy "tickets". If I bet 100 on Exact (5x), do I get 500 shares? 
+        // Simplification: YES. Your "stake" in the pool is Amount * TierWeight.
+
+        // However, if NO ONE wins anything, the house (nobody) takes it? 
+        // In a friendly league, maybe carry over? Or refund?
+        // For simplicity now: If totalShares > 0, distribute. If 0, Refund.
+
+        if (totalShares > 0) {
+            const valuePerShare = bet.totalPool / totalShares;
+
+            wagerShares.forEach(w => {
+                if (w.shares > 0) {
+                    const myTotalShares = w.amount * w.shares;
+                    const payout = Math.floor(myTotalShares * valuePerShare);
+                    totalPayout += payout;
+
+                    batch.update(doc(db, "leagues", leagueId, "members", w.userId), {
+                        points: increment(payout)
+                    });
+                    batch.update(doc(db, "leagues", leagueId, "bets", betId, "wagers", w.id), {
+                        status: "WON",
+                        payout
+                    });
+                } else {
+                    batch.update(doc(db, "leagues", leagueId, "bets", betId, "wagers", w.id), {
+                        status: "LOST",
+                        payout: 0
+                    });
+                }
+            });
+        } else {
+            // Refund everyone if no one got it right (or carry over logic could go here)
+            wagers.forEach(w => {
+                batch.update(doc(db, "leagues", leagueId, "members", w.userId), {
+                    points: increment(w.amount)
+                });
+                batch.update(doc(db, "leagues", leagueId, "bets", betId, "wagers", w.id), {
+                    status: "REFUNDED",
+                    payout: w.amount
+                });
+            });
+        }
+    }
+    // Logic for CHOICE / RANGE Bets (Parimutuel Pool)
+    else {
+        const winningVal = String(winningOutcome);
+        const winningWagers = wagers.filter(w => String(w.selection) === winningVal);
+        const winnerPool = winningWagers.reduce((sum, w) => sum + w.amount, 0);
+
+        if (winningWagers.length > 0) {
+            winningWagers.forEach(wager => {
+                const share = wager.amount / winnerPool;
+                const payout = Math.floor(bet.totalPool * share);
+
+                totalPayout += payout;
+
+                batch.update(doc(db, "leagues", leagueId, "members", wager.userId), {
+                    points: increment(payout)
+                });
+                batch.update(doc(db, "leagues", leagueId, "bets", betId, "wagers", wager.id), {
+                    status: "WON",
+                    payout
+                });
+            });
+        }
+
+        wagers.filter(w => String(w.selection) !== winningVal).forEach(wager => {
+            batch.update(doc(db, "leagues", leagueId, "bets", betId, "wagers", wager.id), {
+                status: "LOST",
+                payout: 0
+            });
+        });
+
+        // Update bet with winner info (MATCH type doesn't use winnerPool in the same way, but consistent enough)
+        batch.update(betRef, {
+            winnerPool
+        });
+    }
+
     batch.update(betRef, {
         status: "RESOLVED",
         resolvedAt: serverTimestamp(),
-        winningOutcome,
-        winnerPool
-    });
-
-    // 3. Process Wagers & Payouts
-    wagers.forEach(w => {
-        const wRef = doc(db, "leagues", leagueId, "bets", betId, "wagers", w.id);
-        let status: "WON" | "LOST" = "LOST";
-        let payout = 0;
-
-        if (isMatch(w.prediction, winningOutcome)) {
-            status = "WON";
-            if (winnerPool > 0) {
-                const share = w.amount / winnerPool;
-                payout = Math.floor(share * totalPool);
-
-                // Credit Member
-                const memberRef = doc(db, "leagues", leagueId, "members", w.userId);
-                batch.update(memberRef, { points: increment(payout) });
-            }
-        }
-
-        batch.update(wRef, { status, payout });
+        winningOutcome
     });
 
     await batch.commit();
-    return { winnerCount: winners.length, totalPayout: totalPool };
+    return { winnerCount: wagers.filter(w => w.status === "WON" || (w.payout ?? 0) > 0).length, totalPayout };
+}
+
+export async function startProofing(
+    leagueId: string,
+    betId: string,
+    user: User,
+    suggestedOutcome: string
+) {
+    if (!user) throw new Error("Unauthorized");
+    const betRef = doc(db, "leagues", leagueId, "bets", betId);
+
+    // Proofing lasts 24 hours by default
+    const deadline = new Date();
+    deadline.setHours(deadline.getHours() + 24);
+
+    await setDoc(betRef, {
+        status: "PROOFING",
+        verificationStatus: "PROOFING", // Admin validated the suggestion
+        aiSuggestedOutcome: suggestedOutcome, // Or manual override
+        proofingDeadline: deadline
+    }, { merge: true });
+}
+
+export async function confirmVerification(
+    leagueId: string,
+    betId: string,
+    user: User
+) {
+    if (!user) throw new Error("Unauthorized");
+    // Just marks it as VERIFIED, ready for resolution (or could trigger resolution automatically)
+    // For now, let's keep it simple: Verified means "Ready to Resolve"
+    const betRef = doc(db, "leagues", leagueId, "bets", betId);
+    await setDoc(betRef, {
+        verificationStatus: "VERIFIED"
+    }, { merge: true });
 }

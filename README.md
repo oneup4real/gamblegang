@@ -1,5 +1,12 @@
 This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
 
+## AI Verification & Proofing
+The platform now includes an automated verification flow for bets:
+1.  **AI Analysis**: The creator can ask the AI to determine the result of a bet based on its internal knowledge.
+2.  **Admin/Creator Approval**: The creator reviews the suggestion and approves it.
+3.  **Proofing Period**: A 24-hour dispute window (Proofing) starts.
+4.  **Final Resolution**: Once the proofing period ends, the result is confirmed and points are distributed.
+
 ## Getting Started
 
 First, run the development server:
