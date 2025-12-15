@@ -27,6 +27,9 @@ export default function LeaguePage() {
     const [isBetModalOpen, setIsBetModalOpen] = useState(false);
     const [isSettingsOpen, setIsSettingsOpen] = useState(false);
     const [actionLoading, setActionLoading] = useState(false);
+    const [viewMode, setViewMode] = useState<"list" | "grid">("list"); // Default to list view
+    const [expandedBets, setExpandedBets] = useState<Set<string>>(new Set()); // Track which bets are expanded
+    const [expandAll, setExpandAll] = useState(false); // Toggle all expand/collapse
 
     const fetchLeagueData = async () => {
         if (!user) return;
@@ -275,21 +278,150 @@ export default function LeaguePage() {
                         )}
                     </div>
 
-                    <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-                        {bets.length === 0 ? (
-                            <div className="col-span-full flex flex-col items-center justify-center py-12 border border-dashed border-white/10 rounded-xl bg-white/5">
-                                <p className="text-white/40">No active bets.</p>
-                                {league.status === "NOT_STARTED" && <p className="text-xs text-primary mt-2">Waiting for League Start...</p>}
-                            </div>
-                        ) : (
-                            bets.map(bet => {
-                                const myPoints = myMemberProfile?.points || 0;
-                                return (
-                                    <BetCard key={bet.id} bet={bet} userPoints={myPoints} mode={league.mode} />
-                                );
-                            })
+                    {/* View Mode Controls */}
+                    <div className="flex items-center gap-4 mb-6">
+                        <div className="flex items-center gap-2 bg-white/10 p-1 rounded-lg border border-white/20">
+                            <button
+                                onClick={() => {
+                                    setViewMode("list");
+                                    if (expandAll) {
+                                        setExpandedBets(new Set());
+                                        setExpandAll(false);
+                                    }
+                                }}
+                                className={`px-4 py-2 rounded-md text-sm font-bold transition-all ${viewMode === "list"
+                                    ? "bg-primary text-white"
+                                    : "text-white/60 hover:text-white"
+                                    }`}
+                            >
+                                📋 List
+                            </button>
+                            <button
+                                onClick={() => setViewMode("grid")}
+                                className={`px-4 py-2 rounded-md text-sm font-bold transition-all ${viewMode === "grid"
+                                    ? "bg-primary text-white"
+                                    : "text-white/60 hover:text-white"
+                                    }`}
+                            >
+                                🎯 Detail
+                            </button>
+                        </div>
+
+                        {/* Expand/Collapse All (only in list view) */}
+                        {viewMode === "list" && (
+                            <button
+                                onClick={() => {
+                                    if (expandAll) {
+                                        setExpandedBets(new Set());
+                                    } else {
+                                        setExpandedBets(new Set(bets.map(b => b.id)));
+                                    }
+                                    setExpandAll(!expandAll);
+                                }}
+                                className="px-4 py-2 bg-white/10 hover:bg-white/20 rounded-lg border border-white/20 text-sm font-bold text-white transition-all"
+                            >
+                                {expandAll ? "📂 Collapse All" : "📁 Expand All"}
+                            </button>
                         )}
                     </div>
+
+                    {viewMode === "grid" ? (
+                        // GRID VIEW - Full detail cards
+                        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+                            {bets.length === 0 ? (
+                                <div className="col-span-full flex flex-col items-center justify-center py-12 border border-dashed border-white/10 rounded-xl bg-white/5">
+                                    <p className="text-white/40">No active bets.</p>
+                                    {league.status === "NOT_STARTED" && <p className="text-xs text-primary mt-2">Waiting for League Start...</p>}
+                                </div>
+                            ) : (
+                                bets.map(bet => {
+                                    const myPoints = myMemberProfile?.points || 0;
+                                    return (
+                                        <BetCard key={bet.id} bet={bet} userPoints={myPoints} mode={league.mode} />
+                                    );
+                                })
+                            )}
+                        </div>
+                    ) : (
+                        // LIST VIEW - Compact expandable cards
+                        <div className="space-y-3">
+                            {bets.length === 0 ? (
+                                <div className="flex flex-col items-center justify-center py-12 border border-dashed border-white/10 rounded-xl bg-white/5">
+                                    <p className="text-white/40">No active bets.</p>
+                                    {league.status === "NOT_STARTED" && <p className="text-xs text-primary mt-2">Waiting for League Start...</p>}
+                                </div>
+                            ) : (
+                                bets.map(bet => {
+                                    const myPoints = myMemberProfile?.points || 0;
+                                    const isExpanded = expandedBets.has(bet.id);
+
+                                    // Calculate estimated odds and return (simplified for now)
+                                    const estimatedOdds = bet.totalPool > 0 ? "2.5x" : "N/A";
+                                    const estimatedReturn = myPoints > 0 ? Math.floor(myPoints * 0.5) : 0;
+
+                                    return (
+                                        <div key={bet.id} className="bg-white/10 border border-white/20 rounded-xl overflow-hidden hover:border-white/40 transition-all">
+                                            {/* COLLAPSED STATE */}
+                                            <button
+                                                onClick={() => {
+                                                    const newExpanded = new Set(expandedBets);
+                                                    if (isExpanded) {
+                                                        newExpanded.delete(bet.id);
+                                                    } else {
+                                                        newExpanded.add(bet.id);
+                                                    }
+                                                    setExpandedBets(newExpanded);
+                                                }}
+                                                className="w-full p-4 text-left hover:bg-white/5 transition-all"
+                                            >
+                                                <div className="flex items-center justify-between gap-4">
+                                                    {/* Left: Question & Status */}
+                                                    <div className="flex-1 min-w-0">
+                                                        <div className="flex items-center gap-2 mb-1">
+                                                            <span className={`text-xs px-2 py-0.5 rounded font-bold ${bet.status === "OPEN" ? "bg-green-500 text-white" :
+                                                                    bet.status === "LOCKED" ? "bg-red-500 text-white" :
+                                                                        bet.status === "PROOFING" ? "bg-yellow-500 text-black" :
+                                                                            bet.status === "DISPUTED" ? "bg-orange-500 text-white" :
+                                                                                "bg-gray-500 text-white"
+                                                                }`}>
+                                                                {bet.status}
+                                                            </span>
+                                                            <span className="text-xs text-white/60">{bet.type}</span>
+                                                        </div>
+                                                        <p className="font-bold text-white truncate">{bet.question}</p>
+                                                    </div>
+
+                                                    {/* Center: Odds & Return */}
+                                                    <div className="flex gap-6 text-sm">
+                                                        <div className="text-center">
+                                                            <p className="text-white/60 text-xs">Odds</p>
+                                                            <p className="font-bold text-white">{estimatedOdds}</p>
+                                                        </div>
+                                                        <div className="text-center">
+                                                            <p className="text-white/60 text-xs">Est. Return</p>
+                                                            <p className="font-bold text-green-400">{estimatedReturn} pts</p>
+                                                        </div>
+                                                    </div>
+
+                                                    {/* Right: Expand Icon */}
+                                                    <div className="text-white/60 text-xl">
+                                                        {isExpanded ? "▲" : "▼"}
+                                                    </div>
+                                                </div>
+                                            </button>
+
+                                            {/* EXPANDED STATE */}
+                                            {isExpanded && (
+                                                <div className="border-t border-white/20 p-4 bg-white/5">
+                                                    <BetCard bet={bet} userPoints={myPoints} mode={league.mode} />
+                                                </div>
+                                            )}
+                                        </div>
+                                    );
+                                })
+                            )}
+                        </div>
+                    )}
                 </section>
 
             </main>

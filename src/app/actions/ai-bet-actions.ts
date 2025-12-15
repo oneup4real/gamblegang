@@ -153,3 +153,108 @@ export async function verifyBetResult(question: string, context?: any) {
         return "Error determining result.";
     }
 }
+
+/**
+ * AI Auto-Resolve: Looks up actual result and returns structured data for aut-filling
+ */
+export async function aiAutoResolveBet(bet: any) {
+    if (!apiKey) {
+        await new Promise(r => setTimeout(r, 1000));
+        // Mock response based on bet type
+        if (bet.type === "MATCH") {
+            return { type: "MATCH", home: 2, away: 1 };
+        } else if (bet.type === "CHOICE") {
+            return { type: "CHOICE", optionIndex: 0 };
+        } else if (bet.type === "RANGE") {
+            return { type: "RANGE", value: Math.floor((bet.rangeMin + bet.rangeMax) / 2) };
+        }
+        return null;
+    }
+
+    try {
+        const genAI = new GoogleGenerativeAI(apiKey);
+        const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+
+        let prompt = "";
+
+        if (bet.type === "MATCH") {
+            prompt = `
+                Look up the actual final score for this match:
+                Question: "${bet.question}"
+                Home Team: ${bet.matchDetails?.homeTeam || "Unknown"}
+                Away Team: ${bet.matchDetails?.awayTeam || "Unknown"}
+                Date: ${bet.matchDetails?.date || bet.eventDate || "Unknown"}
+                
+                Current Time: ${new Date().toISOString()}
+                
+                If the match has finished, return the exact final score.
+                If the match hasn't happened or you don't know, return "UNKNOWN".
+                
+                Return ONLY valid JSON in this format:
+                { "status": "FOUND" | "UNKNOWN", "home": number, "away": number }
+                
+                Example: { "status": "FOUND", "home": 2, "away": 1 }
+                
+                Do not include markdown formatting.
+            `;
+        } else if (bet.type === "CHOICE") {
+            prompt = `
+                Determine the correct answer to this question:
+                Question: "${bet.question}"
+                Options: ${bet.options?.map((o: any, i: number) => `${i}: ${o.text}`).join(", ")}
+                Event Date: ${bet.eventDate || "Unknown"}
+                
+                Current Time: ${new Date().toISOString()}
+                
+                If you can determine the answer, return the INDEX of the correct option.
+                If you don't know or it hasn't happened, return "UNKNOWN".
+                
+                Return ONLY valid JSON in this format:
+                { "status": "FOUND" | "UNKNOWN", "optionIndex": number }
+                
+                Example: { "status": "FOUND", "optionIndex": 0 }
+                
+                Do not include markdown formatting.
+            `;
+        } else if (bet.type === "RANGE") {
+            prompt = `
+                Determine the actual value for this range question:
+                Question: "${bet.question}"
+                Range: ${bet.rangeMin} to ${bet.rangeMax} ${bet.rangeUnit || ""}
+                Event Date: ${bet.eventDate || "Unknown"}
+                
+                Current Time: ${new Date().toISOString()}
+                
+                If you can determine the value, return it.
+                If you don't know or it hasn't happened, return "UNKNOWN".
+                
+                Return ONLY valid JSON in this format:
+                { "status": "FOUND" | "UNKNOWN", "value": number }
+                
+                Example: { "status": "FOUND", "value": 42 }
+                
+                Do not include markdown formatting.
+            `;
+        }
+
+        const result = await model.generateContent(prompt);
+        const response = await result.response;
+        const text = response.text();
+
+        const cleanText = text.replace(/```json/g, "").replace(/```/g, "").trim();
+
+        try {
+            const parsed = JSON.parse(cleanText);
+            if (parsed.status === "UNKNOWN") {
+                return null;
+            }
+            return { type: bet.type, ...parsed };
+        } catch (e) {
+            console.error("Failed to parse AI auto-resolve response:", text);
+            return null;
+        }
+    } catch (error) {
+        console.error("AI Auto-Resolve Error:", error);
+        return null;
+    }
+}

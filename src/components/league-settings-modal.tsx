@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { X, Loader2, AlertTriangle, Save, RefreshCw, Trash } from "lucide-react";
 import { useAuth } from "@/components/auth-provider";
 import { League, updateLeague, resetLeague } from "@/lib/services/league-service";
+import { Button } from "@/components/ui/button";
 
 interface LeagueSettingsModalProps {
     league: League;
@@ -56,124 +57,126 @@ export function LeagueSettingsModal({ league, isOpen, onClose, onUpdate }: Leagu
     return (
         <AnimatePresence>
             {isOpen && (
-                <motion.div
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    exit={{ opacity: 0 }}
-                    onClick={onClose}
-                    className="fixed inset-0 z-50 bg-background/80 backdrop-blur-sm"
-                />
-            )}
-            {isOpen && (
-                <motion.div
-                    initial={{ opacity: 0, scale: 0.95, y: 20 }}
-                    animate={{ opacity: 1, scale: 1, y: 0 }}
-                    exit={{ opacity: 0, scale: 0.95, y: 20 }}
-                    className="fixed left-[50%] top-[50%] z-50 w-full max-w-lg translate-x-[-50%] translate-y-[-50%] rounded-lg border bg-card p-6 shadow-xl"
-                >
-                    <div className="flex items-center justify-between mb-6">
-                        <h2 className="text-2xl font-bold tracking-tight">League Settings</h2>
-                        <button onClick={onClose} className="rounded-full p-1 hover:bg-muted">
-                            <X className="h-5 w-5" />
-                        </button>
-                    </div>
-
-                    <div className="flex gap-4 border-b mb-6">
-                        <button
-                            onClick={() => setActiveTab("general")}
-                            className={`pb-2 text-sm font-medium ${activeTab === "general" ? "border-b-2 border-primary" : "text-muted-foreground"}`}
-                        >
-                            General
-                        </button>
-                        <button
-                            onClick={() => setActiveTab("danger")}
-                            className={`pb-2 text-sm font-medium ${activeTab === "danger" ? "border-b-2 border-red-500 text-red-500" : "text-muted-foreground"}`}
-                        >
-                            Danger Zone
-                        </button>
-                    </div>
-
-                    {activeTab === "general" && (
-                        <form onSubmit={handleUpdateName} className="space-y-4">
-                            <div className="space-y-2">
-                                <label className="text-sm font-medium">League Name</label>
-                                <input
-                                    value={name}
-                                    onChange={(e) => setName(e.target.value)}
-                                    className="flex h-10 w-full rounded-md border bg-background px-3"
-                                />
-                            </div>
-                            <button
-                                disabled={loading}
-                                className="flex w-full items-center justify-center rounded-md bg-primary py-2 text-sm font-medium text-primary-foreground shadow hover:bg-primary/90 disabled:opacity-50"
-                            >
-                                {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
-                                Save Changes
+                <>
+                    <motion.div
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        onClick={onClose}
+                        className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm"
+                    />
+                    <motion.div
+                        initial={{ opacity: 0, scale: 0.95, y: 20 }}
+                        animate={{ opacity: 1, scale: 1, y: 0 }}
+                        exit={{ opacity: 0, scale: 0.95, y: 20 }}
+                        className="fixed left-[50%] top-[50%] z-50 w-full max-w-lg translate-x-[-50%] translate-y-[-50%] rounded-xl border-2 border-black bg-white p-6 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)]"
+                    >
+                        <div className="flex items-center justify-between mb-6">
+                            <h2 className="text-2xl font-black tracking-tight font-comic uppercase">League Settings</h2>
+                            <button onClick={onClose} className="rounded-lg p-1 hover:bg-gray-100 border-2 border-transparent hover:border-black transition-all">
+                                <X className="h-6 w-6" />
                             </button>
-                        </form>
-                    )}
-
-                    {activeTab === "danger" && (
-                        <div className="space-y-6">
-                            <div className="space-y-4 p-4 border border-red-200 bg-red-50 dark:bg-red-900/10 rounded-lg">
-                                <div className="flex items-start gap-4">
-                                    <AlertTriangle className="h-5 w-5 text-red-500 mt-1" />
-                                    <div>
-                                        <h4 className="font-bold text-red-700 dark:text-red-400">Reset Season</h4>
-                                        <p className="text-sm text-red-600/80 dark:text-red-400/80 mt-1">
-                                            This will reset all members' points to the starting capital ({league.startCapital}).
-                                            Use this when starting a new season.
-                                        </p>
-                                    </div>
-                                </div>
-                                <button
-                                    onClick={handleReset}
-                                    disabled={loading}
-                                    className="flex w-full items-center justify-center rounded-md bg-red-600 py-2 text-sm font-medium text-white shadow hover:bg-red-700 disabled:opacity-50"
-                                >
-                                    {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
-                                    Reset Points
-                                </button>
-                            </div>
-
-                            <div className="space-y-4 p-4 border border-red-900/50 bg-red-950/30 rounded-lg">
-                                <div className="flex items-start gap-4">
-                                    <AlertTriangle className="h-5 w-5 text-red-500 mt-1" />
-                                    <div>
-                                        <h4 className="font-bold text-red-500">Delete League</h4>
-                                        <p className="text-sm text-red-400/80 mt-1">
-                                            Permanently delete this league and all its data. This action is irreversible.
-                                        </p>
-                                    </div>
-                                </div>
-                                <button
-                                    onClick={async () => {
-                                        if (!confirm("CRITICAL WARNING: Are you sure you want to delete this league? This cannot be undone.")) return;
-                                        if (prompt("To match deletion, type 'DELETE' below:") !== "DELETE") return;
-
-                                        try {
-                                            setLoading(true);
-                                            const { deleteLeague } = await import("@/lib/services/league-service");
-                                            await deleteLeague(league.id);
-                                            alert("League deleted.");
-                                            window.location.href = "/dashboard";
-                                        } catch (e) {
-                                            console.error(e);
-                                            alert("Failed to delete league");
-                                            setLoading(false);
-                                        }
-                                    }}
-                                    disabled={loading}
-                                    className="flex w-full items-center justify-center rounded-md border border-red-500/50 bg-transparent py-2 text-sm font-bold text-red-500 hover:bg-red-500/10 disabled:opacity-50"
-                                >
-                                    {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Trash className="mr-2 h-4 w-4" />}
-                                    Delete League Permanently
-                                </button>
-                            </div>
                         </div>
-                    )}
 
-                </motion.div>
+                        <div className="flex gap-4 border-b-2 border-black mb-6">
+                            <button
+                                onClick={() => setActiveTab("general")}
+                                className={`pb-2 text-sm font-black uppercase tracking-wide transition-all ${activeTab === "general" ? "border-b-4 border-primary text-primary translate-y-[2px]" : "text-gray-500 hover:text-black"}`}
+                            >
+                                General
+                            </button>
+                            <button
+                                onClick={() => setActiveTab("danger")}
+                                className={`pb-2 text-sm font-black uppercase tracking-wide transition-all ${activeTab === "danger" ? "border-b-4 border-red-500 text-red-500 translate-y-[2px]" : "text-gray-500 hover:text-black"}`}
+                            >
+                                Danger Zone
+                            </button>
+                        </div>
+
+                        {activeTab === "general" && (
+                            <form onSubmit={handleUpdateName} className="space-y-4">
+                                <div className="space-y-2">
+                                    <label className="text-sm font-black uppercase">League Name</label>
+                                    <input
+                                        value={name}
+                                        onChange={(e) => setName(e.target.value)}
+                                        className="flex h-12 w-full rounded-xl border-2 border-black bg-white px-3 text-lg font-bold shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] focus:outline-none focus:ring-4 focus:ring-primary/20"
+                                    />
+                                </div>
+                                <Button
+                                    disabled={loading}
+                                    className="w-full h-12 bg-primary text-white border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]"
+                                >
+                                    {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
+                                    Save Changes
+                                </Button>
+                            </form>
+                        )}
+
+                        {activeTab === "danger" && (
+                            <div className="space-y-6">
+                                <div className="space-y-4 p-4 border-2 border-black bg-red-50 rounded-xl shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
+                                    <div className="flex items-start gap-4">
+                                        <div className="p-2 bg-red-100 rounded-lg border-2 border-black">
+                                            <AlertTriangle className="h-6 w-6 text-red-600" />
+                                        </div>
+                                        <div>
+                                            <h4 className="font-black text-red-700 text-lg uppercase">Reset Season</h4>
+                                            <p className="text-xs font-bold text-red-600/80 mt-1">
+                                                This will reset all members' points to the starting capital ({league.startCapital}).
+                                                Use this when starting a new season.
+                                            </p>
+                                        </div>
+                                    </div>
+                                    <Button
+                                        onClick={handleReset}
+                                        disabled={loading}
+                                        className="w-full bg-red-600 text-white border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:bg-red-700"
+                                    >
+                                        {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
+                                        Reset Points
+                                    </Button>
+                                </div>
+
+                                <div className="space-y-4 p-4 border-2 border-black bg-red-100 rounded-xl border-dashed">
+                                    <div className="flex items-start gap-4">
+                                        <div className="p-2 bg-red-200 rounded-lg border-2 border-black">
+                                            <Trash className="h-6 w-6 text-red-700" />
+                                        </div>
+                                        <div>
+                                            <h4 className="font-black text-red-700 text-lg uppercase">Delete League</h4>
+                                            <p className="text-xs font-bold text-red-600/80 mt-1">
+                                                Permanently delete this league and all its data. Irreversible.
+                                            </p>
+                                        </div>
+                                    </div>
+                                    <button
+                                        onClick={async () => {
+                                            if (!confirm("CRITICAL WARNING: Are you sure you want to delete this league? This cannot be undone.")) return;
+                                            if (prompt("To match deletion, type 'DELETE' below:") !== "DELETE") return;
+
+                                            try {
+                                                setLoading(true);
+                                                const { deleteLeague } = await import("@/lib/services/league-service");
+                                                await deleteLeague(league.id);
+                                                alert("League deleted.");
+                                                window.location.href = "/dashboard";
+                                            } catch (e) {
+                                                console.error(e);
+                                                alert("Failed to delete league");
+                                                setLoading(false);
+                                            }
+                                        }}
+                                        disabled={loading}
+                                        className="flex w-full items-center justify-center rounded-xl border-2 border-red-500 bg-transparent py-3 text-sm font-black text-red-600 hover:bg-red-500/10 disabled:opacity-50 transition-all uppercase tracking-wide"
+                                    >
+                                        {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : "Delete League Permanently"}
+                                    </button>
+                                </div>
+                            </div>
+                        )}
+                    </motion.div>
+                </>
             )}
         </AnimatePresence>
     );

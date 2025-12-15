@@ -20,6 +20,9 @@ service cloud.firestore {
       // Allow update if owner (this is a simplified check, ideally verified via resource data)
       allow update: if request.auth != null && request.auth.uid == resource.data.ownerId;
 
+      // Allow delete if owner
+      allow delete: if request.auth != null && request.auth.uid == resource.data.ownerId;
+
       // Subcollection: Members
       match /members/{memberId} {
         allow read: if request.auth != null;
@@ -38,7 +41,7 @@ service cloud.firestore {
         match /wagers/{wagerId} {
           allow read: if request.auth != null;
           allow create: if request.auth != null && request.auth.uid == request.resource.data.userId;
-          allow update: if false; // Wagers shouldn't change after placement
+          allow update: if request.auth != null; // Allow updates for bet resolution (status changes to WON/LOST/PUSH)
         }
       }
     }

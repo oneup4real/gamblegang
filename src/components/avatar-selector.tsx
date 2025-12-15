@@ -3,6 +3,7 @@
 import { useState, useRef } from "react";
 import { Upload, X, Check } from "lucide-react";
 import { uploadUserAvatar } from "@/lib/services/user-service";
+import { Button } from "@/components/ui/button";
 
 interface AvatarSelectorProps {
     uid: string;
@@ -56,23 +57,23 @@ export function AvatarSelector({ uid, currentAvatar, onAvatarChange }: AvatarSel
                     <img
                         src={selectedAvatar || "https://api.dicebear.com/7.x/avataaars/svg?seed=default"}
                         alt="Current Avatar"
-                        className="h-20 w-20 rounded-full object-cover ring-2 ring-primary"
+                        className="h-24 w-24 rounded-full object-cover border-4 border-black"
                     />
                     {uploading && (
                         <div className="absolute inset-0 flex items-center justify-center rounded-full bg-black/50">
-                            <div className="h-6 w-6 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                            <div className="h-6 w-6 animate-spin rounded-full border-4 border-white border-t-transparent" />
                         </div>
                     )}
                 </div>
                 <div className="flex flex-col gap-2">
-                    <button
+                    <Button
                         onClick={() => fileInputRef.current?.click()}
                         disabled={uploading}
-                        className="inline-flex items-center justify-center rounded-md border border-input bg-background/50 px-4 py-2 text-sm font-medium transition-colors hover:bg-accent hover:text-accent-foreground cursor-pointer"
+                        className="bg-white hover:bg-gray-100 text-black border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] active:translate-y-[1px] active:shadow-none"
                     >
                         <Upload className="mr-2 h-4 w-4" />
-                        Upload Image
-                    </button>
+                        Upload Custom
+                    </Button>
                     <input
                         type="file"
                         ref={fileInputRef}
@@ -80,27 +81,24 @@ export function AvatarSelector({ uid, currentAvatar, onAvatarChange }: AvatarSel
                         accept="image/*"
                         onChange={handleFileUpload}
                     />
-                    <p className="text-xs text-muted-foreground">Max file size 2MB.</p>
+                    <p className="text-xs font-bold text-gray-500">Max size 2MB.</p>
                 </div>
             </div>
 
             <div>
-                <span className="text-sm font-medium text-muted-foreground mb-2 block">Or choose from library:</span>
+                <span className="text-sm font-black text-black uppercase mb-2 block">Or choose standard:</span>
                 <div className="grid grid-cols-4 gap-2 sm:grid-cols-8">
                     {PREDEFINED_AVATARS.map((url, i) => (
                         <button
                             key={i}
                             onClick={() => handlePredefinedSelect(url)}
-                            className={`relative overflow-hidden rounded-full transition-all hover:ring-2 hover:ring-primary/50 focus:outline-none ${selectedAvatar === url ? "ring-2 ring-primary" : "ring-1 ring-border"
+                            className={`relative overflow-hidden rounded-full transition-all border-2 ${selectedAvatar === url
+                                ? "border-primary ring-2 ring-primary ring-offset-1 p-0.5"
+                                : "border-black hover:scale-110"
                                 }`}
                         >
                             {/* eslint-disable-next-line @next/next/no-img-element */}
                             <img src={url} alt={`Avatar ${i}`} className="h-full w-full object-cover" />
-                            {selectedAvatar === url && (
-                                <div className="absolute inset-0 flex items-center justify-center bg-primary/20">
-                                    <Check className="h-4 w-4 text-primary" />
-                                </div>
-                            )}
                         </button>
                     ))}
                 </div>

@@ -1,25 +1,72 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { X, Plus, Trash } from "lucide-react";
+import { X, Plus, Trash, Wand2 } from "lucide-react";
 import { useAuth } from "@/components/auth-provider";
 import { createBet, BetType } from "@/lib/services/bet-service";
 import { Loader2 } from "lucide-react";
+import { Button } from "@/components/ui/button";
 
 interface CreateBetModalProps {
     leagueId: string;
     isOpen: boolean;
     onClose: () => void;
     onSuccess?: () => void;
+    betToEdit?: any; // Simpler to use any for now, or import Bet
 }
 
-export function CreateBetModal({ leagueId, isOpen, onClose, onSuccess }: CreateBetModalProps) {
+import { Bet } from "@/lib/services/bet-service";
+import { updateBet } from "@/lib/services/bet-service";
+
+export function CreateBetModal({ leagueId, isOpen, onClose, onSuccess, betToEdit }: CreateBetModalProps) {
     const { user } = useAuth();
     const [loading, setLoading] = useState(false);
     const [question, setQuestion] = useState("");
     const [type, setType] = useState<BetType>("CHOICE");
-    const [closesAt, setClosesAt] = useState("");
+    const [eventDateStr, setEventDateStr] = useState("");
+    const [lockBufferMinutes, setLockBufferMinutes] = useState(0); // 0 = At Start
+
+    // Populate form if editing
+    useEffect(() => {
+        if (isOpen && betToEdit) {
+            setQuestion(betToEdit.question);
+            setType(betToEdit.type);
+
+            // Dates
+            if (betToEdit.eventDate?.seconds) {
+                const d = new Date(betToEdit.eventDate.seconds * 1000);
+                // Format to YYYY-MM-DDTHH:mm for input
+                const dateString = new Date(d.getTime() - (d.getTimezoneOffset() * 60000)).toISOString().slice(0, 16);
+                setEventDateStr(dateString);
+            }
+
+            if (betToEdit.type === "CHOICE" && betToEdit.options) {
+                setOptions(betToEdit.options.map((o: any) => o.text));
+            }
+            if (betToEdit.type === "MATCH" && betToEdit.matchDetails) {
+                setMatchHome(betToEdit.matchDetails.homeTeam);
+                setMatchAway(betToEdit.matchDetails.awayTeam);
+            }
+            if (betToEdit.type === "RANGE") {
+                setRangeMin(betToEdit.rangeMin);
+                setRangeMax(betToEdit.rangeMax);
+                setRangeUnit(betToEdit.rangeUnit);
+            }
+        } else if (isOpen && !betToEdit) {
+            // Reset if opening fresh
+            setQuestion("");
+            setType("CHOICE");
+            setEventDateStr("");
+            setOptions(["", ""]);
+            setMatchHome("");
+            setMatchAway("");
+            setRangeMin(undefined);
+            setRangeMax(undefined);
+            setRangeUnit("");
+        }
+    }, [isOpen, betToEdit]);
+
 
     // Choice Logic
     const [options, setOptions] = useState<string[]>(["", ""]);
@@ -37,8 +84,6 @@ export function CreateBetModal({ leagueId, isOpen, onClose, onSuccess }: CreateB
     const [aiTopic, setAiTopic] = useState("");
     const [isAiLoading, setIsAiLoading] = useState(false);
     const [showAiInput, setShowAiInput] = useState(false);
-
-
 
     // Bulk Logic
     const [mode, setMode] = useState<"SINGLE" | "BULK">("SINGLE");
@@ -84,10 +129,11 @@ export function CreateBetModal({ leagueId, isOpen, onClose, onSuccess }: CreateB
                     user!,
                     bet.question,
                     bet.type,
-                    date,
+                    date, // closesAt
+                    date, // eventDate
                     bet.type === "CHOICE" ? bet.options : undefined,
                     undefined, // No range support in bulk for now
-                    bet.type === "MATCH" ? { homeTeam: bet.matchHome, awayTeam: bet.matchAway, date: bet.date } : undefined
+                    bet.type === "MATCH" ? { home: bet.matchHome, away: bet.matchAway } : undefined
                 );
                 successCount++;
             }
@@ -146,16 +192,36 @@ export function CreateBetModal({ leagueId, isOpen, onClose, onSuccess }: CreateB
         setLoading(true);
 
         try {
-            await createBet(
-                leagueId,
-                user,
-                question,
-                type,
-                new Date(closesAt),
-                type === "CHOICE" ? options.filter(o => o.trim() !== "") : undefined,
-                type === "RANGE" ? { min: rangeMin, max: rangeMax, unit: rangeUnit } : undefined,
-                type === "MATCH" ? { homeTeam: matchHome, awayTeam: matchAway, date: closesAt } : undefined
-            );
+            const evDate = new Date(eventDateStr);
+            // Calculate closesAt: EventDate - Buffer
+            const clDate = new Date(evDate.getTime() - (lockBufferMinutes * 60000));
+
+            if (betToEdit) {
+                // Editing existing draft
+                await updateBet(leagueId, betToEdit.id, {
+                    question,
+                    type,
+                    closesAt: clDate,
+                    eventDate: evDate,
+                    // Partial updates for specific types
+                    ...(type === "CHOICE" ? { options: options.filter(o => o.trim() !== "").map((t, i) => ({ id: String(i), text: t, totalWagered: 0, odds: 1 })) } : {}),
+                    ...(type === "RANGE" ? { rangeMin: Number(rangeMin), rangeMax: Number(rangeMax), rangeUnit } : {}),
+                    ...(type === "MATCH" ? { matchDetails: { homeTeam: matchHome, awayTeam: matchAway, date: evDate.toISOString() } } : {}),
+                });
+                alert("Draft Updated!");
+            } else {
+                await createBet(
+                    leagueId,
+                    user,
+                    question,
+                    type,
+                    clDate, // Calculated closesAt
+                    evDate, // Actual Event Date
+                    type === "CHOICE" ? options.filter(o => o.trim() !== "") : undefined,
+                    type === "RANGE" ? { min: Number(rangeMin), max: Number(rangeMax), unit: rangeUnit } : undefined,
+                    type === "MATCH" ? { home: matchHome, away: matchAway } : undefined // Fix match arg
+                );
+            }
             if (onSuccess) onSuccess();
             onClose();
         } catch (error) {
@@ -176,32 +242,34 @@ export function CreateBetModal({ leagueId, isOpen, onClose, onSuccess }: CreateB
                         animate={{ opacity: 1 }}
                         exit={{ opacity: 0 }}
                         onClick={onClose}
-                        className="fixed inset-0 z-50 bg-background/80 backdrop-blur-sm"
+                        className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm"
                     />
                     <motion.div
                         initial={{ opacity: 0, scale: 0.95, y: 20 }}
                         animate={{ opacity: 1, scale: 1, y: 0 }}
                         exit={{ opacity: 0, scale: 0.95, y: 20 }}
-                        className="glass fixed left-[50%] top-[50%] z-50 w-full max-w-lg translate-x-[-50%] translate-y-[-50%] rounded-xl border border-white/10 p-6 shadow-2xl max-h-[90vh] overflow-y-auto"
+                        className="fixed left-[50%] top-[50%] z-50 w-full max-w-lg translate-x-[-50%] translate-y-[-50%] rounded-xl border-2 border-black bg-white p-6 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] max-h-[90vh] overflow-y-auto"
                     >
                         <div className="flex items-center justify-between mb-6">
-                            <h2 className="text-2xl font-bold tracking-tight">Create New Bet</h2>
-                            <button onClick={onClose} className="rounded-full p-1 hover:bg-muted">
-                                <X className="h-5 w-5" />
+                            <h2 className="text-2xl font-black tracking-tight font-comic uppercase text-black">
+                                {betToEdit ? "Edit Draft Bet" : "Create New Bet"}
+                            </h2>
+                            <button onClick={onClose} className="rounded-lg p-1 hover:bg-gray-100 border-2 border-transparent hover:border-black transition-all">
+                                <X className="h-6 w-6 text-black" />
                             </button>
                         </div>
 
                         {/* Mode Switcher */}
-                        <div className="flex p-1 bg-secondary/50 rounded-lg mb-6">
+                        <div className="flex p-1 bg-gray-100 border-2 border-black rounded-xl mb-6 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
                             <button
                                 onClick={() => setMode("SINGLE")}
-                                className={`flex-1 py-1.5 text-sm font-bold rounded-md transition-all ${mode === "SINGLE" ? "bg-primary text-primary-foreground shadow" : "text-muted-foreground hover:text-white"}`}
+                                className={`flex-1 py-2 text-sm font-black rounded-lg transition-all uppercase ${mode === "SINGLE" ? "bg-primary text-white border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] -translate-y-[2px]" : "text-gray-500 hover:text-black"}`}
                             >
                                 Single Bet
                             </button>
                             <button
                                 onClick={() => setMode("BULK")}
-                                className={`flex-1 py-1.5 text-sm font-bold rounded-md transition-all ${mode === "BULK" ? "bg-purple-600 text-white shadow" : "text-muted-foreground hover:text-white"}`}
+                                className={`flex-1 py-2 text-sm font-black rounded-lg transition-all uppercase ${mode === "BULK" ? "bg-purple-600 text-white border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] -translate-y-[2px]" : "text-gray-500 hover:text-black"}`}
                             >
                                 Bulk Wizard (AI)
                             </button>
@@ -212,72 +280,100 @@ export function CreateBetModal({ leagueId, isOpen, onClose, onSuccess }: CreateB
                                 {!showAiInput ? (
                                     <button
                                         onClick={() => setShowAiInput(true)}
-                                        className="w-full mb-6 p-3 rounded-lg bg-gradient-to-r from-purple-500/10 to-blue-500/10 border border-purple-500/20 text-purple-500 flex items-center justify-center gap-2 hover:bg-purple-500/20 transition-all"
+                                        className="w-full mb-6 p-3 rounded-xl bg-purple-100 border-2 border-purple-500 text-purple-700 flex items-center justify-center gap-2 hover:bg-purple-200 transition-all font-bold shadow-[2px_2px_0px_0px_rgba(147,51,234,1)] active:translate-y-[1px] active:shadow-none"
                                     >
-                                        <span className="font-bold">✨ Ask AI to draft a bet?</span>
+                                        <Wand2 className="h-4 w-4" />
+                                        <span>Ask AI to draft a bet?</span>
                                     </button>
                                 ) : (
-                                    <div className="mb-6 p-4 rounded-lg bg-secondary/50 border space-y-3">
-                                        <label className="text-sm font-medium">What's the topic?</label>
+                                    <div className="mb-6 p-4 rounded-xl bg-purple-50 border-2 border-purple-200 space-y-3">
+                                        <label className="text-sm font-bold text-black border-b border-purple-200 pb-1 block">What's the topic?</label>
                                         <div className="flex gap-2">
                                             <input
                                                 value={aiTopic}
                                                 onChange={(e) => setAiTopic(e.target.value)}
-                                                placeholder="e.g. Super Bowl, Election, Weather..."
-                                                className="flex-1 h-9 rounded-md border bg-background px-3"
+                                                placeholder="e.g. Super Bowl, Election..."
+                                                className="flex-1 h-10 rounded-lg border-2 border-black bg-white px-3 text-black placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500"
                                             />
-                                            <button
+                                            <Button
                                                 onClick={handleAiGenerate}
                                                 disabled={isAiLoading}
-                                                className="bg-purple-600 text-white px-4 rounded-md font-medium text-sm hover:bg-purple-700 disabled:opacity-50"
+                                                className="bg-purple-600 text-white hover:bg-purple-700 border-2 border-black"
                                             >
                                                 {isAiLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Generate"}
-                                            </button>
+                                            </Button>
                                         </div>
                                     </div>
                                 )}
 
                                 <form onSubmit={handleSubmit} className="space-y-6">
                                     <div>
-                                        <label className="text-sm font-bold text-white drop-shadow-md">Question</label>
+                                        <label className="text-sm font-black text-black uppercase mb-1 block">Question</label>
                                         <input
                                             type="text"
                                             required
                                             value={question}
                                             onChange={(e) => setQuestion(e.target.value)}
                                             placeholder={type === "MATCH" ? `${matchHome || "Home"} vs ${matchAway || "Away"}` : "e.g. Who wins the match?"}
-                                            className="flex h-12 w-full rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-white placeholder:text-white/20 focus:border-primary/50 focus:ring-1 focus:ring-primary/50 outline-none transition-all"
+                                            className="flex h-12 w-full rounded-xl border-2 border-black bg-white px-3 py-2 text-black placeholder:text-gray-400 focus:outline-none focus:ring-4 focus:ring-primary/20 transition-all shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]"
                                         />
                                     </div>
 
                                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                         <div>
-                                            <label className="text-sm font-bold text-white drop-shadow-md">Type</label>
-                                            <select
-                                                value={type}
-                                                onChange={(e) => setType(e.target.value as BetType)}
-                                                className="flex h-12 w-full rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-white focus:border-primary/50 focus:ring-1 focus:ring-primary/50 outline-none transition-all"
-                                            >
-                                                <option value="CHOICE" className="bg-zinc-900 text-white">Multiple Choice</option>
-                                                <option value="RANGE" className="bg-zinc-900 text-white">Range / Number</option>
-                                                <option value="MATCH" className="bg-zinc-900 text-white">Match Prediction</option>
-                                            </select>
+                                            <label className="text-sm font-black text-black uppercase mb-1 block">Type</label>
+                                            <div className="relative">
+                                                <select
+                                                    value={type}
+                                                    onChange={(e) => setType(e.target.value as BetType)}
+                                                    className="flex h-12 w-full appearance-none rounded-xl border-2 border-black bg-white px-3 py-2 text-black focus:outline-none focus:ring-4 focus:ring-primary/20 transition-all shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] pr-8"
+                                                >
+                                                    <option value="CHOICE">Multiple Choice</option>
+                                                    <option value="RANGE">Range / Number</option>
+                                                    <option value="MATCH">Match Prediction</option>
+                                                </select>
+                                                <div className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2">
+                                                    <svg className="h-4 w-4 fill-black" viewBox="0 0 20 20"><path d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" /></svg>
+                                                </div>
+                                            </div>
                                         </div>
                                         <div>
-                                            <label className="text-sm font-bold text-white drop-shadow-md">Closes At</label>
+                                            <label className="text-sm font-black text-black uppercase mb-1 block">Event Start Time</label>
                                             <input
                                                 type="datetime-local"
                                                 required
-                                                value={closesAt}
-                                                onChange={(e) => setClosesAt(e.target.value)}
-                                                className="flex h-12 w-full rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-white placeholder:text-white/20 focus:border-primary/50 focus:ring-1 focus:ring-primary/50 outline-none transition-all [color-scheme:dark]"
+                                                value={eventDateStr}
+                                                onChange={(e) => setEventDateStr(e.target.value)}
+                                                className="flex h-12 w-full rounded-xl border-2 border-black bg-white px-3 py-2 text-black placeholder:text-gray-400 focus:outline-none focus:ring-4 focus:ring-primary/20 transition-all shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]"
                                             />
                                         </div>
                                     </div>
 
+                                    <div>
+                                        <label className="text-sm font-black text-black uppercase mb-1 block">Lock Betting</label>
+                                        <div className="relative">
+                                            <select
+                                                value={lockBufferMinutes}
+                                                onChange={(e) => setLockBufferMinutes(Number(e.target.value))}
+                                                className="flex h-12 w-full appearance-none rounded-xl border-2 border-black bg-white px-3 py-2 text-black focus:outline-none focus:ring-4 focus:ring-primary/20 transition-all shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] pr-8"
+                                            >
+                                                <option value={0}>At Start (Kick-off)</option>
+                                                <option value={15}>15 Minutes Before</option>
+                                                <option value={60}>1 Hour Before</option>
+                                                <option value={1440}>24 Hours Before</option>
+                                            </select>
+                                            <div className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2">
+                                                <svg className="h-4 w-4 fill-black" viewBox="0 0 20 20"><path d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" /></svg>
+                                            </div>
+                                        </div>
+                                        <p className="text-xs font-bold text-gray-500 mt-1">
+                                            Betting will close at {eventDateStr ? new Date(new Date(eventDateStr).getTime() - (lockBufferMinutes * 60000)).toLocaleString() : "..."}
+                                        </p>
+                                    </div>
+
                                     {type === "CHOICE" && (
                                         <div className="space-y-3">
-                                            <label className="text-sm font-bold text-white drop-shadow-md">Options</label>
+                                            <label className="text-sm font-black text-black uppercase block">Options</label>
                                             {options.map((opt, idx) => (
                                                 <div key={idx} className="flex gap-2">
                                                     <input
@@ -286,99 +382,98 @@ export function CreateBetModal({ leagueId, isOpen, onClose, onSuccess }: CreateB
                                                         value={opt}
                                                         onChange={(e) => handleOptionChange(idx, e.target.value)}
                                                         placeholder={`Option ${idx + 1}`}
-                                                        className="flex h-10 w-full rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-white placeholder:text-white/20 focus:border-primary/50 focus:ring-1 focus:ring-primary/50 outline-none transition-all"
+                                                        className="flex h-10 w-full rounded-lg border-2 border-black bg-white px-3 py-2 text-black placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-primary shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
                                                     />
                                                     {options.length > 2 && (
-                                                        <button type="button" onClick={() => handleRemoveOption(idx)} className="p-2 text-red-400 hover:text-red-300 transition-colors">
+                                                        <button type="button" onClick={() => handleRemoveOption(idx)} className="p-2 text-red-500 hover:text-red-700 transition-colors border-2 border-red-500 rounded-lg shadow-[2px_2px_0px_0px_rgba(239,68,68,1)] active:translate-y-[1px] active:shadow-none hover:bg-red-50">
                                                             <Trash className="h-4 w-4" />
                                                         </button>
                                                     )}
                                                 </div>
                                             ))}
-                                            <button type="button" onClick={handleAddOption} className="text-sm text-primary font-bold flex items-center hover:text-primary/80 transition-colors">
-                                                <Plus className="h-4 w-4 mr-1" /> Add Option
+                                            <button type="button" onClick={handleAddOption} className="text-sm text-primary font-bold flex items-center hover:text-primary/80 transition-colors uppercase tracking-wide">
+                                                <Plus className="h-4 w-4 mr-1 border-2 border-primary rounded-full p-0.5" /> Add Option
                                             </button>
                                         </div>
                                     )}
 
                                     {type === "MATCH" && (
-                                        <div className="space-y-4 rounded-xl border border-white/10 bg-black/20 p-4">
+                                        <div className="space-y-4 rounded-xl border-2 border-black bg-blue-50 p-4 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
                                             <div className="grid grid-cols-2 gap-4">
                                                 <div>
-                                                    <label className="text-xs font-bold text-white/50">Home Team</label>
+                                                    <label className="text-xs font-bold text-blue-800 uppercase mb-1 block">Home Team</label>
                                                     <input
                                                         type="text"
                                                         required
                                                         value={matchHome}
                                                         onChange={(e) => setMatchHome(e.target.value)}
                                                         placeholder="e.g. Arsenal"
-                                                        className="flex h-10 w-full rounded-lg border border-white/10 bg-black/30 px-3 py-1 text-sm text-white focus:border-primary/50 outline-none"
+                                                        className="flex h-10 w-full rounded-lg border-2 border-black bg-white px-3 py-1 text-sm text-black focus:outline-none focus:ring-2 focus:ring-primary shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
                                                     />
                                                 </div>
                                                 <div>
-                                                    <label className="text-xs font-bold text-white/50">Away Team</label>
+                                                    <label className="text-xs font-bold text-blue-800 uppercase mb-1 block">Away Team</label>
                                                     <input
                                                         type="text"
                                                         required
                                                         value={matchAway}
                                                         onChange={(e) => setMatchAway(e.target.value)}
                                                         placeholder="e.g. Chelsea"
-                                                        className="flex h-10 w-full rounded-lg border border-white/10 bg-black/30 px-3 py-1 text-sm text-white focus:border-primary/50 outline-none"
+                                                        className="flex h-10 w-full rounded-lg border-2 border-black bg-white px-3 py-1 text-sm text-black focus:outline-none focus:ring-2 focus:ring-primary shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
                                                     />
                                                 </div>
                                             </div>
-                                            <p className="text-xs text-white/50 font-mono">
-                                                Payout Shares: Exact Score (5), Goal Diff (3), Winner (1).
+                                            <p className="text-xs text-blue-600 font-bold font-mono">
+                                                Payouts: Exact(5), Diff(3), Winner(1).
                                             </p>
                                         </div>
                                     )}
 
+                                    {/* Range - similar style */}
                                     {type === "RANGE" && (
-                                        <div className="space-y-4 rounded-xl border border-white/10 bg-black/20 p-4">
+                                        <div className="space-y-4 rounded-xl border-2 border-black bg-blue-50 p-4 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
                                             <div className="flex gap-4">
                                                 <div className="flex-1">
-                                                    <label className="text-xs font-bold text-white/50">Min</label>
+                                                    <label className="text-xs font-bold text-blue-800 uppercase mb-1 block">Min</label>
                                                     <input
                                                         type="number"
                                                         value={rangeMin}
                                                         onChange={(e) => setRangeMin(Number(e.target.value))}
-                                                        className="flex h-10 w-full rounded-lg border border-white/10 bg-black/30 px-3 py-1 text-sm text-white focus:border-primary/50 outline-none"
+                                                        className="flex h-10 w-full rounded-lg border-2 border-black bg-white px-3 py-1 text-sm text-black focus:outline-none focus:ring-2 focus:ring-primary shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
                                                     />
                                                 </div>
                                                 <div className="flex-1">
-                                                    <label className="text-xs font-bold text-white/50">Max</label>
+                                                    <label className="text-xs font-bold text-blue-800 uppercase mb-1 block">Max</label>
                                                     <input
                                                         type="number"
                                                         value={rangeMax}
                                                         onChange={(e) => setRangeMax(Number(e.target.value))}
-                                                        className="flex h-10 w-full rounded-lg border border-white/10 bg-black/30 px-3 py-1 text-sm text-white focus:border-primary/50 outline-none"
+                                                        className="flex h-10 w-full rounded-lg border-2 border-black bg-white px-3 py-1 text-sm text-black focus:outline-none focus:ring-2 focus:ring-primary shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
                                                     />
                                                 </div>
                                             </div>
                                             <div>
-                                                <label className="text-xs font-bold text-white/50">Unit (Optional)</label>
+                                                <label className="text-xs font-bold text-blue-800 uppercase mb-1 block">Unit</label>
                                                 <input
                                                     type="text"
                                                     value={rangeUnit}
                                                     onChange={(e) => setRangeUnit(e.target.value)}
                                                     placeholder="e.g. Points, Goals"
-                                                    className="flex h-10 w-full rounded-lg border border-white/10 bg-black/30 px-3 py-1 text-sm text-white focus:border-primary/50 outline-none"
+                                                    className="flex h-10 w-full rounded-lg border-2 border-black bg-white px-3 py-1 text-sm text-black focus:outline-none focus:ring-2 focus:ring-primary shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
                                                 />
                                             </div>
                                         </div>
                                     )}
 
                                     <div className="flex justify-end pt-4">
-                                        <motion.button
-                                            whileHover={{ scale: 1.05 }}
-                                            whileTap={{ scale: 0.95 }}
+                                        <Button
                                             type="submit"
                                             disabled={loading}
-                                            className="inline-flex items-center justify-center rounded-xl bg-gradient-to-r from-primary to-green-400 px-8 py-3 text-sm font-bold text-black shadow-[0_0_20px_rgba(0,255,100,0.3)] transition-all hover:shadow-[0_0_30px_rgba(0,255,100,0.5)] disabled:opacity-50"
+                                            className="flex-1 bg-green-400 text-black border-2 border-black hover:bg-green-500 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] active:translate-y-[2px] active:shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] transition-all h-12 text-lg font-black uppercase tracking-widest"
                                         >
-                                            {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                                            Create Bet
-                                        </motion.button>
+                                            {loading && <Loader2 className="mr-2 h-5 w-5 animate-spin" />}
+                                            {betToEdit ? "Save Changes" : "Create Bet"}
+                                        </Button>
                                     </div>
                                 </form>
                             </>
@@ -386,85 +481,90 @@ export function CreateBetModal({ leagueId, isOpen, onClose, onSuccess }: CreateB
                             <div className="space-y-6">
                                 <div className="space-y-4">
                                     <div>
-                                        <label className="text-sm font-bold text-white">Project / League</label>
+                                        <label className="text-sm font-black text-black">Project / League</label>
                                         <input
                                             value={bulkTopic}
                                             onChange={(e) => setBulkTopic(e.target.value)}
-                                            placeholder="e.g. Premier League, NBA Playoffs..."
-                                            className="flex h-10 w-full rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-white placeholder:text-white/20 focus:border-purple-500/50 outline-none"
+                                            placeholder="e.g. Premier League, NBA..."
+                                            className="flex h-10 w-full rounded-lg border-2 border-black bg-white px-3 py-2 text-black focus:outline-none focus:ring-2 focus:ring-purple-500 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
                                         />
                                     </div>
                                     <div>
-                                        <label className="text-sm font-bold text-white">Timeframe</label>
+                                        <label className="text-sm font-black text-black">Timeframe</label>
                                         <input
                                             value={bulkTimeframe}
                                             onChange={(e) => setBulkTimeframe(e.target.value)}
-                                            placeholder="e.g. Next 3 gameweeks, Until March 2026..."
-                                            className="flex h-10 w-full rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-white placeholder:text-white/20 focus:border-purple-500/50 outline-none"
+                                            placeholder="e.g. Next Week..."
+                                            className="flex h-10 w-full rounded-lg border-2 border-black bg-white px-3 py-2 text-black focus:outline-none focus:ring-2 focus:ring-purple-500 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
                                         />
                                     </div>
                                     <div>
-                                        <label className="text-sm font-bold text-white">Bet Type</label>
-                                        <select
-                                            value={bulkType}
-                                            onChange={(e) => setBulkType(e.target.value as any)}
-                                            className="flex h-10 w-full rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-white focus:border-purple-500/50 outline-none"
-                                        >
-                                            <option value="MATCH" className="bg-zinc-900">Match Prediction (Exact Score)</option>
-                                            <option value="CHOICE" className="bg-zinc-900">1x2 (Home/Draw/Away)</option>
-                                        </select>
+                                        <label className="text-sm font-black text-black">Bet Type</label>
+                                        <div className="relative">
+                                            <select
+                                                value={bulkType}
+                                                onChange={(e) => setBulkType(e.target.value as any)}
+                                                className="flex h-10 w-full appearance-none rounded-lg border-2 border-black bg-white px-3 py-2 text-black focus:outline-none focus:ring-2 focus:ring-purple-500 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
+                                            >
+                                                <option value="MATCH">Match Prediction (Exact Score)</option>
+                                                <option value="CHOICE">1x2 (Home/Draw/Away)</option>
+                                            </select>
+                                            <div className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2">
+                                                <svg className="h-4 w-4 fill-black" viewBox="0 0 20 20"><path d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" /></svg>
+                                            </div>
+                                        </div>
                                     </div>
 
-                                    <button
+                                    <Button
                                         onClick={handleBulkGenerate}
                                         disabled={isAiLoading}
-                                        className="w-full flex items-center justify-center rounded-xl bg-purple-600 py-3 text-sm font-bold text-white shadow hover:bg-purple-700 disabled:opacity-50"
+                                        className="w-full h-12 bg-purple-600 text-white hover:bg-purple-700 border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]"
                                     >
                                         {isAiLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : "🤖 Generate Schedule"}
-                                    </button>
+                                    </Button>
                                 </div>
 
                                 {/* Preview List */}
                                 {bulkBets.length > 0 && (
                                     <div className="space-y-2">
-                                        <div className="flex items-center justify-between text-sm text-white/50 border-b border-white/10 pb-2">
-                                            <span>Generated {bulkBets.length} matches</span>
+                                        <div className="flex items-center justify-between text-sm text-gray-500 border-b-2 border-gray-100 pb-2">
+                                            <span className="font-bold">Generated {bulkBets.length} matches</span>
                                             <button
                                                 onClick={() => setSelectedBulkIndices(selectedBulkIndices.length === bulkBets.length ? [] : bulkBets.map((_, i) => i))}
-                                                className="text-purple-400 hover:text-purple-300"
+                                                className="text-purple-600 hover:text-purple-800 font-bold"
                                             >
                                                 {selectedBulkIndices.length === bulkBets.length ? "Deselect All" : "Select All"}
                                             </button>
                                         </div>
                                         <div className="max-h-[300px] overflow-y-auto space-y-2 pr-2">
                                             {bulkBets.map((bet, i) => (
-                                                <div key={i} className={`flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${selectedBulkIndices.includes(i) ? "bg-purple-500/20 border-purple-500/50" : "bg-black/20 border-white/5 hover:bg-white/5"}`} onClick={() => {
+                                                <div key={i} className={`flex items-start gap-3 p-3 rounded-lg border-2 cursor-pointer transition-all ${selectedBulkIndices.includes(i) ? "bg-purple-100 border-purple-500 shadow-[2px_2px_0px_0px_rgba(147,51,234,1)]" : "bg-white border-gray-200 hover:bg-gray-50"}`} onClick={() => {
                                                     if (selectedBulkIndices.includes(i)) {
                                                         setSelectedBulkIndices(selectedBulkIndices.filter(idx => idx !== i));
                                                     } else {
                                                         setSelectedBulkIndices([...selectedBulkIndices, i]);
                                                     }
                                                 }}>
-                                                    <div className={`mt-1 w-4 h-4 rounded border flex items-center justify-center ${selectedBulkIndices.includes(i) ? "bg-purple-500 border-purple-500" : "border-white/30"}`}>
+                                                    <div className={`mt-1 w-5 h-5 rounded border-2 flex items-center justify-center ${selectedBulkIndices.includes(i) ? "bg-purple-600 border-purple-600" : "border-gray-300 bg-white"}`}>
                                                         {selectedBulkIndices.includes(i) && <div className="w-2 h-2 bg-white rounded-sm" />}
                                                     </div>
                                                     <div className="flex-1">
-                                                        <p className="font-bold text-sm text-white">{bet.question}</p>
-                                                        <p className="text-xs text-white/50">{new Date(bet.date).toLocaleString()} • {bet.matchHome} vs {bet.matchAway} • {bet.type === "MATCH" ? "Score Prediction" : "1x2"}</p>
+                                                        <p className="font-bold text-sm text-black">{bet.question}</p>
+                                                        <p className="text-xs text-gray-500 font-bold">{new Date(bet.date).toLocaleString()} • {bet.matchHome} vs {bet.matchAway}</p>
                                                     </div>
                                                 </div>
                                             ))}
                                         </div>
 
-                                        <div className="pt-4 border-t border-white/10">
-                                            <button
+                                        <div className="pt-4 border-t-2 border-dashed border-gray-200">
+                                            <Button
                                                 onClick={handleBulkCreate}
                                                 disabled={loading || selectedBulkIndices.length === 0}
-                                                className="w-full flex items-center justify-center rounded-xl bg-gradient-to-r from-green-500 to-emerald-600 py-3 text-sm font-bold text-white shadow hover:shadow-lg disabled:opacity-50"
+                                                className="w-full h-12 bg-green-500 hover:bg-green-600 text-black border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]"
                                             >
                                                 {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Plus className="mr-2 h-4 w-4" />}
                                                 Create {selectedBulkIndices.length} Selected Bets
-                                            </button>
+                                            </Button>
                                         </div>
                                     </div>
                                 )}

@@ -5,12 +5,14 @@ import { LeagueRole } from "@/lib/rbac";
 
 export type LeagueMode = "ZERO_SUM" | "STANDARD";
 export type LeagueStatus = "NOT_STARTED" | "STARTED" | "FINISHED" | "ARCHIVED";
+export type BuyInType = "FIXED" | "FLEXIBLE";
 
 export interface League {
     id: string;
     name: string;
     ownerId: string;
     startCapital: number;
+    buyInType?: BuyInType; // Only for ZERO_SUM mode
     startDate?: any;
     endDate?: any;
     createdAt: any;
@@ -27,7 +29,8 @@ export interface LeagueMember {
     joinedAt: any;
     displayName: string;
     photoURL: string;
-    totalInvested: number; // For Zero Sum logic (Buy-in + Rebuys)
+    totalInvested: number; // Only actual bets placed
+    totalBought: number; // Initial capital + Rebuys (not counted as invested)
 }
 
 export async function createLeague(
@@ -35,6 +38,7 @@ export async function createLeague(
     leagueName: string,
     mode: LeagueMode,
     startCapital: number = 1000,
+    buyInType: BuyInType = "FIXED",
     startDate?: Date,
     endDate?: Date
 ) {
@@ -44,32 +48,34 @@ export async function createLeague(
     const leagueId = leagueRef.id;
 
     // In Standard mode, everyone starts with 0.
-    // In Zero Sum, startCapital is the initial buy-in.
-    const initialPoints = mode === "STANDARD" ? 0 : startCapital;
+    // In Zero Sum FIXED, everyone gets startCapital.
+    // In Zero Sum FLEXIBLE, everyone starts with 0.
+    const initialPoints = mode === "STANDARD" ? 0 : (buyInType === "FIXED" ? startCapital : 0);
 
     const leagueData: League = {
         id: leagueId,
         name: leagueName,
         ownerId: user.uid,
-        startCapital: initialPoints,
+        startCapital,
+        buyInType: mode === "ZERO_SUM" ? buyInType : undefined,
+        startDate: startDate || null,
+        endDate: endDate || null,
         createdAt: serverTimestamp(),
         memberCount: 1,
-        mode: mode,
-        status: "NOT_STARTED",
+        mode,
+        status: "NOT_STARTED"
     };
 
-    if (startDate) leagueData.startDate = startDate;
-    if (endDate) leagueData.endDate = endDate;
-
-    const memberData: LeagueMember = {
+    const ownerMember: LeagueMember = {
         uid: user.uid,
-        leagueId: leagueId,
+        leagueId,
         role: "OWNER",
         points: initialPoints,
         joinedAt: serverTimestamp(),
         displayName: user.displayName || "Anonymous",
         photoURL: user.photoURL || "",
-        totalInvested: mode === "ZERO_SUM" ? initialPoints : 0,
+        totalInvested: 0, // Only actual bets count
+        totalBought: mode === "ZERO_SUM" && buyInType === "FIXED" ? startCapital : 0, // Initial capital
     };
 
     try {
@@ -79,7 +85,7 @@ export async function createLeague(
 
             // Create member document in subcollection
             const memberRef = doc(db, "leagues", leagueId, "members", user.uid);
-            transaction.set(memberRef, memberData);
+            transaction.set(memberRef, ownerMember);
         });
         return leagueId;
     } catch (error) {
@@ -96,17 +102,17 @@ export async function updateLeagueStatus(leagueId: string, status: LeagueStatus)
 export async function rebuy(leagueId: string, userId: string, amount: number) {
     const memberRef = doc(db, "leagues", leagueId, "members", userId);
 
-    // Increment points AND totalInvested
+    // Increment points AND totalBought (NOT totalInvested - that's only for bets)
     await runTransaction(db, async (transaction) => {
         const memberSnap = await transaction.get(memberRef);
         if (!memberSnap.exists()) throw new Error("Member not found");
 
         const currentPoints = memberSnap.data().points || 0;
-        const currentInvested = memberSnap.data().totalInvested || 0;
+        const currentBought = memberSnap.data().totalBought || 0;
 
         transaction.update(memberRef, {
             points: currentPoints + amount,
-            totalInvested: currentInvested + amount
+            totalBought: currentBought + amount
         });
     });
 }

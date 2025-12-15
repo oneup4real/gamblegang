@@ -1,24 +1,34 @@
 "use client";
 
-import { Bet, BetType, placeWager, resolveBet, calculateOdds, getReturnPotential, Wager, startProofing, confirmVerification } from "@/lib/services/bet-service";
-import { verifyBetResult } from "@/app/actions/ai-bet-actions";
+import { Bet, BetType, placeWager, resolveBet, calculateOdds, getReturnPotential, Wager, startProofing, confirmVerification, publishBet, disputeBetResult, voteOnDisputedBet, markBetInvalidAndRefund, checkDisputeVoting } from "@/lib/services/bet-service";
+import { aiAutoResolveBet, verifyBetResult } from "@/app/actions/ai-bet-actions";
 import { useAuth } from "@/components/auth-provider";
 import { useState } from "react";
-import { Coins, Loader2, Gavel, Wallet, Trophy, BrainCircuit, CheckCircle, AlertTriangle } from "lucide-react";
+import { Coins, Loader2, Gavel, Wallet, Trophy, BrainCircuit, CheckCircle, AlertTriangle, Timer, ThumbsUp, ThumbsDown, AlertCircle } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
+import { Button } from "@/components/ui/button";
+import { CoinFlow } from "@/components/animations/coin-flow";
+import { AllInModal } from "@/components/all-in-modal";
+import confetti from "canvas-confetti";
+import { useEffect } from "react";
 
 interface BetCardProps {
     bet: Bet;
     userPoints: number;
     userWager?: Wager;
     mode: "ZERO_SUM" | "STANDARD";
+    onEdit?: (bet: Bet) => void;
+    onWagerSuccess?: () => void;
 }
 
-export function BetCard({ bet, userPoints, userWager, mode }: BetCardProps) {
+import { collection, getDocs } from "firebase/firestore";
+import { db } from "@/lib/firebase/config";
+
+export function BetCard({ bet, userPoints, userWager, mode, onEdit, onWagerSuccess }: BetCardProps) {
     const { user } = useAuth();
     const [isExpanded, setIsExpanded] = useState(false);
     const [isResolving, setIsResolving] = useState(false);
-    const [wagerAmount, setWagerAmount] = useState<number>(mode === "STANDARD" ? 100 : 0);
+    const [wagerAmount, setWagerAmount] = useState<number | "">(mode === "STANDARD" ? 100 : "");
     const [selectedOption, setSelectedOption] = useState<string | number>(""); // For CHOICE bets
     const [rangeValue, setRangeValue] = useState<number | "">(""); // For RANGE bets
     const [winningOption, setWinningOption] = useState<string | number>(""); // For CHOICE resolution
@@ -28,6 +38,64 @@ export function BetCard({ bet, userPoints, userWager, mode }: BetCardProps) {
     const [loading, setLoading] = useState(false);
     const [aiSuggestion, setAiSuggestion] = useState<string | null>(null);
     const [verifying, setVerifying] = useState(false);
+    const [showCoinFlow, setShowCoinFlow] = useState(false);
+    const [showAllInModal, setShowAllInModal] = useState(false);
+    const [pendingWagerData, setPendingWagerData] = useState<{ amount: number; prediction: any } | null>(null);
+    const [userVote, setUserVote] = useState<"approve" | "reject" | null>(bet.votes?.[user?.uid || ""] || null);
+    const [votingLoading, setVotingLoading] = useState(false);
+    const [disputeLoading, setDisputeLoading] = useState(false);
+    const [aiResolving, setAiResolving] = useState(false);
+    const [aiHighlighted, setAiHighlighted] = useState(false);
+
+    useEffect(() => {
+        if (userWager && userWager.status === "WON") {
+            confetti({
+                particleCount: 100,
+                spread: 70,
+                origin: { y: 0.6 }
+            });
+        }
+    }, [userWager]);
+
+    // Dynamic Odds Calculation for Match/Range (Zero Sum)
+    const [dynamicMatchOdds, setDynamicMatchOdds] = useState<{ [key: string]: string }>({});
+    const [dynamicRangeOdds, setDynamicRangeOdds] = useState<{ [key: number]: string }>({});
+
+    useEffect(() => {
+        if (mode === "ZERO_SUM" && (bet.type === "MATCH" || bet.type === "RANGE") && bet.status === "OPEN") {
+            const fetchWagersForOdds = async () => {
+                const wagersRef = collection(db, "leagues", bet.leagueId, "bets", bet.id, "wagers");
+                const snap = await getDocs(wagersRef);
+                const wagers = snap.docs.map(d => d.data() as Wager);
+
+                if (bet.type === "MATCH") {
+                    const pools: { [key: string]: number } = {};
+                    wagers.forEach(w => {
+                        const sel = w.selection as { home: number, away: number };
+                        const key = `${sel.home}-${sel.away}`;
+                        pools[key] = (pools[key] || 0) + w.amount;
+                    });
+                    const odds: { [key: string]: string } = {};
+                    Object.keys(pools).forEach(k => {
+                        odds[k] = calculateOdds(bet.totalPool, pools[k]);
+                    });
+                    setDynamicMatchOdds(odds);
+                } else if (bet.type === "RANGE") {
+                    const pools: { [key: number]: number } = {};
+                    wagers.forEach(w => {
+                        const val = Number(w.selection);
+                        pools[val] = (pools[val] || 0) + w.amount;
+                    });
+                    const odds: { [key: number]: string } = {};
+                    Object.keys(pools).forEach(k => {
+                        odds[Number(k)] = calculateOdds(bet.totalPool, pools[Number(k)]);
+                    });
+                    setDynamicRangeOdds(odds);
+                }
+            };
+            fetchWagersForOdds();
+        }
+    }, [bet, mode]);
 
     // Quick wager presets
     // State for Match Wager
@@ -100,7 +168,7 @@ export function BetCard({ bet, userPoints, userWager, mode }: BetCardProps) {
         if (!user) return;
         // Validation: If Zero Sum, check balance. If Standard, ignore.
         if (mode === "ZERO_SUM") {
-            if (userPoints < wagerAmount || wagerAmount <= 0) return alert("Insufficient points or invalid amount");
+            if (userPoints < (Number(wagerAmount) || 0) || (Number(wagerAmount) || 0) <= 0) return alert("Insufficient points or invalid amount");
         }
 
         let prediction: string | number | { home: number, away: number } = selectedOption;
@@ -117,19 +185,50 @@ export function BetCard({ bet, userPoints, userWager, mode }: BetCardProps) {
             return alert("Invalid bet type or selection.");
         }
 
+        const amount = mode === "STANDARD" ? 0 : Number(wagerAmount);
+
+        // Check if player is going ALL-IN (betting everything they have)
+        if (mode === "ZERO_SUM" && amount >= userPoints && amount > 0) {
+            // Save wager data and show confirmation modal
+            setPendingWagerData({ amount, prediction });
+            setShowAllInModal(true);
+            return;
+        }
+
+        // Proceed with normal wager
+        await executePlaceWager(amount, prediction);
+    };
+
+    const executePlaceWager = async (amount: number, prediction: any) => {
         setLoading(true);
         try {
-            // For Standard mode, we just pass 100 or whatever, backend forces it to 100 anyway.
-            await placeWager(bet.leagueId, bet.id, user, mode === "STANDARD" ? 100 : wagerAmount, prediction as any);
-            if (mode === "ZERO_SUM") setWagerAmount(0);
+            await placeWager(bet.leagueId, bet.id, user!, amount, prediction as any);
+            if (mode === "ZERO_SUM") setWagerAmount("");
             setSelectedOption("");
             setRangeValue("");
             setMatchHome("");
             setMatchAway("");
-            alert("Wager placed!");
+            setShowCoinFlow(true);
+            if (onWagerSuccess) {
+                setTimeout(() => onWagerSuccess(), 1500); // Delay refresh to let animation play
+            }
         } catch (error) {
             console.error(error);
             alert("Failed to place wager");
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handlePublish = async () => {
+        if (!user || !isOwner) return;
+        setLoading(true);
+        try {
+            await publishBet(bet.leagueId, bet.id);
+            alert("Bet Published! It is now live.");
+        } catch (error) {
+            console.error(error);
+            alert("Failed to publish bet");
         } finally {
             setLoading(false);
         }
@@ -166,44 +265,156 @@ export function BetCard({ bet, userPoints, userWager, mode }: BetCardProps) {
         }
     };
 
+    const handleDispute = async () => {
+        if (!user) return;
+        if (!confirm("Are you sure you want to dispute this result? This will trigger a vote among all players.")) return;
+
+        setDisputeLoading(true);
+        try {
+            await disputeBetResult(bet.leagueId, bet.id, user.uid);
+            alert("Dispute filed! Voting has begun.");
+            if (onWagerSuccess) onWagerSuccess();
+        } catch (error: any) {
+            alert(error.message || "Failed to dispute bet");
+        } finally {
+            setDisputeLoading(false);
+        }
+    };
+
+    const handleVote = async (vote: "approve" | "reject") => {
+        if (!user) return;
+
+        setVotingLoading(true);
+        try {
+            await voteOnDisputedBet(bet.leagueId, bet.id, user.uid, vote);
+            setUserVote(vote);
+            alert(`Vote recorded: ${vote === "approve" ? "✅ Approved" : "❌ Rejected"}`);
+            if (onWagerSuccess) onWagerSuccess();
+        } catch (error: any) {
+            alert(error.message || "Failed to vote");
+        } finally {
+            setVotingLoading(false);
+        }
+    };
+
+    const handleMarkInvalid = async () => {
+        if (!confirm("Mark this bet as INVALID? All players will be refunded. This cannot be undone.")) return;
+
+        setLoading(true);
+        try {
+            await markBetInvalidAndRefund(bet.leagueId, bet.id);
+            alert("Bet marked as INVALID. All wagers have been refunded.");
+            if (onWagerSuccess) onWagerSuccess();
+        } catch (error: any) {
+            alert(error.message || "Failed to mark bet invalid");
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const getDisputeTimeRemaining = () => {
+        if (!bet.disputeDeadline) return null;
+        const deadline = bet.disputeDeadline.toDate();
+        const now = new Date();
+        const diff = deadline.getTime() - now.getTime();
+
+        if (diff <= 0) return "Expired";
+
+        const hours = Math.floor(diff / (1000 * 60 * 60));
+        const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+
+        return `${hours}h ${minutes}m`;
+    };
+
+    const handleAIResolve = async () => {
+        setAiResolving(true);
+        try {
+            const result = await aiAutoResolveBet(bet);
+            if (!result) {
+                alert("AI couldn't determine the result. Please enter manually.");
+                return;
+            }
+
+            // Prefill based on type
+            if (result.type === "MATCH") {
+                setResHome(result.home);
+                setResAway(result.away);
+            } else if (result.type === "CHOICE") {
+                setWinningOption(String(result.optionIndex));
+            } else if (result.type === "RANGE") {
+                setWinningRange(result.value);
+            }
+
+            // Trigger animation
+            setAiHighlighted(true);
+            setTimeout(() => setAiHighlighted(false), 3000);
+
+            alert("✅ Result found and filled by AI!");
+        } catch (error: any) {
+            alert(error.message || "AI resolution failed");
+        } finally {
+            setAiResolving(false);
+        }
+    };
+
+
     return (
         <motion.div
             layout
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
-            whileHover={{ scale: 1.02, y: -5 }}
+            whileHover={{ scale: 1.01, rotate: 1 }}
             transition={{ type: "spring", stiffness: 300, damping: 20 }}
-            className="glass rounded-xl p-6 relative overflow-hidden group"
+            className="rounded-xl border-2 border-black bg-white p-6 relative comic-shadow mb-6"
         >
-            <div className="absolute inset-0 bg-gradient-to-br from-primary/5 to-secondary/5 opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none" />
-
             <div className="flex justify-between items-start mb-4 relative z-10">
                 <div>
-                    <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-bold uppercase tracking-wider shadow-sm ${bet.status === "OPEN" ? "bg-green-500/20 text-green-400 border border-green-500/30" :
-                        bet.status === "RESOLVED" ? "bg-blue-500/20 text-blue-400 border border-blue-500/30" :
-                            bet.status === "PROOFING" ? "bg-yellow-500/20 text-yellow-400 border border-yellow-500/30" :
-                                "bg-zinc-500/20 text-zinc-400 border border-zinc-500/30"
+                    <span className={`inline-flex items-center border-2 border-black rounded-lg px-2 py-0.5 text-xs font-bold uppercase tracking-wider shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] ${bet.status === "RESOLVED" ? "bg-blue-400 text-black" :
+                        bet.status === "PROOFING" ? "bg-yellow-400 text-black" :
+                            bet.status === "DISPUTED" ? "bg-orange-500 text-white animate-pulse" :
+                                bet.status === "INVALID" ? "bg-gray-400 text-black" :
+                                    bet.status === "DRAFT" ? "bg-gray-300 text-gray-800 border-dashed" :
+                                        isExpired ? "bg-red-400 text-black" :
+                                            "bg-green-400 text-black pb-1"
                         }`}>
-                        {bet.status} • {bet.type}
+                        {bet.status === "INVALID" ? "♻️ INVALID (REFUNDED)" :
+                            bet.status === "OPEN" && isExpired ? "LOCKED" :
+                                bet.status} • {bet.type}
                     </span>
-                    <h3 className="mt-3 text-xl font-bold text-white drop-shadow-md">{bet.question}</h3>
+
+                    {/* Dispute Timer */}
+                    {bet.disputeDeadline && !bet.disputeActive && bet.status === "PROOFING" && (
+                        <div className="mt-2 flex items-center gap-2 text-xs font-bold text-orange-600">
+                            <Timer className="h-4 w-4" />
+                            Dispute Period: {getDisputeTimeRemaining()} remaining
+                        </div>
+                    )}
+                    <h3 className="mt-3 text-xl font-bold font-comic text-black leading-tight max-w-[90%]">{bet.question}</h3>
                     {bet.type === "MATCH" && bet.matchDetails && (
-                        <p className="text-sm text-primary font-medium mt-1">
+                        <p className="text-sm text-blue-600 font-black mt-1 uppercase tracking-tight">
                             {bet.matchDetails.homeTeam} vs {bet.matchDetails.awayTeam} • {new Date(bet.matchDetails.date).toLocaleDateString()}
                         </p>
                     )}
-                    <p className="text-xs text-muted-foreground mt-1">
-                        Pool: {bet.totalPool} pts • Closes {new Date(bet.closesAt.seconds * 1000).toLocaleDateString()}
+                    <p className="text-xs text-muted-foreground mt-1 font-bold">
+                        Pool: {bet.totalPool} pts
+                        {bet.eventDate && (
+                            <span className="ml-2 bg-yellow-100 text-yellow-800 px-1 border border-black rounded-md">
+                                Kick-off: {new Date(bet.eventDate.seconds * 1000).toLocaleString()}
+                            </span>
+                        )}
+                        <span className="block mt-1 text-red-600">
+                            Betting Closes: {new Date(bet.closesAt.seconds * 1000).toLocaleString()}
+                        </span>
                     </p>
                 </div>
-                {bet.status === "RESOLVED" && <Trophy className="h-6 w-6 text-yellow-500" />}
+                {bet.status === "RESOLVED" && <Trophy className="h-8 w-8 text-yellow-500 fill-yellow-500 drop-shadow-[2px_2px_0_rgba(0,0,0,1)]" />}
             </div>
 
             {/* If Resolved, show outcome */}
             {bet.status === "RESOLVED" && (
-                <div className="mb-6 rounded-lg bg-muted/50 p-4 border border-border/50">
-                    <p className="text-sm font-medium text-muted-foreground">Winning Outcome</p>
-                    <p className="text-xl font-bold mt-1 text-primary">
+                <div className="mb-6 rounded-lg bg-blue-50 p-4 border-2 border-black border-dashed">
+                    <p className="text-sm font-black text-blue-600 uppercase">Winning Outcome</p>
+                    <p className="text-2xl font-black mt-1 text-black">
                         {bet.type === "MATCH" && typeof bet.winningOutcome === "object" && bet.winningOutcome !== null && "home" in bet.winningOutcome
                             ? `${(bet.winningOutcome as any).home} - ${(bet.winningOutcome as any).away}`
                             : String(bet.winningOutcome)}
@@ -212,9 +423,10 @@ export function BetCard({ bet, userPoints, userWager, mode }: BetCardProps) {
                         <motion.div
                             initial={{ scale: 0.9, opacity: 0 }}
                             animate={{ scale: 1, opacity: 1 }}
-                            className="mt-3 flex items-center gap-2 text-green-500"
+                            className="mt-3 flex items-center gap-2 text-green-600 font-black text-lg"
                         >
-                            <span className="font-bold">You Won +{userWager.payout} pts!</span>
+                            <CheckCircle className="h-5 w-5 fill-green-600 text-white" />
+                            <span>You Won +{userWager.payout} pts!</span>
                         </motion.div>
                     )}
                 </div>
@@ -223,67 +435,103 @@ export function BetCard({ bet, userPoints, userWager, mode }: BetCardProps) {
             {/* Wager Input Section for OPEN bets */}
             {bet.status === "OPEN" && !isExpired && !userWager && (
                 <div className="space-y-4">
-                    <div className="flex items-center gap-2 mb-2">
-                        <Wallet className="h-4 w-4 text-purple-400" />
-                        <span className="text-xs font-medium text-purple-200">
-                            {mode === "ZERO_SUM" ? `My Points: ${userPoints}` : "Arcade Mode: Free Entry"}
+                    <div className="flex items-center gap-2 mb-2 p-2 bg-purple-100 border-2 border-black rounded-lg w-max">
+                        <Wallet className="h-4 w-4 text-black" />
+                        <span className="text-xs font-bold text-black uppercase">
+                            {mode === "ZERO_SUM" ? `Your Points: ${userPoints}` : "Arcade Mode: Free Entry"}
                         </span>
                     </div>
 
                     {/* CHOICE BETS */}
                     {bet.type === "CHOICE" && bet.options && (
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                            {bet.options.map((opt, idx) => {
-                                const odds = calculateOdds(bet.totalPool, opt.totalWagered);
-                                // For standard mode, assume wagerAmount is 100 for potential calculation
-                                const calcWager = mode === "STANDARD" ? 100 : wagerAmount;
-                                const potential = calcWager > 0
-                                    ? getReturnPotential(calcWager, bet.totalPool + calcWager, opt.totalWagered + calcWager).toFixed(0)
-                                    : (1.0 * (Number(odds) || 1) * 10).toFixed(0);
+                        <div className="space-y-3">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                {bet.options.map((opt, idx) => {
+                                    const odds = calculateOdds(bet.totalPool, opt.totalWagered);
+                                    // For standard mode, assume wagerAmount is 100 for potential calculation
+                                    const calcWager = mode === "STANDARD" ? 100 : (Number(wagerAmount) || 0);
+                                    const potential = calcWager > 0
+                                        ? getReturnPotential(calcWager, bet.totalPool + calcWager, opt.totalWagered + calcWager).toFixed(0)
+                                        : (1.0 * (Number(odds) || 1) * 10).toFixed(0);
 
-                                return (
-                                    <button
-                                        key={opt.id}
-                                        onClick={() => setSelectedOption(String(idx))}
-                                        className={`relative flex flex-col items-start rounded-lg border p-3 text-left transition-all duration-300 ${selectedOption === String(idx)
-                                            ? "border-primary bg-primary/10 shadow-[0_0_15px_rgba(0,255,128,0.3)] scale-[1.02]"
-                                            : "border-white/10 bg-black/20 hover:bg-white/5 hover:border-white/20"
-                                            }`}
-                                    >
-                                        <span className="font-bold text-sm tracking-wide text-white">{opt.text}</span>
-                                        <div className="mt-2 flex w-full items-center justify-between text-xs text-muted-foreground">
-                                            <span className="font-mono text-purple-300">{odds}x</span>
-                                            {selectedOption === String(idx) && (
-                                                <span className="text-primary font-bold text-shadow-neon">Est. Pts: {potential}</span>
-                                            )}
-                                        </div>
-                                    </button>
-                                );
-                            })}
+                                    // Calculate precise percentage of pool (excluding current hypothetical wager for display stability)
+                                    const percentage = bet.totalPool > 0 ? Math.round((opt.totalWagered / bet.totalPool) * 100) : 0;
+
+                                    return (
+                                        <button
+                                            key={opt.id}
+                                            onClick={() => setSelectedOption(String(idx))}
+                                            className={`relative overflow-hidden flex flex-col items-start rounded-xl border-2 p-3 text-left transition-all duration-200 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] active:translate-y-[2px] active:shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] ${selectedOption === String(idx)
+                                                ? "border-black bg-white ring-2 ring-primary ring-offset-2" // Selected needs highlight
+                                                : "border-black bg-white hover:bg-gray-50"
+                                                }`}
+                                        >
+                                            {/* Progress Bar Background */}
+                                            <div
+                                                className={`absolute left-0 top-0 bottom-0 transition-all duration-500 ease-out z-0 ${selectedOption === String(idx) ? "bg-primary/20" : "bg-gray-100"}`}
+                                                style={{ width: `${percentage}%` }}
+                                            />
+
+                                            <div className="relative z-10 w-full">
+                                                <div className="flex justify-between items-start w-full">
+                                                    <span className="font-bold text-sm tracking-wide text-black">{opt.text}</span>
+                                                    <span className="text-xs font-black text-gray-400">{percentage}%</span>
+                                                </div>
+                                                <div className="mt-2 text-xs">
+                                                    {mode === "ZERO_SUM" ? (
+                                                        <div className="flex items-center justify-between bg-yellow-200/50 p-1 rounded border border-black/20">
+                                                            <div className="flex flex-col leading-none">
+                                                                <span className="text-[9px] uppercase font-bold text-gray-500">Dynamic Odds</span>
+                                                                <span className="font-black text-sm">{odds}x</span>
+                                                            </div>
+                                                            <div className="flex flex-col items-end leading-none">
+                                                                <span className="text-[9px] uppercase font-bold text-gray-500">Est. Return</span>
+                                                                <span className="font-black text-sm">{potential} pts</span>
+                                                            </div>
+                                                        </div>
+                                                    ) : (
+                                                        <div className="flex items-center justify-between">
+                                                            <span className="font-mono font-bold text-black bg-gray-100 px-1 border border-black rounded">{odds}x</span>
+                                                            <span className="font-medium text-gray-500">
+                                                                Return: <span className="text-black font-bold">{potential}</span>
+                                                            </span>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        </button>
+                                    );
+                                })}
+                            </div>
                         </div>
                     )}
 
                     {/* RANGE BETS */}
                     {bet.type === "RANGE" && (
                         <div className="space-y-2">
-                            <label className="text-xs font-medium text-purple-200">Your Prediction ({bet.rangeMin} - {bet.rangeMax} {bet.rangeUnit})</label>
+                            <label className="text-xs font-bold text-black uppercase">Your Prediction ({bet.rangeMin} - {bet.rangeMax} {bet.rangeUnit})</label>
                             <input
                                 type="number"
                                 value={rangeValue}
                                 onChange={(e) => setRangeValue(Number(e.target.value))}
-                                className="flex h-12 w-full rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-sm text-white placeholder:text-white/20 focus:border-primary/50 focus:ring-1 focus:ring-primary/50 focus:outline-none transition-all"
+                                className="flex h-12 w-full rounded-xl border-2 border-black bg-white px-3 py-2 text-sm text-black placeholder:text-gray-400 focus:outline-none focus:ring-4 focus:ring-primary/20 transition-all shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]"
                                 placeholder={`Enter number (${bet.rangeMin}-${bet.rangeMax})`}
                             />
+                            {mode === "ZERO_SUM" && rangeValue !== "" && (
+                                <p className="text-xs font-bold text-gray-500 mt-1 text-right">
+                                    Current Odds for {rangeValue}: {dynamicRangeOdds[Number(rangeValue)] || calculateOdds(bet.totalPool, 0)}x
+                                </p>
+                            )}
                         </div>
                     )}
 
                     {/* MATCH BETS */}
                     {bet.type === "MATCH" && (
                         <div className="space-y-3">
-                            <label className="text-xs font-medium text-purple-200">Predict Score</label>
+                            <label className="text-xs font-bold text-black uppercase">Predict Score</label>
                             <div className="flex items-center gap-4">
                                 <div className="flex-1 text-center">
-                                    <label className="text-[10px] uppercase font-bold text-muted-foreground mb-1 block">
+                                    <label className="text-[10px] uppercase font-bold text-gray-500 mb-1 block">
                                         {bet.matchDetails?.homeTeam || "Home"}
                                     </label>
                                     <input
@@ -291,12 +539,12 @@ export function BetCard({ bet, userPoints, userWager, mode }: BetCardProps) {
                                         min="0"
                                         value={matchHome}
                                         onChange={(e) => setMatchHome(e.target.value === "" ? "" : Number(e.target.value))}
-                                        className="h-14 w-full rounded-xl border border-white/10 bg-black/30 text-center text-2xl font-black text-white focus:border-primary/50 focus:ring-1 focus:ring-primary/50 outline-none transition-all"
+                                        className="h-14 w-full rounded-xl border-2 border-black bg-white text-center text-3xl font-black text-black focus:outline-none focus:ring-4 focus:ring-primary/20 transition-all shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]"
                                     />
                                 </div>
-                                <span className="text-2xl font-bold text-white/20">-</span>
+                                <span className="text-3xl font-black text-black">-</span>
                                 <div className="flex-1 text-center">
-                                    <label className="text-[10px] uppercase font-bold text-muted-foreground mb-1 block">
+                                    <label className="text-[10px] uppercase font-bold text-gray-500 mb-1 block">
                                         {bet.matchDetails?.awayTeam || "Away"}
                                     </label>
                                     <input
@@ -304,94 +552,275 @@ export function BetCard({ bet, userPoints, userWager, mode }: BetCardProps) {
                                         min="0"
                                         value={matchAway}
                                         onChange={(e) => setMatchAway(e.target.value === "" ? "" : Number(e.target.value))}
-                                        className="h-14 w-full rounded-xl border border-white/10 bg-black/30 text-center text-2xl font-black text-white focus:border-primary/50 focus:ring-1 focus:ring-primary/50 outline-none transition-all"
+                                        className="h-14 w-full rounded-xl border-2 border-black bg-white text-center text-3xl font-black text-black focus:outline-none focus:ring-4 focus:ring-primary/20 transition-all shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]"
                                     />
                                 </div>
                             </div>
-                            <div className="flex justify-center gap-4 text-[10px] text-zinc-400 font-mono uppercase tracking-tight">
-                                <span>Exact: x5 Share</span>
-                                <span>Diff: x3 Share</span>
-                                <span>Winner: x1 Share</span>
-                            </div>
+                            {mode === "STANDARD" ? (
+                                <div className="flex justify-center gap-4 text-[10px] text-gray-500 font-bold uppercase tracking-tight">
+                                    <span>Exact: x5 Share</span>
+                                    <span>Diff: x3 Share</span>
+                                    <span>Winner: x1 Share</span>
+                                </div>
+                            ) : (
+                                matchHome !== "" && matchAway !== "" && (
+                                    <div className="mt-2 text-center">
+                                        <span className="text-xs font-bold bg-yellow-100 px-2 py-1 rounded border border-black text-black">
+                                            Current Odds for {matchHome}-{matchAway}: {
+                                                (dynamicMatchOdds[`${matchHome}-${matchAway}`] && dynamicMatchOdds[`${matchHome}-${matchAway}`] !== "---")
+                                                    ? dynamicMatchOdds[`${matchHome}-${matchAway}`] + "x"
+                                                    : (bet.totalPool > 0 ? "Untouched (High Potential)" : "2.00x")
+                                            }
+                                        </span>
+                                    </div>
+                                )
+                            )}
                         </div>
                     )}
 
                     {mode === "ZERO_SUM" && (
                         <div className="flex items-center gap-4 pt-4">
                             <div className="relative flex-1">
-                                <span className="absolute left-3 top-3.5 text-purple-500 text-xs font-black">PTS</span>
+                                <span className="absolute left-3 top-3.5 text-black font-black text-xs">PTS</span>
                                 <input
                                     type="number"
                                     value={wagerAmount}
-                                    onChange={(e) => setWagerAmount(Number(e.target.value))}
-                                    className="flex h-12 w-full rounded-xl border border-white/10 bg-black/30 pl-10 pr-3 py-2 text-lg font-bold text-white placeholder:text-white/20 focus:border-primary/50 focus:ring-1 focus:ring-primary/50 outline-none"
+                                    onChange={(e) => setWagerAmount(e.target.value === "" ? "" : Number(e.target.value))}
+                                    className="flex h-12 w-full rounded-xl border-2 border-black bg-white pl-10 pr-3 py-2 text-lg font-bold text-black placeholder:text-gray-400 focus:outline-none focus:ring-4 focus:ring-primary/20 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]"
                                     placeholder="Wager"
                                     min="1"
                                     max={userPoints}
                                 />
                             </div>
-                            <motion.button
-                                whileHover={{ scale: 1.05 }}
-                                whileTap={{ scale: 0.95 }}
+                            <Button
                                 onClick={handlePlaceWager}
                                 disabled={loading}
-                                className="inline-flex h-12 items-center justify-center rounded-xl bg-gradient-to-r from-primary to-green-400 px-8 text-sm font-bold text-black shadow-[0_0_20px_rgba(0,255,100,0.3)] transition-all hover:shadow-[0_0_30px_rgba(0,255,100,0.5)] disabled:opacity-50 disabled:cursor-not-allowed"
+                                className="h-12 bg-green-400 hover:bg-green-500 text-black border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]"
                             >
                                 {loading && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
                                 Place Bet
-                            </motion.button>
+                            </Button>
                         </div>
                     )}
 
                     {mode === "STANDARD" && (
                         <div className="pt-4">
-                            <motion.button
-                                whileHover={{ scale: 1.05 }}
-                                whileTap={{ scale: 0.95 }}
+                            <Button
                                 onClick={handlePlaceWager}
                                 disabled={loading}
-                                className="w-full inline-flex h-12 items-center justify-center rounded-xl bg-gradient-to-r from-secondary to-pink-500 px-8 text-sm font-bold text-white shadow-[0_0_20px_rgba(255,0,255,0.3)] transition-all hover:shadow-[0_0_30px_rgba(255,0,255,0.5)] disabled:opacity-50"
+                                className="w-full h-12 bg-secondary hover:bg-secondary/90 text-white border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]"
                             >
                                 {loading && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
                                 Lock In Prediction (Free)
-                            </motion.button>
+                            </Button>
                         </div>
                     )}
 
                 </div>
             )}
 
-            {/* My Wager Display if already placed */}
+            {/* My Wager Display - GOLDEN TICKET STYLE */}
             {userWager && (
-                <div className="mt-4 rounded-lg bg-green-500/10 p-4 border border-green-500/20">
-                    <div className="flex items-center justify-between">
-                        <div>
-                            <p className="text-xs font-bold text-green-600 uppercase tracking-wider mb-1">Your Wager</p>
-                            <p className="font-bold text-foreground">
-                                {formatSelection(userWager.selection)}
-                            </p>
+                <div className="mt-6 relative mx-auto max-w-sm">
+                    {/* Ticket Perforation Effect */}
+                    <div className="absolute -left-2 top-1/2 -mt-2 h-4 w-4 rounded-full bg-background border-r-2 border-black z-10" />
+                    <div className="absolute -right-2 top-1/2 -mt-2 h-4 w-4 rounded-full bg-background border-l-2 border-black z-10" />
+
+                    <div className="rounded-none border-2 border-black bg-yellow-300 p-0 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] transform rotate-1 hover:rotate-0 transition-transform duration-300">
+                        <div className="border-b-2 border-dashed border-black/50 p-2 flex justify-between items-center bg-yellow-400/50">
+                            <div className="text-[10px] font-black tracking-widest uppercase text-yellow-900 flex items-center gap-1">
+                                <Trophy className="h-3 w-3" /> OFFICIAL WAGER TICKET
+                            </div>
+                            <div className="text-[10px] font-mono font-bold text-black/60">
+                                #{userWager.id.slice(0, 6)}
+                            </div>
                         </div>
-                        <div className="text-right">
-                            <p className="text-xs font-medium text-muted-foreground">Amount</p>
-                            <p className="font-bold">{userWager.amount} pts</p>
+                        <div className="p-4 flex items-center justify-between">
+                            <div>
+                                <p className="text-xs font-bold text-yellow-800 uppercase tracking-wider mb-1">You Picked</p>
+                                <p className="font-black text-black text-xl leading-none">
+                                    {formatSelection(userWager.selection)}
+                                </p>
+                            </div>
+                            <div className="text-right border-l-2 border-black/10 pl-4">
+                                <p className="text-xs font-bold text-yellow-800 uppercase">Stake</p>
+                                <p className="font-black text-black text-2xl">{userWager.amount}</p>
+                            </div>
+                        </div>
+                        <div className="bg-yellow-100 p-2 border-t-2 border-dashed border-black/50">
+                            {/* Current Odds Display */}
+                            <p className="text-xs font-medium text-yellow-900 mb-1">
+                                Current Odds: <span className="font-black">
+                                    {bet.type === "CHOICE" && bet.options
+                                        ? calculateOdds(bet.totalPool, bet.options[Number(userWager.selection)]?.totalWagered || 1) + "x"
+                                        : bet.type === "MATCH" && typeof userWager.selection === "object" && "home" in userWager.selection
+                                            ? (dynamicMatchOdds[`${userWager.selection.home}-${userWager.selection.away}`] || "2.00") + "x"
+                                            : bet.type === "RANGE"
+                                                ? (dynamicRangeOdds[Number(userWager.selection)] || "2.00") + "x"
+                                                : "2.00x"
+                                    }
+                                </span>
+                            </p>
+                            {/* Return Calculation */}
+                            <p className="text-xs font-medium text-yellow-900">
+                                Est. Return: <span className="font-black">
+                                    {bet.type === "CHOICE" && bet.options
+                                        ? Math.floor(Number(calculateOdds(bet.totalPool, bet.options[Number(userWager.selection)]?.totalWagered || 1)) * userWager.amount).toLocaleString()
+                                        : bet.type === "MATCH" && typeof userWager.selection === "object" && "home" in userWager.selection
+                                            ? Math.floor(Number(dynamicMatchOdds[`${userWager.selection.home}-${userWager.selection.away}`] || "2.00") * userWager.amount).toLocaleString()
+                                            : bet.type === "RANGE"
+                                                ? Math.floor(Number(dynamicRangeOdds[Number(userWager.selection)] || "2.00") * userWager.amount).toLocaleString()
+                                                : (userWager.amount * 2).toLocaleString()
+                                    } pts
+                                </span>
+                            </p>
                         </div>
                     </div>
                 </div>
             )}
 
+            {/* DISPUTE BUTTON (For Players during dispute period) */}
+            {userWager && bet.disputeDeadline && !bet.disputeActive && bet.status === "PROOFING" && new Date() < bet.disputeDeadline.toDate() && (
+                <div className="mt-4">
+                    <Button
+                        onClick={handleDispute}
+                        disabled={disputeLoading}
+                        className="w-full bg-red-500 text-white border-2 border-black hover:bg-red-600 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] font-black"
+                    >
+                        {disputeLoading ? (
+                            <>
+                                <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                                Filing Dispute...
+                            </>
+                        ) : (
+                            "🚨 Dispute This Result"
+                        )}
+                    </Button>
+                </div>
+            )}
+
+            {/* VOTING UI (For disputed bets) */}
+            {bet.status === "DISPUTED" && userWager && (
+                <div className="mt-6 p-4 bg-orange-50 border-2 border-black rounded-xl shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
+                    <div className="flex items-center gap-2 mb-3">
+                        <AlertCircle className="h-5 w-5 text-orange-600" />
+                        <h4 className="font-black uppercase text-black">⚖️ Vote on Result</h4>
+                    </div>
+
+                    {/* Show proposed result */}
+                    <div className="mb-3 p-3 bg-white rounded-lg border-2 border-black">
+                        <p className="text-xs font-bold text-gray-600 uppercase mb-1">Proposed Result:</p>
+                        <p className="font-black text-lg">
+                            {bet.winningOutcome ?
+                                (bet.type === "MATCH" && typeof bet.winningOutcome === "object" && bet.winningOutcome !== null && "home" in bet.winningOutcome
+                                    ? `${(bet.winningOutcome as any).home} - ${(bet.winningOutcome as any).away}`
+                                    : String(bet.winningOutcome))
+                                : "N/A"}
+                        </p>
+                    </div>
+
+                    {/* Voting buttons or vote status */}
+                    {!userVote ? (
+                        <div className="grid grid-cols-2 gap-2 mb-3">
+                            <Button
+                                onClick={() => handleVote("approve")}
+                                disabled={votingLoading}
+                                className="bg-green-500 text-white border-2 border-black hover:bg-green-600 font-black"
+                            >
+                                <ThumbsUp className="h-4 w-4 mr-1" />
+                                Approve
+                            </Button>
+                            <Button
+                                onClick={() => handleVote("reject")}
+                                disabled={votingLoading}
+                                className="bg-red-500 text-white border-2 border-black hover:bg-red-600 font-black"
+                            >
+                                <ThumbsDown className="h-4 w-4 mr-1" />
+                                Reject
+                            </Button>
+                        </div>
+                    ) : (
+                        <div className="text-center p-3 bg-white border-2 border-black rounded-lg mb-3">
+                            <p className="font-black">
+                                Your vote: {userVote === "approve" ? "✅ Approved" : "❌ Rejected"}
+                            </p>
+                        </div>
+                    )}
+
+                    {/* Vote count */}
+                    <p className="text-xs text-gray-600 text-center font-bold">
+                        📊 {Object.keys(bet.votes || {}).length} vote(s) cast •{" "}
+                        {Object.values(bet.votes || {}).filter(v => v === "approve").length} approve,{" "}
+                        {Object.values(bet.votes || {}).filter(v => v === "reject").length} reject
+                    </p>
+                </div>
+            )}
+
+            {/* OWNER DRAFT CONTROLS */}
+            {isOwner && bet.status === "DRAFT" && (
+                <div className="mt-8 pt-6 border-t-2 border-black border-dashed">
+                    <p className="text-xs font-black uppercase text-gray-500 mb-4">Draft Preview</p>
+                    <div className="bg-yellow-100 p-4 rounded-lg border-2 border-black mb-4">
+                        <p className="text-sm font-bold">This bet is invisible to players.</p>
+                        <p className="text-xs text-gray-600 mt-1">Review the details above. When ready, click Publish to go live.</p>
+                    </div>
+                    <div className="flex gap-2">
+                        {onEdit && (
+                            <Button
+                                onClick={() => onEdit(bet)}
+                                disabled={loading}
+                                variant="outline"
+                                className="flex-1 bg-white text-black border-2 border-black hover:bg-gray-100 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
+                            >
+                                Edit Draft
+                            </Button>
+                        )}
+                        <Button
+                            onClick={handlePublish}
+                            disabled={loading}
+                            className="flex-[2] bg-green-400 text-black border-2 border-black hover:bg-green-500 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
+                        >
+                            {loading ? "Publishing..." : "Publish Bet Now"}
+                        </Button>
+                    </div>
+                </div>
+            )}
+
             {/* OWNER RESOLUTION UI */}
-            {isOwner && bet.status === "OPEN" && !isExpired && (
-                <div className="mt-8 pt-6 border-t border-border border-dashed">
-                    <p className="text-xs font-bold uppercase text-muted-foreground mb-4">Owner Controls</p>
+            {isOwner && (bet.status === "OPEN" || bet.status === "PROOFING") && isExpired && (
+                <div className="mt-8 pt-6 border-t-2 border-black border-dashed">
+                    <p className="text-xs font-black uppercase text-gray-500 mb-4">Owner Controls</p>
 
                     <div className="space-y-4">
+                        {/* AI Resolve Button */}
+                        <Button
+                            onClick={handleAIResolve}
+                            disabled={aiResolving}
+                            className="w-full bg-purple-500 text-white border-2 border-black hover:bg-purple-600 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] font-black"
+                        >
+                            {aiResolving ? (
+                                <>
+                                    <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                                    AI Looking Up Result...
+                                </>
+                            ) : (
+                                <>
+                                    <BrainCircuit className="h-4 w-4 mr-2" />
+                                    🤖 AI Resolve
+                                </>
+                            )}
+                        </Button>
+
                         {bet.type === "CHOICE" ? (
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                                 {bet.options?.map(opt => (
                                     <button
                                         key={opt.id}
                                         onClick={() => setWinningOption(String(bet.options?.findIndex(o => o.id === opt.id)))}
-                                        className={`p-2 text-sm rounded-md border transition-all ${winningOption === String(bet.options?.findIndex(o => o.id === opt.id)) ? "bg-yellow-500 text-white border-yellow-600" : "bg-background"}`}
+                                        className={`p-2 text-sm font-bold rounded-lg border-2 border-black transition-all ${winningOption === String(bet.options?.findIndex(o => o.id === opt.id))
+                                            ? "bg-yellow-400 text-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
+                                            : "bg-white hover:bg-gray-50"
+                                            } ${aiHighlighted && winningOption === String(bet.options?.findIndex(o => o.id === opt.id)) ? "animate-pulse ring-4 ring-purple-500" : ""}`}
                                     >
                                         {opt.text}
                                     </button>
@@ -403,50 +832,124 @@ export function BetCard({ bet, userPoints, userWager, mode }: BetCardProps) {
                                 value={winningRange}
                                 onChange={(e) => setWinningRange(e.target.value === "" ? "" : Number(e.target.value))}
                                 placeholder={`Correct Value (${bet.rangeMin}-${bet.rangeMax})`}
-                                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                                className={`flex h-10 w-full rounded-lg border-2 border-black bg-white px-3 py-2 text-sm font-bold shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] ${aiHighlighted ? "animate-pulse ring-4 ring-purple-500" : ""}`}
                             />
                         ) : (
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                 <div>
-                                    <label className="text-xs font-medium mb-1 block">Home Score</label>
+                                    <label className="text-xs font-bold mb-1 block">Home Score</label>
                                     <input
                                         type="number"
                                         value={resHome}
                                         onChange={(e) => setResHome(e.target.value === "" ? "" : Number(e.target.value))}
-                                        className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm font-bold text-center"
+                                        className={`flex h-10 w-full rounded-lg border-2 border-black bg-white px-3 py-2 text-sm font-bold text-center shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] ${aiHighlighted ? "animate-pulse ring-4 ring-purple-500" : ""}`}
                                         placeholder="0"
                                     />
                                 </div>
                                 <div>
-                                    <label className="text-xs font-medium mb-1 block">Away Score</label>
+                                    <label className="text-xs font-bold mb-1 block">Away Score</label>
                                     <input
                                         type="number"
                                         value={resAway}
                                         onChange={(e) => setResAway(e.target.value === "" ? "" : Number(e.target.value))}
-                                        className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm font-bold text-center"
+                                        className={`flex h-10 w-full rounded-lg border-2 border-black bg-white px-3 py-2 text-sm font-bold text-center shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] ${aiHighlighted ? "animate-pulse ring-4 ring-purple-500" : ""}`}
                                         placeholder="0"
                                     />
                                 </div>
                             </div>
                         )}
                         <div className="flex gap-2">
-                            <button
+                            <Button
                                 onClick={handleResolve}
                                 disabled={loading}
-                                className="flex-1 rounded-md bg-yellow-600 py-2 text-sm font-medium text-white shadow hover:bg-yellow-700"
+                                className="flex-1 bg-yellow-400 text-black border-2 border-black hover:bg-yellow-500 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
                             >
                                 {loading ? "Processing..." : "Confirm & Payout"}
-                            </button>
-                            <button
+                            </Button>
+                            <Button
                                 onClick={() => setIsResolving(false)}
-                                className="px-4 text-sm hover:underline"
+                                variant="ghost"
+                                className="px-4 text-sm underline text-gray-500 hover:text-black"
                             >
                                 Cancel
-                            </button>
+                            </Button>
                         </div>
                     </div>
                 </div>
             )}
+
+            {/* OWNER DISPUTE CONTROLS */}
+            {isOwner && bet.status === "DISPUTED" && (
+                <div className="mt-8 pt-6 border-t-2 border-black border-dashed">
+                    <p className="text-xs font-black uppercase text-gray-500 mb-4">Dispute Management</p>
+
+                    <div className="p-4 bg-yellow-50 border-2 border-black rounded-xl shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] mb-4">
+                        <h4 className="font-black uppercase mb-2 text-orange-600">⚠️ Bet Under Dispute</h4>
+                        <p className="text-sm font-bold mb-3">
+                            Voting Status: {Object.keys(bet.votes || {}).length} vote(s) •{" "}
+                            {Object.values(bet.votes || {}).filter(v => v === "approve").length} approve,{" "}
+                            {Object.values(bet.votes || {}).filter(v => v === "reject").length} reject
+                        </p>
+
+                        <div className="grid grid-cols-1 gap-2">
+                            <Button
+                                onClick={async () => {
+                                    setLoading(true);
+                                    try {
+                                        const result = await checkDisputeVoting(bet.leagueId, bet.id);
+                                        if (result === "approve") {
+                                            alert("✅ Result APPROVED by majority vote! You can now finalize resolution.");
+                                        } else if (result === "reject") {
+                                            alert("❌ Result REJECTED by majority vote. Please re-proof or mark invalid.");
+                                        } else {
+                                            alert("⚖️ No consensus reached. You can mark the bet as invalid and refund all players.");
+                                        }
+                                        if (onWagerSuccess) onWagerSuccess();
+                                    } catch (error: any) {
+                                        alert(error.message || "Failed to check voting");
+                                    } finally {
+                                        setLoading(false);
+                                    }
+                                }}
+                                disabled={loading}
+                                className="bg-blue-500 text-white border-2 border-black hover:bg-blue-600 font-black"
+                            >
+                                {loading ? "Checking..." : "📊 Check Voting Results"}
+                            </Button>
+
+                            <Button
+                                onClick={handleMarkInvalid}
+                                disabled={loading}
+                                variant="outline"
+                                className="bg-gray-500 text-white border-2 border-black hover:bg-gray-600 font-black"
+                            >
+                                ♻️ Mark Invalid & Refund All
+                            </Button>
+                        </div>
+
+                        <p className="text-xs text-gray-600 mt-3 font-bold">
+                            💡 Tip: Check voting results first. If approved, you can resolve normally. If no consensus, mark as invalid to refund everyone.
+                        </p>
+                    </div>
+                </div>
+            )}
+
+            {showCoinFlow && <CoinFlow onComplete={() => setShowCoinFlow(false)} />}
+            <AllInModal
+                isOpen={showAllInModal}
+                amount={pendingWagerData?.amount || 0}
+                onConfirm={async () => {
+                    setShowAllInModal(false);
+                    if (pendingWagerData) {
+                        await executePlaceWager(pendingWagerData.amount, pendingWagerData.prediction);
+                        setPendingWagerData(null);
+                    }
+                }}
+                onCancel={() => {
+                    setShowAllInModal(false);
+                    setPendingWagerData(null);
+                }}
+            />
         </motion.div>
     );
 }

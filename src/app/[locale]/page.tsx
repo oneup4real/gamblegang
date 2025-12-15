@@ -10,8 +10,7 @@ export default function Home() {
   const t = useTranslations('Landing');
 
   return (
-    <main className="flex min-h-screen flex-col items-center justify-center overflow-hidden bg-background text-foreground">
-      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-primary/20 via-background to-background" />
+    <main className="flex min-h-screen flex-col items-center justify-center overflow-hidden text-foreground">
 
       <div className="z-10 container px-4 md:px-6">
         <div className="flex flex-col items-center space-y-4 text-center">
@@ -20,8 +19,8 @@ export default function Home() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.5 }}
           >
-            <div className="inline-flex items-center rounded-full border border-primary/50 bg-primary/10 px-3 py-1 text-sm font-medium text-primary backdrop-blur-xl comic-border bg-white/50">
-              <span className="flex h-2 w-2 rounded-full bg-primary mr-2 animate-pulse" />
+            <div className="inline-flex items-center rounded-lg border-2 border-black bg-white px-3 py-1 text-sm font-bold text-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
+              <span className="flex h-2 w-2 rounded-full bg-primary mr-2 animate-pulse border border-black" />
               {t('badge')}
             </div>
           </motion.div>
@@ -30,7 +29,7 @@ export default function Home() {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.5, delay: 0.2 }}
-            className="text-6xl font-bold tracking-tighter sm:text-7xl md:text-8xl lg:text-9xl text-primary font-comic drop-shadow-md comic-title"
+            className="text-6xl font-bold tracking-tighter sm:text-7xl md:text-8xl lg:text-9xl text-primary font-comic drop-shadow-[5px_5px_0px_rgba(0,0,0,1)] comic-title"
           >
             {t('title')}
           </motion.h1>
