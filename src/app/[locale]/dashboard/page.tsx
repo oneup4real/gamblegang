@@ -99,7 +99,13 @@ export default function DashboardPage() {
         <div className="min-h-screen bg-background text-foreground">
             <header className="border-b-2 border-black bg-white py-4 relative z-50">
                 <div className="container mx-auto flex h-14 items-center justify-between">
-                    <div className="mr-4 flex">
+                    <div className="mr-4 flex items-center gap-3">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                            src="/GG_Logo.png"
+                            alt="GambleGang Logo"
+                            className="h-12 w-12 object-contain"
+                        />
                         <h1 className="text-3xl font-black font-comic text-primary uppercase tracking-wider drop-shadow-[2px_2px_0_rgba(0,0,0,1)]">{t('title')}</h1>
                     </div>
                     <div className="flex items-center gap-4">
@@ -581,11 +587,11 @@ export default function DashboardPage() {
                                                             <div className="flex-1 min-w-0">
                                                                 <div className="flex items-center gap-2 mb-2">
                                                                     <span className={`text-xs px-2 py-1 rounded font-bold border-2 border-black ${bet.status === "OPEN" ? "bg-green-400" :
-                                                                            bet.status === "LOCKED" ? "bg-red-400" :
-                                                                                bet.status === "PROOFING" ? "bg-yellow-400" :
-                                                                                    bet.status === "DISPUTED" ? "bg-orange-400" :
-                                                                                        bet.status === "RESOLVED" ? "bg-blue-400" :
-                                                                                            "bg-gray-400"
+                                                                        bet.status === "LOCKED" ? "bg-red-400" :
+                                                                            bet.status === "PROOFING" ? "bg-yellow-400" :
+                                                                                bet.status === "DISPUTED" ? "bg-orange-400" :
+                                                                                    bet.status === "RESOLVED" ? "bg-blue-400" :
+                                                                                        "bg-gray-400"
                                                                         }`}>
                                                                         {bet.status}
                                                                     </span>

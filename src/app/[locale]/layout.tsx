@@ -20,6 +20,11 @@ const fontFredoka = Fredoka({
 export const metadata: Metadata = {
   title: "GambleGang",
   description: "Social Betting App",
+  icons: {
+    icon: '/GG_Logo.png',
+    shortcut: '/GG_Logo.png',
+    apple: '/GG_Logo.png',
+  },
 };
 
 import { AuthProvider } from "@/components/auth-provider";
