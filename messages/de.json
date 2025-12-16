@@ -230,9 +230,9 @@
             "slide2Text": "Platziere deinen Einsatz wenn OFFEN. Sobald GESPERRT, warte auf das Spiel. Nach dem Spiel gibt es eine 12h PRÜFUNG (Proofing), bevor du ausgezahlt wirst.",
             "slide2Details": "Proofing ist ein 12-Stunden Sicherheitsfenster nach Ergebniseingabe. Jeder Spieler kann das Ergebnis anfechten (Dispute), falls es falsch ist. Kein Einspruch = Automatische Auszahlung.",
             "slide3Title": "Kenne deinen Modus",
-            "slide3Subtitle": "Hai oder Haus?",
-            "slide3Text": "Im NULLSUMMENSPIEL nimmst du Punkte von den Verlierern (Pot). Im ARCADE spielst du gegen feste Quoten des Hauses.",
-            "slide3Details": "Nullsummen-Quoten sind dynamisch: Gesamt-Pot / Auswahl-Pot. Wenn wenige auf deinen Tipp setzen, ist dein Gewinn riesig! Arcade-Quoten sind fix vom Admin eingestellt (z.B. Exaktes Ergebnis = 10x)."
+            "slide3Subtitle": "Punkte vs Echte Quoten",
+            "slide3Text": "Im ARCADE-Modus spielst du um Punkte, die sich anhäufen - wer die meisten Punkte hat, gewinnt. Im NULLSUMMENSPIEL funktioniert es wie echtes Wetten mit dynamischen Quoten basierend auf dem Pot.",
+            "slide3Details": "Nullsummenspiel hat zwei Modi: SUDDEN DEATH (feste Startpunkte, 0 Punkte = Game Over) und UNBEGRENZT (unbegrenztes Nachkaufen, keine Eliminierung). Arcade dreht sich um das Sammeln von Punkten durch korrekte Vorhersagen mit festen Auszahlungen."
         }
     }
 }

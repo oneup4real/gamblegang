@@ -234,9 +234,9 @@
             "slide2Text": "Place your wager when OPEN. Once LOCKED, wait for the game. After the game, there's a 12h PROOFING period before you get paid.",
             "slide2Details": "Proofing is a 12-hour safety window after a result is entered. Any player can dispute the result if they believe it's wrong. No dispute = Automatic Payout.",
             "slide3Title": "Know Your Mode",
-            "slide3Subtitle": "Shark or House?",
-            "slide3Text": "In ZERO SUM, you take points from losers (Pot). In ARCADE, you play against fixed odds from the House.",
-            "slide3Details": "Zero Sum Odds are dynamic: Total Pot / Selection Pot. If few people bet on your pick, your return is huge! Arcade Odds are fixed by the admin (e.g. Exact Score = 10x)."
+            "slide3Subtitle": "Points vs Real Odds",
+            "slide3Text": "In ARCADE, you play for points that accumulate - whoever has the most points wins. In ZERO SUM, it's real-world betting with dynamic odds based on the pot.",
+            "slide3Details": "Zero Sum has two modes: SUDDEN DEATH (fixed starting points, 0 pts = game over) and UNCAPPED (unlimited rebuy, no elimination). Arcade is about accumulating points through correct predictions with fixed payouts."
         }
     }
 }

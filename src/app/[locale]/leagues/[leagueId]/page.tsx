@@ -676,6 +676,9 @@ export default function LeaguePage() {
                                             <p className="text-xs text-white/90 font-bold mt-1">
                                                 Wallet: {myMemberProfile.points.toLocaleString()} | Active: {(myMemberProfile.totalInvested || 0).toLocaleString()}
                                             </p>
+                                            <p className="text-xs text-white/70 font-bold mt-0.5">
+                                                Total Invested: {(myMemberProfile.totalBought || (league.buyInType === "FIXED" ? league.startCapital : 0)).toLocaleString()} chips
+                                            </p>
                                         </div>
 
                                         {/* Active Stats */}
@@ -784,6 +787,9 @@ export default function LeaguePage() {
                                                                 }
                                                                 return `Points Accumulation`;
                                                             })()}
+                                                        </p>
+                                                        <p className="text-xs text-gray-400 font-bold mt-0.5">
+                                                            Invested: {(member.totalBought || (league.mode === "ZERO_SUM" && league.buyInType === "FIXED" ? league.startCapital : 0)).toLocaleString()} chips
                                                         </p>
                                                     </div>
                                                 </div>
