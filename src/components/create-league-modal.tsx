@@ -17,6 +17,8 @@ interface CreateLeagueModalProps {
 
 export function CreateLeagueModal({ isOpen, onClose }: CreateLeagueModalProps) {
     const t = useTranslations('League');
+    const tBets = useTranslations('Bets');
+    const tAi = useTranslations('AI');
     const [name, setName] = useState("");
     const [startCapital, setStartCapital] = useState(1000);
     const [mode, setMode] = useState<LeagueMode>("ZERO_SUM");
@@ -56,7 +58,7 @@ export function CreateLeagueModal({ isOpen, onClose }: CreateLeagueModalProps) {
         if (useAi && aiTopic.trim()) {
             // Step 1: Generate Bets first
             setLoading(true);
-            setLoadingMessage("🤖 AI Analyzing Schedule...");
+            setLoadingMessage(tAi('analyzing'));
             setProgress(10);
 
             try {
@@ -76,11 +78,11 @@ export function CreateLeagueModal({ isOpen, onClose }: CreateLeagueModalProps) {
                     setSelectedBetIndices(bets.map((_, i) => i)); // Select all by default
                     setStep("REVIEW");
                 } else {
-                    alert("No bets found. Try a different topic.");
+                    alert(tAi('noBets'));
                 }
             } catch (err) {
                 console.error(err);
-                alert("AI Generation failed.");
+                alert(tAi('error'));
             } finally {
                 setLoading(false);
                 setProgress(0);
@@ -143,7 +145,7 @@ export function CreateLeagueModal({ isOpen, onClose }: CreateLeagueModalProps) {
 
         } catch (error) {
             console.error(error);
-            alert("Failed to create league.");
+            alert(t('errorCreate'));
         } finally {
             setLoading(false);
             setLoadingMessage("");
@@ -159,7 +161,7 @@ export function CreateLeagueModal({ isOpen, onClose }: CreateLeagueModalProps) {
                         isVisible={loading}
                         message={loadingMessage}
                         progress={progress}
-                        subMessage={step === "FORM" ? "Please wait while we consult the oracle..." : "Finalizing your league..."}
+                        subMessage={step === "FORM" ? tAi('analyzing') : t('btnCreating')}
                     />
                     <motion.div
                         initial={{ opacity: 0 }}
@@ -176,7 +178,7 @@ export function CreateLeagueModal({ isOpen, onClose }: CreateLeagueModalProps) {
                     >
                         <div className="flex items-center justify-between mb-6">
                             <h2 className="text-2xl font-black tracking-tight font-comic uppercase">
-                                {step === "REVIEW" ? "Review Bets" : t('createTitle')}
+                                {step === "REVIEW" ? t('reviewStep') : t('createTitle')}
                             </h2>
                             <button onClick={onClose} className="rounded-lg p-1 hover:bg-gray-100 border-2 border-transparent hover:border-black transition-all">
                                 <X className="h-6 w-6" />
@@ -301,10 +303,10 @@ export function CreateLeagueModal({ isOpen, onClose }: CreateLeagueModalProps) {
                                         animate={{ height: "auto", opacity: 1 }}
                                         className="space-y-4 overflow-hidden p-4 bg-purple-50 rounded-xl border-2 border-dashed border-purple-200"
                                     >
-                                        <h3 className="font-black text-purple-900 uppercase text-sm">Arcade Settings</h3>
+                                        <h3 className="font-black text-purple-900 uppercase text-sm">{t('arcadeSettings')}</h3>
                                         <div className="grid grid-cols-3 gap-2">
                                             <div className="space-y-1">
-                                                <label className="text-xs font-bold text-gray-500 uppercase">Exact (x)</label>
+                                                <label className="text-xs font-bold text-gray-500 uppercase">{t('exactX')}</label>
                                                 <input
                                                     type="number"
                                                     min={1}
@@ -315,7 +317,7 @@ export function CreateLeagueModal({ isOpen, onClose }: CreateLeagueModalProps) {
                                                 />
                                             </div>
                                             <div className="space-y-1">
-                                                <label className="text-xs font-bold text-gray-500 uppercase">Winner (x)</label>
+                                                <label className="text-xs font-bold text-gray-500 uppercase">{t('winnerX')}</label>
                                                 <input
                                                     type="number"
                                                     min={1}
@@ -326,7 +328,7 @@ export function CreateLeagueModal({ isOpen, onClose }: CreateLeagueModalProps) {
                                                 />
                                             </div>
                                             <div className="space-y-1">
-                                                <label className="text-xs font-bold text-gray-500 uppercase">Diff (x)</label>
+                                                <label className="text-xs font-bold text-gray-500 uppercase">{t('diffX')}</label>
                                                 <input
                                                     type="number"
                                                     min={1}
@@ -340,7 +342,7 @@ export function CreateLeagueModal({ isOpen, onClose }: CreateLeagueModalProps) {
 
                                         <div className="grid grid-cols-2 gap-2 pt-2 border-t border-purple-200 mt-2">
                                             <div className="space-y-1">
-                                                <label className="text-xs font-bold text-gray-500 uppercase">Choice (x)</label>
+                                                <label className="text-xs font-bold text-gray-500 uppercase">{t('choiceX')}</label>
                                                 <input
                                                     type="number"
                                                     min={1}
@@ -351,7 +353,7 @@ export function CreateLeagueModal({ isOpen, onClose }: CreateLeagueModalProps) {
                                                 />
                                             </div>
                                             <div className="space-y-1">
-                                                <label className="text-xs font-bold text-gray-500 uppercase">Guess (x)</label>
+                                                <label className="text-xs font-bold text-gray-500 uppercase">{t('rangeX')}</label>
                                                 <input
                                                     type="number"
                                                     min={1}
@@ -364,9 +366,9 @@ export function CreateLeagueModal({ isOpen, onClose }: CreateLeagueModalProps) {
                                         </div>
 
                                         <div className="text-[10px] font-bold text-purple-600 space-y-1 mt-2">
-                                            <p>Multipliers applied to the wager amount for correct predictions.</p>
+                                            <p>{t('multipliersDesc')}</p>
                                             <p className="opacity-75 italic border-t border-purple-200 pt-1">
-                                                Note: No fixed points can be set for Zero Sum betting, because the odds are calculated dynamically like in real life.
+                                                {t('zeroSumNoPoints')}
                                             </p>
                                         </div>
                                     </motion.div>
@@ -441,21 +443,21 @@ export function CreateLeagueModal({ isOpen, onClose }: CreateLeagueModalProps) {
                                                 {/* Standard Mode: Forecast Style */}
                                                 {mode === "STANDARD" && (
                                                     <div className="space-y-2 p-1">
-                                                        <label className="text-sm font-black uppercase text-purple-800">Forecast Style</label>
+                                                        <label className="text-sm font-black uppercase text-purple-800">{t('forecastStyle')}</label>
                                                         <div className="flex bg-gray-100 rounded-lg p-1 border border-purple-100">
                                                             <button
                                                                 type="button"
                                                                 onClick={() => setAiTargetType("MATCH")}
                                                                 className={`flex-1 py-1 text-xs font-bold rounded uppercase transition-all ${aiTargetType === "MATCH" ? "bg-white text-purple-900 border border-purple-200 shadow-sm" : "text-gray-400 hover:text-purple-700"}`}
                                                             >
-                                                                Exact Score
+                                                                {tBets('forecastExact')}
                                                             </button>
                                                             <button
                                                                 type="button"
                                                                 onClick={() => setAiTargetType("CHOICE")}
                                                                 className={`flex-1 py-1 text-xs font-bold rounded uppercase transition-all ${aiTargetType === "CHOICE" ? "bg-white text-purple-900 border border-purple-200 shadow-sm" : "text-gray-400 hover:text-purple-700"}`}
                                                             >
-                                                                Winner
+                                                                {tBets('forecastWinner')}
                                                             </button>
                                                         </div>
                                                     </div>
@@ -464,26 +466,26 @@ export function CreateLeagueModal({ isOpen, onClose }: CreateLeagueModalProps) {
                                                 {/* Outcome Options */}
                                                 {(mode === "ZERO_SUM" || (mode === "STANDARD" && aiTargetType === "CHOICE")) && (
                                                     <div className="space-y-2 p-1">
-                                                        <label className="text-sm font-black uppercase text-purple-800">Outcome Options</label>
+                                                        <label className="text-sm font-black uppercase text-purple-800">{t('outcomeOptions')}</label>
                                                         <div className="flex gap-2">
                                                             <button
                                                                 type="button"
                                                                 onClick={() => setAiOutcomeType("WINNER_DRAW")}
                                                                 className={`flex-1 py-2 text-xs font-bold rounded-lg border-2 transition-all ${aiOutcomeType === "WINNER_DRAW" ? "bg-purple-600 text-white border-purple-600" : "bg-white border-purple-200 text-purple-800 hover:bg-purple-50"}`}
                                                             >
-                                                                1x2 (Win/Draw/Loss)
+                                                                {tBets('opt1x2Desc')}
                                                             </button>
                                                             <button
                                                                 type="button"
                                                                 onClick={() => setAiOutcomeType("WINNER")}
                                                                 className={`flex-1 py-2 text-xs font-bold rounded-lg border-2 transition-all ${aiOutcomeType === "WINNER" ? "bg-purple-600 text-white border-purple-600" : "bg-white border-purple-200 text-purple-800 hover:bg-purple-50"}`}
                                                             >
-                                                                Winner (2-Way)
+                                                                {tBets('optWinnerDesc')}
                                                             </button>
                                                         </div>
                                                         {mode === "ZERO_SUM" && (
                                                             <p className="text-[10px] text-purple-600 font-bold">
-                                                                Zero Sum requires Choice bets (Odds calculation).
+                                                                {t('zeroSumRequirement')}
                                                             </p>
                                                         )}
                                                     </div>
@@ -507,14 +509,14 @@ export function CreateLeagueModal({ isOpen, onClose }: CreateLeagueModalProps) {
                                         disabled={loading}
                                         className="px-8 h-12 bg-gradient-to-r from-primary to-green-400 text-black border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] text-lg uppercase font-black tracking-widest hover:translate-y-[-2px] transition-all"
                                     >
-                                        {loading ? <Loader2 className="animate-spin h-5 w-5" /> : (useAi ? "Generate Bets" : t('btnCreate'))}
+                                        {loading ? <Loader2 className="animate-spin h-5 w-5" /> : (useAi ? t('generateBets') : t('btnCreate'))}
                                     </Button>
                                 </div>
                             </form>
                         ) : (
                             <div className="space-y-4">
                                 <div className="p-3 bg-blue-50 border-2 border-blue-200 rounded-xl text-blue-900 text-sm font-bold">
-                                    Almost there! Review and select the bets you want to include in the league.
+                                    {t('almostThere')}
                                 </div>
 
                                 <div className="max-h-[400px] overflow-y-auto space-y-2 pr-2">
@@ -547,7 +549,7 @@ export function CreateLeagueModal({ isOpen, onClose }: CreateLeagueModalProps) {
                                         onClick={() => setStep("FORM")}
                                         className="text-gray-500 hover:text-black font-bold"
                                     >
-                                        Back to Settings
+                                        {t('backToSettings')}
                                     </Button>
                                     <Button
                                         onClick={() => {
@@ -557,7 +559,7 @@ export function CreateLeagueModal({ isOpen, onClose }: CreateLeagueModalProps) {
                                         disabled={loading || selectedBetIndices.length === 0}
                                         className="px-6 h-12 bg-green-500 hover:bg-green-600 text-black border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] text-lg uppercase font-black tracking-widest hover:translate-y-[-2px] transition-all"
                                     >
-                                        {loading ? <Loader2 className="animate-spin h-5 w-5" /> : `Create League (${selectedBetIndices.length} Bets)`}
+                                        {loading ? <Loader2 className="animate-spin h-5 w-5" /> : t('createWithBets', { count: selectedBetIndices.length })}
                                     </Button>
                                 </div>
                             </div>

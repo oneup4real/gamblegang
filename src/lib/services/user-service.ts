@@ -50,6 +50,36 @@ export async function updateUserProfile(uid: string, data: Partial<UserProfile>)
             updatedAt: serverTimestamp(),
         });
         console.log("User profile updated for", uid);
+
+        // If photoURL or displayName changed, update all league member documents
+        if (data.photoURL !== undefined || data.displayName !== undefined) {
+            const { collection, query, where, getDocs } = await import("firebase/firestore");
+
+            // Find all leagues this user is a member of using collection group query
+            const membersQuery = query(
+                collection(db, "leagues"),
+            );
+            const leaguesSnap = await getDocs(membersQuery);
+
+            // Update each member document
+            const updatePromises: Promise<void>[] = [];
+            for (const leagueDoc of leaguesSnap.docs) {
+                const memberRef = doc(db, "leagues", leagueDoc.id, "members", uid);
+                const updateData: any = {};
+                if (data.photoURL !== undefined) updateData.photoURL = data.photoURL;
+                if (data.displayName !== undefined) updateData.displayName = data.displayName;
+
+                updatePromises.push(
+                    updateDoc(memberRef, updateData).catch((err) => {
+                        // Member doc might not exist in this league, that's OK
+                        console.log(`Could not update member doc in league ${leagueDoc.id}:`, err.message);
+                    })
+                );
+            }
+
+            await Promise.all(updatePromises);
+            console.log("Synced profile changes to league member documents");
+        }
     } catch (error) {
         console.error("Error updating user profile", error);
         throw error;

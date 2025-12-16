@@ -11,14 +11,20 @@ service cloud.firestore {
 
     // 2. Leads/Leagues
     match /leagues/{leagueId} {
-      // Allow read if authenticated (could be stricter: allow read if user is member)
-      allow read: if request.auth != null;
+      // Allow read for anyone (including unauthenticated) so join links work
+      // Users need to see league details before deciding to join/login
+      allow read: if true;
       
       // Allow create if authenticated
       allow create: if request.auth != null;
 
-      // Allow update if owner (this is a simplified check, ideally verified via resource data)
-      allow update: if request.auth != null && request.auth.uid == resource.data.ownerId;
+      // Allow update if:
+      // - Owner (can update any field)
+      // - OR authenticated user updating ONLY memberCount (for joining league)
+      allow update: if request.auth != null && (
+        request.auth.uid == resource.data.ownerId ||
+        (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['memberCount']))
+      );
 
       // Allow delete if owner
       allow delete: if request.auth != null && request.auth.uid == resource.data.ownerId;

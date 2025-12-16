@@ -7,6 +7,7 @@ import { useAuth } from "@/components/auth-provider";
 import { createBet, BetType, Bet, updateBet } from "@/lib/services/bet-service";
 import { Button } from "@/components/ui/button";
 import { AIProgressOverlay } from "@/components/ai-progress-overlay";
+import { useTranslations } from "next-intl";
 
 import { LeagueMode } from "@/lib/services/league-service";
 
@@ -20,6 +21,8 @@ interface CreateBetModalProps {
 }
 
 export function CreateBetModal({ leagueId, leagueMode, isOpen, onClose, onSuccess, betToEdit }: CreateBetModalProps) {
+    const t = useTranslations('Bets');
+    const tAi = useTranslations('AI');
     const { user } = useAuth();
     const [loading, setLoading] = useState(false);
     const [loadingMessage, setLoadingMessage] = useState("");
@@ -56,20 +59,81 @@ export function CreateBetModal({ leagueId, leagueMode, isOpen, onClose, onSucces
     const [selectedBulkIndices, setSelectedBulkIndices] = useState<number[]>([]);
 
     // Populate form if editing
+    // Populate form if editing
     useEffect(() => {
         if (isOpen && betToEdit) {
-            // ... existing edit logic ...
             setQuestion(betToEdit.question);
             setType(betToEdit.type);
-            // ...
+
+            // Handle Date formatting for input
+            let d: Date;
+            // Firestore Timestamp check
+            if (betToEdit.eventDate && typeof betToEdit.eventDate.toDate === 'function') {
+                d = betToEdit.eventDate.toDate();
+            } else if (betToEdit.eventDate && typeof betToEdit.eventDate.seconds === 'number') {
+                d = new Date(betToEdit.eventDate.seconds * 1000);
+            } else {
+                d = new Date(betToEdit.eventDate);
+            }
+
+            if (!isNaN(d.getTime())) {
+                // Input datetime-local expects YYYY-MM-DDTHH:mm
+                // Adjust for local timezone offset
+                const offset = d.getTimezoneOffset() * 60000;
+                const localISOTime = (new Date(d.getTime() - offset)).toISOString().slice(0, 16);
+                setEventDateStr(localISOTime);
+
+                // Calculate Lock Buffer
+                let closeDate: Date | null = null;
+                if (betToEdit.closesAt && typeof betToEdit.closesAt.toDate === 'function') {
+                    closeDate = betToEdit.closesAt.toDate();
+                } else if (betToEdit.closesAt && typeof betToEdit.closesAt.seconds === 'number') {
+                    closeDate = new Date(betToEdit.closesAt.seconds * 1000);
+                } else if (betToEdit.closesAt) {
+                    closeDate = new Date(betToEdit.closesAt);
+                }
+
+                if (closeDate && !isNaN(closeDate.getTime())) {
+                    const diff = (d.getTime() - closeDate.getTime()) / 60000;
+                    // Match nearest option or default to 0
+                    if (diff >= 1440) setLockBufferMinutes(1440);
+                    else if (diff >= 60) setLockBufferMinutes(60);
+                    else if (diff >= 15) setLockBufferMinutes(15);
+                    else setLockBufferMinutes(0);
+                }
+            } else {
+                setEventDateStr("");
+            }
+
+            if (betToEdit.type === "CHOICE" && betToEdit.options) {
+                setOptions(betToEdit.options.map((o: any) => o.text));
+            }
+
+            if (betToEdit.type === "RANGE") {
+                setRangeMin(betToEdit.rangeMin);
+                setRangeMax(betToEdit.rangeMax);
+                setRangeUnit(betToEdit.unit || "");
+            }
+
+            if (betToEdit.type === "MATCH" && betToEdit.matchDetails) {
+                setMatchHome(betToEdit.matchDetails.homeTeam);
+                setMatchAway(betToEdit.matchDetails.awayTeam);
+            }
+
         } else if (isOpen && !betToEdit) {
             // Reset if opening fresh
             setQuestion("");
-            setType("CHOICE");
-            // If Zero Sum, default is CHOICE anyway.
-            // ...
+            setType(leagueMode === "ZERO_SUM" ? "CHOICE" : "CHOICE");
+            setOptions(["", ""]);
+            setRangeMin(undefined);
+            setRangeMax(undefined);
+            setRangeUnit("");
+            setMatchHome("");
+            setMatchAway("");
+            setEventDateStr("");
+            setLockBufferMinutes(0);
         }
-    }, [isOpen, betToEdit]);
+    }, [isOpen, betToEdit, leagueMode]);
 
     // Outcome Type for Bulk
     const [bulkOutcomeType, setBulkOutcomeType] = useState<"WINNER" | "WINNER_DRAW">("WINNER_DRAW");
@@ -77,7 +141,7 @@ export function CreateBetModal({ leagueId, leagueMode, isOpen, onClose, onSucces
     const handleBulkGenerate = async () => {
         if (!bulkTopic) return;
         setIsAiLoading(true);
-        setLoadingMessage("🤖 Scanning history & upcoming schedules...");
+        setLoadingMessage(tAi('scanning'));
         setProgress(10);
 
         try {
@@ -95,15 +159,15 @@ export function CreateBetModal({ leagueId, leagueMode, isOpen, onClose, onSucces
             setProgress(100);
 
             if (bets) {
-                setLoadingMessage(`Data Found! Parsed ${bets.length} outcomes.`);
+                setLoadingMessage(tAi('found', { count: bets.length }));
                 setBulkBets(bets);
                 setSelectedBulkIndices(bets.map((_: any, i: number) => i)); // Select all by default
             } else {
-                setLoadingMessage("No bets found.");
+                setLoadingMessage(tAi('noBets'));
             }
         } catch (error) {
             console.error(error);
-            setLoadingMessage("Errored out. Try again.");
+            setLoadingMessage(tAi('error'));
         } finally {
             setIsAiLoading(false);
             setProgress(0);
@@ -113,7 +177,7 @@ export function CreateBetModal({ leagueId, leagueMode, isOpen, onClose, onSucces
     const handleBulkCreate = async () => {
         if (selectedBulkIndices.length === 0) return;
         setLoading(true);
-        setOverlayMessage("Creating Bets...");
+        setOverlayMessage(tAi('processing'));
         setProgress(0);
         try {
             let successCount = 0;
@@ -141,12 +205,12 @@ export function CreateBetModal({ leagueId, leagueMode, isOpen, onClose, onSucces
                 successCount++;
                 setProgress(Math.round(((i + 1) / total) * 100));
             }
-            alert(`Successfully created ${successCount} bets!`);
+            alert(t('successCreate', { count: successCount }));
             if (onSuccess) onSuccess();
             onClose();
         } catch (e) {
             console.error(e);
-            alert("Some bets failed to create.");
+            alert(t('partialError'));
         } finally {
             setLoading(false);
             setOverlayMessage("");
@@ -191,11 +255,11 @@ export function CreateBetModal({ leagueId, leagueMode, isOpen, onClose, onSucces
                 }
                 setShowAiInput(false);
             } else {
-                alert("No ideas returned. Try a different topic.");
+                alert(tAi('noBets'));
             }
         } catch (e) {
             console.error(e);
-            alert("AI generation failed");
+            alert(tAi('error'));
         } finally {
             setIsAiLoading(false);
         }
@@ -253,7 +317,7 @@ export function CreateBetModal({ leagueId, leagueMode, isOpen, onClose, onSucces
                             <AIProgressOverlay
                                 isVisible={true}
                                 progress={progress}
-                                message={loadingMessage || overlayMessage || "Processing..."}
+                                message={loadingMessage || overlayMessage || tAi('processing')}
                             />
                         </div>
                     )}
@@ -262,311 +326,313 @@ export function CreateBetModal({ leagueId, leagueMode, isOpen, onClose, onSucces
                         animate={{ opacity: 1 }}
                         exit={{ opacity: 0 }}
                         onClick={onClose}
-                        className="fixed inset-0 z-40 bg-black/50 backdrop-blur-sm"
-                    />
-                    <motion.div
-                        initial={{ opacity: 0, scale: 0.95, y: "-50%", x: "-50%" }}
-                        animate={{ opacity: 1, scale: 1, y: "-50%", x: "-50%" }}
-                        exit={{ opacity: 0, scale: 0.95, y: "-50%", x: "-50%" }}
-                        className="fixed left-[50%] top-[50%] z-50 w-full max-w-lg translate-x-[-50%] translate-y-[-50%] rounded-xl border-2 border-black bg-white p-6 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] max-h-[90vh] overflow-y-auto"
+                        className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4"
                     >
-                        {/* ... Header ... */}
+                        <motion.div
+                            initial={{ scale: 0.95, y: 20 }}
+                            animate={{ scale: 1, y: 0 }}
+                            exit={{ scale: 0.95, y: 20 }}
+                            onClick={(e) => e.stopPropagation()}
+                            className="w-full max-w-lg rounded-xl border-2 border-black bg-white p-6 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] max-h-[90vh] overflow-y-auto"
+                        >
+                            {/* ... Header ... */}
 
-                        {/* Mode Switcher - Hide BULK if Zero Sum maybe? Or restrict Bulk options too. */}
-                        {/* Lets keep Bulk but restrict types inside it */}
-                        <div className="flex p-1 bg-gray-100 border-2 border-black rounded-xl mb-6 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
-                            {/* ... buttons ... */}
-                            <button
-                                onClick={() => setMode("SINGLE")}
-                                className={`flex-1 py-2 text-sm font-black rounded-lg transition-all uppercase ${mode === "SINGLE" ? "bg-primary text-white border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] -translate-y-[2px]" : "text-gray-500 hover:text-black"}`}
-                            >
-                                Single Bet
-                            </button>
-                            <button
-                                onClick={() => setMode("BULK")}
-                                className={`flex-1 py-2 text-sm font-black rounded-lg transition-all uppercase ${mode === "BULK" ? "bg-purple-600 text-white border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] -translate-y-[2px]" : "text-gray-500 hover:text-black"}`}
-                            >
-                                Bulk Wizard (AI)
-                            </button>
-                        </div>
+                            {/* Mode Switcher - Hide BULK if Zero Sum maybe? Or restrict Bulk options too. */}
+                            {/* Lets keep Bulk but restrict types inside it */}
+                            <div className="flex p-1 bg-gray-100 border-2 border-black rounded-xl mb-6 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
+                                {/* ... buttons ... */}
+                                <button
+                                    onClick={() => setMode("SINGLE")}
+                                    className={`flex-1 py-2 text-sm font-black rounded-lg transition-all uppercase ${mode === "SINGLE" ? "bg-primary text-white border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] -translate-y-[2px]" : "text-gray-500 hover:text-black"}`}
+                                >
+                                    {t('singleBet')}
+                                </button>
+                                <button
+                                    onClick={() => setMode("BULK")}
+                                    className={`flex-1 py-2 text-sm font-black rounded-lg transition-all uppercase ${mode === "BULK" ? "bg-purple-600 text-white border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] -translate-y-[2px]" : "text-gray-500 hover:text-black"}`}
+                                >
+                                    {t('bulkWizard')}
+                                </button>
+                            </div>
 
-                        {mode === "SINGLE" ? (
-                            <>
-                                {/* ... AI Button ... */}
-                                {/* ... Form ... */}
-                                <form onSubmit={handleSubmit} className="space-y-6">
-                                    {/* Question Input */}
-                                    <div>
-                                        <label className="text-sm font-black text-black uppercase mb-1 block">Question</label>
-                                        <input
-                                            type="text"
-                                            required
-                                            value={question}
-                                            onChange={(e) => setQuestion(e.target.value)}
-                                            placeholder={type === "MATCH" ? `${matchHome || "Home"} vs ${matchAway || "Away"}` : "e.g. Who wins the match?"}
-                                            className="flex h-12 w-full rounded-xl border-2 border-black bg-white px-3 py-2 text-black placeholder:text-gray-400 focus:outline-none focus:ring-4 focus:ring-primary/20 transition-all shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]"
-                                        />
-                                    </div>
-
-                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            {mode === "SINGLE" ? (
+                                <>
+                                    {/* ... AI Button ... */}
+                                    {/* ... Form ... */}
+                                    <form onSubmit={handleSubmit} className="space-y-6">
+                                        {/* Question Input */}
                                         <div>
-                                            <label className="text-sm font-black text-black uppercase mb-1 block">Type</label>
-                                            {leagueMode === "ZERO_SUM" ? (
-                                                <div className="p-3 bg-blue-50 border-2 border-blue-200 rounded-xl text-blue-900 text-xs font-bold leading-tight">
-                                                    Only Multiple Choice is allowed in Zero Sum leagues (Parimutuel Odds).
-                                                </div>
-                                            ) : (
-                                                <div className="relative">
-                                                    <select
-                                                        value={type}
-                                                        onChange={(e) => setType(e.target.value as BetType)}
-                                                        className="flex h-12 w-full appearance-none rounded-xl border-2 border-black bg-white px-3 py-2 text-black focus:outline-none focus:ring-4 focus:ring-primary/20 transition-all shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] pr-8"
-                                                    >
-                                                        <option value="CHOICE">Multiple Choice</option>
-                                                        <option value="RANGE">Range / Number</option>
-                                                        <option value="MATCH">Match Prediction</option>
-                                                    </select>
-                                                    <div className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2">
-                                                        <svg className="h-4 w-4 fill-black" viewBox="0 0 20 20"><path d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" /></svg>
-                                                    </div>
-                                                </div>
-                                            )}
-                                        </div>
-                                        <div>
-                                            <label className="text-sm font-black text-black uppercase mb-1 block">Event Start Time</label>
+                                            <label className="text-sm font-black text-black uppercase mb-1 block">{t('question')}</label>
                                             <input
-                                                type="datetime-local"
+                                                type="text"
                                                 required
-                                                value={eventDateStr}
-                                                onChange={(e) => setEventDateStr(e.target.value)}
+                                                value={question}
+                                                onChange={(e) => setQuestion(e.target.value)}
+                                                placeholder={type === "MATCH" ? `${matchHome || "Home"} vs ${matchAway || "Away"}` : "e.g. Who wins the match?"}
                                                 className="flex h-12 w-full rounded-xl border-2 border-black bg-white px-3 py-2 text-black placeholder:text-gray-400 focus:outline-none focus:ring-4 focus:ring-primary/20 transition-all shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]"
                                             />
                                         </div>
-                                    </div>
 
-                                    {/* ... Lock Buffer ... */}
-                                    <div>
-                                        <label className="text-sm font-black text-black uppercase mb-1 block">Lock Betting</label>
-                                        <div className="relative">
-                                            <select
-                                                value={lockBufferMinutes}
-                                                onChange={(e) => setLockBufferMinutes(Number(e.target.value))}
-                                                className="flex h-12 w-full appearance-none rounded-xl border-2 border-black bg-white px-3 py-2 text-black focus:outline-none focus:ring-4 focus:ring-primary/20 transition-all shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] pr-8"
-                                            >
-                                                <option value={0}>At Start (Kick-off)</option>
-                                                <option value={15}>15 Minutes Before</option>
-                                                <option value={60}>1 Hour Before</option>
-                                                <option value={1440}>24 Hours Before</option>
-                                            </select>
-                                        </div>
-                                    </div>
-
-                                    {type === "CHOICE" && (
-                                        // ... Choice options UI ...
-                                        <div className="space-y-3">
-                                            <label className="text-sm font-black text-black uppercase block">Options</label>
-                                            {options.map((opt, idx) => (
-                                                <div key={idx} className="flex gap-2">
-                                                    <input
-                                                        type="text"
-                                                        required
-                                                        value={opt}
-                                                        onChange={(e) => handleOptionChange(idx, e.target.value)}
-                                                        placeholder={`Option ${idx + 1}`}
-                                                        className="flex h-10 w-full rounded-lg border-2 border-black bg-white px-3 py-2 text-black placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-primary shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
-                                                    />
-                                                    {options.length > 2 && (
-                                                        <button type="button" onClick={() => handleRemoveOption(idx)} className="p-2 text-red-500 hover:text-red-700 transition-colors border-2 border-red-500 rounded-lg shadow-[2px_2px_0px_0px_rgba(239,68,68,1)] active:translate-y-[1px] active:shadow-none hover:bg-red-50">
-                                                            <Trash className="h-4 w-4" />
-                                                        </button>
-                                                    )}
-                                                </div>
-                                            ))}
-                                            <div className="flex gap-2">
-                                                <button type="button" onClick={handleAddOption} className="text-sm text-primary font-bold flex items-center hover:text-primary/80 transition-colors uppercase tracking-wide">
-                                                    <Plus className="h-4 w-4 mr-1 border-2 border-primary rounded-full p-0.5" /> Add Option
-                                                </button>
-
-                                                {/* Pre-fill Helpers */}
-                                                <button type="button" onClick={() => setOptions(["Yes", "No"])} className="text-xs font-bold text-gray-400 hover:text-black border border-gray-300 rounded px-2 py-0.5">Yes / No</button>
-                                                <button type="button" onClick={() => setOptions(["Home Team", "Draw", "Away Team"])} className="text-xs font-bold text-gray-400 hover:text-black border border-gray-300 rounded px-2 py-0.5">1x2</button>
-                                            </div>
-                                        </div>
-                                    )}
-
-                                    {type === "MATCH" && (
-                                        <div className="space-y-4 rounded-xl border-2 border-black bg-blue-50 p-4 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
-                                            {/* Match inputs */}
-                                            <div className="grid grid-cols-2 gap-4">
-                                                <div>
-                                                    <label className="text-xs font-bold text-blue-800 uppercase mb-1 block">Home Team</label>
-                                                    <input type="text" required value={matchHome} onChange={(e) => setMatchHome(e.target.value)} className="flex h-10 w-full rounded-lg border-2 border-black bg-white px-3 py-1 text-sm text-black focus:outline-none focus:ring-2 focus:ring-primary shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]" />
-                                                </div>
-                                                <div>
-                                                    <label className="text-xs font-bold text-blue-800 uppercase mb-1 block">Away Team</label>
-                                                    <input type="text" required value={matchAway} onChange={(e) => setMatchAway(e.target.value)} className="flex h-10 w-full rounded-lg border-2 border-black bg-white px-3 py-1 text-sm text-black focus:outline-none focus:ring-2 focus:ring-primary shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]" />
-                                                </div>
-                                            </div>
-                                        </div>
-                                    )}
-
-                                    {type === "RANGE" && (
-                                        <div className="space-y-4 rounded-xl border-2 border-black bg-blue-50 p-4 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
-                                            {/* Range inputs */}
-                                            <div className="flex gap-4">
-                                                <div className="flex-1">
-                                                    <label className="text-xs font-bold text-blue-800 uppercase mb-1 block">Min</label>
-                                                    <input type="number" value={rangeMin} onChange={(e) => setRangeMin(Number(e.target.value))} className="flex h-10 w-full rounded-lg border-2 border-black bg-white px-3 py-1 text-sm text-black focus:outline-none focus:ring-2 focus:ring-primary shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]" />
-                                                </div>
-                                                <div className="flex-1">
-                                                    <label className="text-xs font-bold text-blue-800 uppercase mb-1 block">Max</label>
-                                                    <input type="number" value={rangeMax} onChange={(e) => setRangeMax(Number(e.target.value))} className="flex h-10 w-full rounded-lg border-2 border-black bg-white px-3 py-1 text-sm text-black focus:outline-none focus:ring-2 focus:ring-primary shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]" />
-                                                </div>
-                                            </div>
+                                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                             <div>
-                                                <label className="text-xs font-bold text-blue-800 uppercase mb-1 block">Unit</label>
-                                                <input type="text" value={rangeUnit} onChange={(e) => setRangeUnit(e.target.value)} className="flex h-10 w-full rounded-lg border-2 border-black bg-white px-3 py-1 text-sm text-black focus:outline-none focus:ring-2 focus:ring-primary shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]" />
-                                            </div>
-                                        </div>
-                                    )}
-
-                                    <div className="flex justify-end pt-4">
-                                        <Button
-                                            type="submit"
-                                            disabled={loading}
-                                            className="flex-1 bg-green-400 text-black border-2 border-black hover:bg-green-500 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] active:translate-y-[2px] active:shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] transition-all h-12 text-lg font-black uppercase tracking-widest"
-                                        >
-                                            {loading && <Loader2 className="mr-2 h-5 w-5 animate-spin" />}
-                                            {betToEdit ? "Save Changes" : "Create Bet"}
-                                        </Button>
-                                    </div>
-                                </form>
-                            </>
-                        ) : (
-                            // BULK MODE
-                            <div className="space-y-6">
-                                {/* ... Bulk Inputs ... */}
-                                <div className="space-y-4">
-                                    <div>
-                                        <label className="text-sm font-black text-black">Project / League</label>
-                                        <input value={bulkTopic} onChange={(e) => setBulkTopic(e.target.value)} className="flex h-10 w-full rounded-lg border-2 border-black bg-white px-3 py-2 text-black focus:outline-none focus:ring-2 focus:ring-purple-500 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]" />
-                                    </div>
-                                    <div>
-                                        <label className="text-sm font-black text-black">Timeframe</label>
-                                        <input value={bulkTimeframe} onChange={(e) => setBulkTimeframe(e.target.value)} className="flex h-10 w-full rounded-lg border-2 border-black bg-white px-3 py-2 text-black focus:outline-none focus:ring-2 focus:ring-purple-500 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]" />
-                                    </div>
-                                    <div>
-                                        <label className="text-sm font-black text-black">Bet Type</label>
-                                        {leagueMode === "ZERO_SUM" ? (
-                                            <div className="space-y-2">
-                                                <div className="p-3 bg-blue-50 border-2 border-blue-200 rounded-xl text-blue-900 text-xs font-bold">
-                                                    Auto-generating 1x2 Choice Bets (Zero Sum Requirement).
-                                                </div>
-
-                                                <div className="flex gap-2">
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => setBulkOutcomeType("WINNER_DRAW")}
-                                                        className={`flex-1 py-1 text-xs font-bold rounded-lg border-2 transition-all ${bulkOutcomeType === "WINNER_DRAW" ? "bg-purple-600 text-white border-purple-600" : "bg-white border-purple-200 text-purple-800 hover:bg-purple-50"}`}
-                                                    >
-                                                        1x2 (Win/Draw/Loss)
-                                                    </button>
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => setBulkOutcomeType("WINNER")}
-                                                        className={`flex-1 py-1 text-xs font-bold rounded-lg border-2 transition-all ${bulkOutcomeType === "WINNER" ? "bg-purple-600 text-white border-purple-600" : "bg-white border-purple-200 text-purple-800 hover:bg-purple-50"}`}
-                                                    >
-                                                        Winner (2-Way)
-                                                    </button>
-                                                </div>
-                                            </div>
-                                        ) : (
-                                            <div className="space-y-3">
-                                                <div className="relative">
-                                                    <select
-                                                        value={bulkType}
-                                                        onChange={(e) => setBulkType(e.target.value as any)}
-                                                        className="flex h-10 w-full appearance-none rounded-lg border-2 border-black bg-white px-3 py-2 text-black focus:outline-none focus:ring-2 focus:ring-purple-500 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
-                                                    >
-                                                        <option value="MATCH">Match Prediction (Exact Score)</option>
-                                                        <option value="CHOICE">Winner Prediction (Choice)</option>
-                                                    </select>
-                                                    <div className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2">
-                                                        <svg className="h-4 w-4 fill-black" viewBox="0 0 20 20"><path d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" /></svg>
+                                                <label className="text-sm font-black text-black uppercase mb-1 block">{t('type')}</label>
+                                                {leagueMode === "ZERO_SUM" ? (
+                                                    <div className="p-3 bg-blue-50 border-2 border-blue-200 rounded-xl text-blue-900 text-xs font-bold leading-tight">
+                                                        {t('onlyZeroSumChoice')}
                                                     </div>
-                                                </div>
-
-                                                {/* Outcome Options for Standard Mode (if Choice selected) */}
-                                                {bulkType === "CHOICE" && (
-                                                    <div className="space-y-1">
-                                                        <label className="text-xs font-bold text-gray-500 uppercase">Outcome Options</label>
-                                                        <div className="flex gap-2">
-                                                            <button
-                                                                type="button"
-                                                                onClick={() => setBulkOutcomeType("WINNER_DRAW")}
-                                                                className={`flex-1 py-1 text-xs font-bold rounded-lg border-2 transition-all ${bulkOutcomeType === "WINNER_DRAW" ? "bg-purple-600 text-white border-purple-600" : "bg-white border-purple-200 text-purple-800 hover:bg-purple-50"}`}
-                                                            >
-                                                                1x2 (Win/Draw/Loss)
-                                                            </button>
-                                                            <button
-                                                                type="button"
-                                                                onClick={() => setBulkOutcomeType("WINNER")}
-                                                                className={`flex-1 py-1 text-xs font-bold rounded-lg border-2 transition-all ${bulkOutcomeType === "WINNER" ? "bg-purple-600 text-white border-purple-600" : "bg-white border-purple-200 text-purple-800 hover:bg-purple-50"}`}
-                                                            >
-                                                                Winner (2-Way)
-                                                            </button>
+                                                ) : (
+                                                    <div className="relative">
+                                                        <select
+                                                            value={type}
+                                                            onChange={(e) => setType(e.target.value as BetType)}
+                                                            className="flex h-12 w-full appearance-none rounded-xl border-2 border-black bg-white px-3 py-2 text-black focus:outline-none focus:ring-4 focus:ring-primary/20 transition-all shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] pr-8"
+                                                        >
+                                                            <option value="CHOICE">{t('typeChoice')}</option>
+                                                            <option value="RANGE">{t('typeRange')}</option>
+                                                            <option value="MATCH">{t('typeMatch')}</option>
+                                                        </select>
+                                                        <div className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2">
+                                                            <svg className="h-4 w-4 fill-black" viewBox="0 0 20 20"><path d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" /></svg>
                                                         </div>
                                                     </div>
                                                 )}
                                             </div>
-                                        )}
-                                    </div>
-                                    <Button
-                                        onClick={handleBulkGenerate}
-                                        disabled={isAiLoading}
-                                        className="w-full h-12 bg-purple-600 text-white hover:bg-purple-700 border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]"
-                                    >
-                                        {isAiLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : "🤖 Generate Schedule"}
-                                    </Button>
-                                </div>
-                                {/* ... Results ... */}
-                                {bulkBets.length > 0 && (
-                                    <div className="space-y-2">
-                                        <div className="max-h-[300px] overflow-y-auto space-y-2 pr-2">
-                                            {bulkBets.map((bet, i) => (
-                                                <div key={i} className={`flex items-start gap-3 p-3 rounded-lg border-2 cursor-pointer transition-all ${selectedBulkIndices.includes(i) ? "bg-purple-100 border-purple-500 shadow-[2px_2px_0px_0px_rgba(147,51,234,1)]" : "bg-white border-gray-200 hover:bg-gray-50"}`} onClick={() => {
-                                                    if (selectedBulkIndices.includes(i)) {
-                                                        setSelectedBulkIndices(selectedBulkIndices.filter(idx => idx !== i));
-                                                    } else {
-                                                        setSelectedBulkIndices([...selectedBulkIndices, i]);
-                                                    }
-                                                }}>
-                                                    {/* ... Checkbox ... */}
-                                                    <div className={`mt-1 w-5 h-5 rounded border-2 flex items-center justify-center ${selectedBulkIndices.includes(i) ? "bg-purple-600 border-purple-600" : "border-gray-300 bg-white"}`}>
-                                                        {selectedBulkIndices.includes(i) && <div className="w-2 h-2 bg-white rounded-sm" />}
+                                            <div>
+                                                <label className="text-sm font-black text-black uppercase mb-1 block">{t('startTime')}</label>
+                                                <input
+                                                    type="datetime-local"
+                                                    required
+                                                    value={eventDateStr}
+                                                    onChange={(e) => setEventDateStr(e.target.value)}
+                                                    className="flex h-12 w-full rounded-xl border-2 border-black bg-white px-3 py-2 text-black placeholder:text-gray-400 focus:outline-none focus:ring-4 focus:ring-primary/20 transition-all shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]"
+                                                />
+                                            </div>
+                                        </div>
+
+                                        {/* ... Lock Buffer ... */}
+                                        <div>
+                                            <label className="text-sm font-black text-black uppercase mb-1 block">{t('lockBetting')}</label>
+                                            <div className="relative">
+                                                <select
+                                                    value={lockBufferMinutes}
+                                                    onChange={(e) => setLockBufferMinutes(Number(e.target.value))}
+                                                    className="flex h-12 w-full appearance-none rounded-xl border-2 border-black bg-white px-3 py-2 text-black focus:outline-none focus:ring-4 focus:ring-primary/20 transition-all shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] pr-8"
+                                                >
+                                                    <option value={0}>{t('lockAtStart')}</option>
+                                                    <option value={15}>{t('lock15Min')}</option>
+                                                    <option value={60}>{t('lock1Hour')}</option>
+                                                    <option value={1440}>{t('lock24Hours')}</option>
+                                                </select>
+                                            </div>
+                                        </div>
+
+                                        {type === "CHOICE" && (
+                                            // ... Choice options UI ...
+                                            <div className="space-y-3">
+                                                <label className="text-sm font-black text-black uppercase block">{t('options')}</label>
+                                                {options.map((opt, idx) => (
+                                                    <div key={idx} className="flex gap-2">
+                                                        <input
+                                                            type="text"
+                                                            required
+                                                            value={opt}
+                                                            onChange={(e) => handleOptionChange(idx, e.target.value)}
+                                                            placeholder={`Option ${idx + 1}`}
+                                                            className="flex h-10 w-full rounded-lg border-2 border-black bg-white px-3 py-2 text-black placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-primary shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
+                                                        />
+                                                        {options.length > 2 && (
+                                                            <button type="button" onClick={() => handleRemoveOption(idx)} className="p-2 text-red-500 hover:text-red-700 transition-colors border-2 border-red-500 rounded-lg shadow-[2px_2px_0px_0px_rgba(239,68,68,1)] active:translate-y-[1px] active:shadow-none hover:bg-red-50">
+                                                                <Trash className="h-4 w-4" />
+                                                            </button>
+                                                        )}
                                                     </div>
-                                                    <div className="flex-1">
-                                                        <p className="font-bold text-sm text-black">{bet.question}</p>
-                                                        <p className="text-xs text-gray-500 font-bold">{new Date(bet.date).toLocaleString()} • {bet.matchHome} vs {bet.matchAway}</p>
+                                                ))}
+                                                <div className="flex gap-2">
+                                                    <button type="button" onClick={handleAddOption} className="text-sm text-primary font-bold flex items-center hover:text-primary/80 transition-colors uppercase tracking-wide">
+                                                        <Plus className="h-4 w-4 mr-1 border-2 border-primary rounded-full p-0.5" /> {t('addOption')}
+                                                    </button>
+
+                                                    {/* Pre-fill Helpers */}
+                                                    <button type="button" onClick={() => setOptions(["Yes", "No"])} className="text-xs font-bold text-gray-400 hover:text-black border border-gray-300 rounded px-2 py-0.5">{t('optYesNo')}</button>
+                                                    <button type="button" onClick={() => setOptions(["Home Team", "Draw", "Away Team"])} className="text-xs font-bold text-gray-400 hover:text-black border border-gray-300 rounded px-2 py-0.5">{t('opt1x2')}</button>
+                                                </div>
+                                            </div>
+                                        )}
+
+                                        {type === "MATCH" && (
+                                            <div className="space-y-4 rounded-xl border-2 border-black bg-blue-50 p-4 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
+                                                {/* Match inputs */}
+                                                <div className="grid grid-cols-2 gap-4">
+                                                    <div>
+                                                        <label className="text-xs font-bold text-blue-800 uppercase mb-1 block">{t('homeTeam')}</label>
+                                                        <input type="text" required value={matchHome} onChange={(e) => setMatchHome(e.target.value)} className="flex h-10 w-full rounded-lg border-2 border-black bg-white px-3 py-1 text-sm text-black focus:outline-none focus:ring-2 focus:ring-primary shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]" />
+                                                    </div>
+                                                    <div>
+                                                        <label className="text-xs font-bold text-blue-800 uppercase mb-1 block">{t('awayTeam')}</label>
+                                                        <input type="text" required value={matchAway} onChange={(e) => setMatchAway(e.target.value)} className="flex h-10 w-full rounded-lg border-2 border-black bg-white px-3 py-1 text-sm text-black focus:outline-none focus:ring-2 focus:ring-primary shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]" />
                                                     </div>
                                                 </div>
-                                            ))}
-                                        </div>
-                                        {/* ... Submit Button ... */}
-                                        <div className="pt-4 border-t-2 border-dashed border-gray-200">
+                                            </div>
+                                        )}
+
+                                        {type === "RANGE" && (
+                                            <div className="space-y-4 rounded-xl border-2 border-black bg-blue-50 p-4 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
+                                                {/* Range inputs */}
+                                                <div className="flex gap-4">
+                                                    <div className="flex-1">
+                                                        <label className="text-xs font-bold text-blue-800 uppercase mb-1 block">{t('min')}</label>
+                                                        <input type="number" value={rangeMin} onChange={(e) => setRangeMin(Number(e.target.value))} className="flex h-10 w-full rounded-lg border-2 border-black bg-white px-3 py-1 text-sm text-black focus:outline-none focus:ring-2 focus:ring-primary shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]" />
+                                                    </div>
+                                                    <div className="flex-1">
+                                                        <label className="text-xs font-bold text-blue-800 uppercase mb-1 block">{t('max')}</label>
+                                                        <input type="number" value={rangeMax} onChange={(e) => setRangeMax(Number(e.target.value))} className="flex h-10 w-full rounded-lg border-2 border-black bg-white px-3 py-1 text-sm text-black focus:outline-none focus:ring-2 focus:ring-primary shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]" />
+                                                    </div>
+                                                </div>
+                                                <div>
+                                                    <label className="text-xs font-bold text-blue-800 uppercase mb-1 block">{t('unit')}</label>
+                                                    <input type="text" value={rangeUnit} onChange={(e) => setRangeUnit(e.target.value)} className="flex h-10 w-full rounded-lg border-2 border-black bg-white px-3 py-1 text-sm text-black focus:outline-none focus:ring-2 focus:ring-primary shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]" />
+                                                </div>
+                                            </div>
+                                        )}
+
+                                        <div className="flex justify-end pt-4">
                                             <Button
-                                                onClick={handleBulkCreate}
-                                                disabled={loading || selectedBulkIndices.length === 0}
-                                                className="w-full h-12 bg-green-500 hover:bg-green-600 text-black border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]"
+                                                type="submit"
+                                                disabled={loading}
+                                                className="flex-1 bg-green-400 text-black border-2 border-black hover:bg-green-500 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] active:translate-y-[2px] active:shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] transition-all h-12 text-lg font-black uppercase tracking-widest"
                                             >
-                                                {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Plus className="mr-2 h-4 w-4" />}
-                                                Create {selectedBulkIndices.length} Selected Bets
+                                                {loading && <Loader2 className="mr-2 h-5 w-5 animate-spin" />}
+                                                {betToEdit ? t('btnSave') : t('btnCreate')}
                                             </Button>
                                         </div>
+                                    </form>
+                                </>
+                            ) : (
+                                // BULK MODE
+                                <div className="space-y-6">
+                                    {/* ... Bulk Inputs ... */}
+                                    <div className="space-y-4">
+                                        <div>
+                                            <label className="text-sm font-black text-black">{t('projectLeague')}</label>
+                                            <input value={bulkTopic} onChange={(e) => setBulkTopic(e.target.value)} className="flex h-10 w-full rounded-lg border-2 border-black bg-white px-3 py-2 text-black focus:outline-none focus:ring-2 focus:ring-purple-500 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]" />
+                                        </div>
+                                        <div>
+                                            <label className="text-sm font-black text-black">{t('timeframe')}</label>
+                                            <input value={bulkTimeframe} onChange={(e) => setBulkTimeframe(e.target.value)} className="flex h-10 w-full rounded-lg border-2 border-black bg-white px-3 py-2 text-black focus:outline-none focus:ring-2 focus:ring-purple-500 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]" />
+                                        </div>
+                                        <div>
+                                            <label className="text-sm font-black text-black">{t('type')}</label>
+                                            {leagueMode === "ZERO_SUM" ? (
+                                                <div className="space-y-2">
+                                                    <div className="p-3 bg-blue-50 border-2 border-blue-200 rounded-xl text-blue-900 text-xs font-bold">
+                                                        {t('bulkZeroSumNote')}
+                                                    </div>
+
+                                                    <div className="flex gap-2">
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => setBulkOutcomeType("WINNER_DRAW")}
+                                                            className={`flex-1 py-1 text-xs font-bold rounded-lg border-2 transition-all ${bulkOutcomeType === "WINNER_DRAW" ? "bg-purple-600 text-white border-purple-600" : "bg-white border-purple-200 text-purple-800 hover:bg-purple-50"}`}
+                                                        >
+                                                            {t('opt1x2Desc')}
+                                                        </button>
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => setBulkOutcomeType("WINNER")}
+                                                            className={`flex-1 py-1 text-xs font-bold rounded-lg border-2 transition-all ${bulkOutcomeType === "WINNER" ? "bg-purple-600 text-white border-purple-600" : "bg-white border-purple-200 text-purple-800 hover:bg-purple-50"}`}
+                                                        >
+                                                            {t('optWinnerDesc')}
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            ) : (
+                                                <div className="space-y-3">
+                                                    <div className="relative">
+                                                        <select
+                                                            value={bulkType}
+                                                            onChange={(e) => setBulkType(e.target.value as any)}
+                                                            className="flex h-10 w-full appearance-none rounded-lg border-2 border-black bg-white px-3 py-2 text-black focus:outline-none focus:ring-2 focus:ring-purple-500 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
+                                                        >
+                                                            <option value="MATCH">{t('typeMatchExact')}</option>
+                                                            <option value="CHOICE">{t('typeWinnerChoice')}</option>
+                                                        </select>
+                                                        <div className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2">
+                                                            <svg className="h-4 w-4 fill-black" viewBox="0 0 20 20"><path d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" /></svg>
+                                                        </div>
+                                                    </div>
+
+                                                    {/* Outcome Options for Standard Mode (if Choice selected) */}
+                                                    {bulkType === "CHOICE" && (
+                                                        <div className="space-y-1">
+                                                            <label className="text-xs font-bold text-gray-500 uppercase">{t('outcomeOptions')}</label>
+                                                            <div className="flex gap-2">
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => setBulkOutcomeType("WINNER_DRAW")}
+                                                                    className={`flex-1 py-1 text-xs font-bold rounded-lg border-2 transition-all ${bulkOutcomeType === "WINNER_DRAW" ? "bg-purple-600 text-white border-purple-600" : "bg-white border-purple-200 text-purple-800 hover:bg-purple-50"}`}
+                                                                >
+                                                                    {t('opt1x2Desc')}
+                                                                </button>
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => setBulkOutcomeType("WINNER")}
+                                                                    className={`flex-1 py-1 text-xs font-bold rounded-lg border-2 transition-all ${bulkOutcomeType === "WINNER" ? "bg-purple-600 text-white border-purple-600" : "bg-white border-purple-200 text-purple-800 hover:bg-purple-50"}`}
+                                                                >
+                                                                    {t('optWinnerDesc')}
+                                                                </button>
+                                                            </div>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            )}
+                                        </div>
+                                        <Button
+                                            onClick={handleBulkGenerate}
+                                            disabled={isAiLoading}
+                                            className="w-full h-12 bg-purple-600 text-white hover:bg-purple-700 border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]"
+                                        >
+                                            {isAiLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : t('generateSchedule')}
+                                        </Button>
                                     </div>
-                                )}
-                            </div>
-                        )}
+                                    {/* ... Results ... */}
+                                    {bulkBets.length > 0 && (
+                                        <div className="space-y-2">
+                                            <div className="max-h-[300px] overflow-y-auto space-y-2 pr-2">
+                                                {bulkBets.map((bet, i) => (
+                                                    <div key={i} className={`flex items-start gap-3 p-3 rounded-lg border-2 cursor-pointer transition-all ${selectedBulkIndices.includes(i) ? "bg-purple-100 border-purple-500 shadow-[2px_2px_0px_0px_rgba(147,51,234,1)]" : "bg-white border-gray-200 hover:bg-gray-50"}`} onClick={() => {
+                                                        if (selectedBulkIndices.includes(i)) {
+                                                            setSelectedBulkIndices(selectedBulkIndices.filter(idx => idx !== i));
+                                                        } else {
+                                                            setSelectedBulkIndices([...selectedBulkIndices, i]);
+                                                        }
+                                                    }}>
+                                                        {/* ... Checkbox ... */}
+                                                        <div className={`mt-1 w-5 h-5 rounded border-2 flex items-center justify-center ${selectedBulkIndices.includes(i) ? "bg-purple-600 border-purple-600" : "border-gray-300 bg-white"}`}>
+                                                            {selectedBulkIndices.includes(i) && <div className="w-2 h-2 bg-white rounded-sm" />}
+                                                        </div>
+                                                        <div className="flex-1">
+                                                            <p className="font-bold text-sm text-black">{bet.question}</p>
+                                                            <p className="text-xs text-gray-500 font-bold">{new Date(bet.date).toLocaleString()} • {bet.matchHome} vs {bet.matchAway}</p>
+                                                        </div>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                            {/* ... Submit Button ... */}
+                                            <div className="pt-4 border-t-2 border-dashed border-gray-200">
+                                                <Button
+                                                    onClick={handleBulkCreate}
+                                                    disabled={loading || selectedBulkIndices.length === 0}
+                                                    className="w-full h-12 bg-green-500 hover:bg-green-600 text-black border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]"
+                                                >
+                                                    {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Plus className="mr-2 h-4 w-4" />}
+                                                    {t('btnCreateSelected', { count: selectedBulkIndices.length })}
+                                                </Button>
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+                        </motion.div>
                     </motion.div>
                 </>
             )}

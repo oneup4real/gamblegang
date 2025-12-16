@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Bangers, Fredoka } from "next/font/google";
 import "../globals.css";
 import { cn } from "@/lib/utils";
@@ -20,14 +20,29 @@ const fontFredoka = Fredoka({
 export const metadata: Metadata = {
   title: "GambleGang",
   description: "Social Betting App",
+  manifest: "/manifest.json",
   icons: {
     icon: '/GG_Logo.png',
     shortcut: '/GG_Logo.png',
     apple: '/GG_Logo.png',
   },
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "black-translucent",
+    title: "GambleGang",
+  },
+};
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 1,
+  userScalable: false,
+  themeColor: "#8B5CF6", // Purple to match branding
 };
 
 import { AuthProvider } from "@/components/auth-provider";
+import { NavBar } from "@/components/navbar";
 
 export const dynamicParams = false;
 
@@ -61,7 +76,10 @@ export default async function LocaleLayout({
         )}
       >
         <NextIntlClientProvider messages={messages}>
-          <AuthProvider>{children}</AuthProvider>
+          <AuthProvider>
+            <NavBar />
+            {children}
+          </AuthProvider>
         </NextIntlClientProvider>
       </body>
     </html>

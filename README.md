@@ -185,6 +185,430 @@ gamblegang/
 └── firebase.json                 # Firebase config
 ```
 
+## 🏗️ Code Architecture
+
+### Overview
+
+GambleGang follows a **service-oriented architecture** with clear separation of concerns:
+- **UI Layer**: React components (Next.js App Router)
+- **Service Layer**: Business logic and data operations
+- **Data Layer**: Firebase Firestore with structured collections
+- **AI Layer**: Gemini AI integration for automated features
+
+### Architecture Patterns
+
+#### 1. **Service Pattern**
+All data operations are encapsulated in service modules located in `src/lib/services/`:
+
+```typescript
+// Service modules handle all CRUD and business logic
+src/lib/services/
+  ├── bet-service.ts       // Bet creation, wagering, resolution
+  ├── league-service.ts    // League management, members
+  └── user-service.ts      // User profiles, avatars
+```
+
+**Benefits:**
+- Centralized business logic
+- Reusable across components
+- Easy to test and maintain
+- Consistent error handling
+
+#### 2. **Component Composition**
+UI components are broken down into small, focused units:
+
+```typescript
+// Atomic components
+src/components/
+  ├── ui/                  // Base components (buttons, cards, modals)
+  ├── bet-card.tsx         // Composite component for bet display
+  ├── bet-ticket.tsx       // Bet receipt display
+  ├── bet-status-stepper.tsx // Visual status indicator
+  └── animations/          // Reusable animations
+```
+
+#### 3. **Provider Pattern**
+Context providers manage global state:
+
+```typescript
+// Auth context wraps the entire app
+<AuthProvider>
+  <App />
+</AuthProvider>
+
+// Usage in components
+const { user, loading } = useAuth();
+```
+
+#### 4. **Server Actions Pattern**
+AI features use Next.js server actions for secure API calls:
+
+```typescript
+// src/app/actions/ai-bet-actions.ts
+export async function aiAutoResolveBet(bet: Bet) {
+  "use server";
+  // Gemini API calls happen server-side
+}
+```
+
+### Core Data Models
+
+#### League Model
+```typescript
+interface League {
+  id: string;
+  name: string;
+  ownerId: string;
+  mode: "ZERO_SUM" | "STANDARD" | "ARCADE";
+  
+  // Zero-Sum specific
+  startCapital: number;
+  buyInType?: "FIXED" | "FLEXIBLE";
+  
+  // Arcade/Standard specific
+  matchSettings?: {
+    exact: number;      // Points for exact match prediction
+    diff: number;       // Points for goal difference
+    winner: number;     // Points for winner prediction
+    choice?: number;    // Points for multiple choice
+    range?: number;     // Points for range/guessing
+  };
+  
+  status: "DRAFT" | "NOT_STARTED" | "ACTIVE" | "COMPLETED";
+  memberCount: number;
+  createdAt: Timestamp;
+  startDate?: Timestamp;
+  endDate?: Timestamp;
+}
+```
+
+**Subcollections:**
+- `leagues/{leagueId}/members` - League members
+- `leagues/{leagueId}/bets` - League bets
+
+#### Bet Model
+```typescript
+interface Bet {
+  id: string;
+  leagueId: string;
+  creatorId: string;
+  question: string;
+  type: "CHOICE" | "MATCH" | "RANGE";
+  status: "DRAFT" | "OPEN" | "LOCKED" | "PROOFING" | "DISPUTED" | "RESOLVED" | "INVALID";
+  
+  closesAt: Timestamp;      // When wagering closes
+  eventDate?: Timestamp;    // When event occurs
+  
+  totalPool: number;        // Total points wagered (Zero-Sum only)
+  wagerCount?: number;      // Number of wagers placed
+  
+  // Type-specific fields
+  options?: BetOption[];           // For CHOICE bets
+  rangeMin?: number;              // For RANGE bets
+  rangeMax?: number;
+  rangeUnit?: string;
+  matchDetails?: {                // For MATCH bets
+    homeTeam: string;
+    awayTeam: string;
+    date: string;
+  };
+  
+  // Resolution fields
+  winningOutcome?: any;
+  disputeDeadline?: Timestamp;
+  votes?: { [userId: string]: "approve" | "reject" };
+}
+```
+
+**Subcollections:**
+- `bets/{betId}/wagers` - Individual player wagers
+
+#### Wager Model
+```typescript
+interface Wager {
+  id: string;
+  userId: string;
+  userName: string;
+  userAvatar: string;
+  amount: number;              // 0 for Arcade/Standard mode
+  selection: string | number | { home: number, away: number };
+  status: "PENDING" | "WON" | "LOST" | "PUSH";
+  payout?: number;            // Set when resolved
+  placedAt: Timestamp;
+}
+```
+
+#### League Member Model
+```typescript
+interface LeagueMember {
+  uid: string;
+  leagueId: string;
+  role: "OWNER" | "ADMIN" | "MEMBER";
+  points: number;             // Current wallet balance
+  totalBought: number;        // Total investment (Zero-Sum)
+  totalInvested: number;      // Amount in active wagers
+  joinedAt: Timestamp;
+  displayName: string;
+  photoURL: string;
+}
+```
+
+### Data Flow Patterns
+
+#### 1. **Create League Flow**
+```
+User Action → CreateLeagueModal 
+  → league-service.createLeague()
+    → Firestore transaction
+      → Create league doc
+      → Create owner member doc
+        → Return leagueId
+          → Navigate to league page
+```
+
+#### 2. **Place Wager Flow**
+```
+User Action → BetCard component
+  → Validation (points, selection)
+    → bet-service.placeWager()
+      → Firestore transaction
+        ├── Deduct points from member
+        ├── Create wager doc
+        ├── Update bet totalPool
+        └── Update option.totalWagered (CHOICE)
+          → Show BetTicket confirmation
+            → Update local state
+```
+
+#### 3. **Resolve Bet Flow**
+```
+Owner Action → BetCard (expanded)
+  → [Optional] AI Auto-Resolve
+    → ai-bet-actions.aiAutoResolveBet()
+      → Gemini API call
+        → Parse result
+  → bet-service.resolveBet()
+    → Firestore transaction
+      ├── Update bet.status = "PROOFING"
+      ├── Set bet.winningOutcome
+      ├── Set bet.disputeDeadline (+48h)
+      ├── Calculate winners
+      ├── Update wager.status (WON/LOST/PUSH)
+      ├── Update wager.payout
+      └── Update member.points
+        → Trigger payout + confetti animation
+```
+
+#### 4. **Dashboard Data Flow**
+```
+Dashboard Page Load
+  → getUserLeagues()
+    → Fetch all user's leagues
+      → For each league:
+        ├── Fetch league.mode
+        ├── Fetch league.matchSettings
+        └── Fetch all bets
+          → For each bet:
+            ├── Fetch user's wager
+            └── Build DashboardBetWithWager
+              → Categorize by status:
+                ├── Available (OPEN, no wager)
+                ├── Active (OPEN, has wager)
+                ├── Pending (LOCKED/PROOFING/DISPUTED)
+                ├── Won (RESOLVED, status=WON)
+                └── Lost (RESOLVED, status=LOST)
+                  → Sort by time
+                    → Display in sections
+```
+
+### Key Service Functions
+
+#### bet-service.ts
+
+**Creation & Management:**
+- `createBet()` - Create new bet with validation
+- `publishBet()` - Change status from DRAFT to OPEN
+- `deleteBet()` - Remove bet (owner only, draft only)
+
+**Wagering:**
+- `placeWager()` - Place wager with transaction
+- `calculateOdds()` - Compute parimutuel odds
+- `getReturnPotential()` - Calculate estimated payout
+
+**Resolution:**
+- `resolveBet()` - Resolve bet and distribute payouts
+- `startProofing()` - Begin 48h dispute period
+- `disputeBetResult()` - File dispute
+- `voteOnDisputedBet()` - Cast vote on disputed bet
+- `markBetInvalidAndRefund()` - Refund all wagers
+
+**Dashboard:**
+- `getUserDashboardStats()` - Aggregate all user bets across leagues
+- `dismissBet()` - Mark bet as dismissed (localStorage)
+- `clearDismissedSection()` - Bulk dismiss bets
+
+#### league-service.ts
+
+**League Management:**
+- `createLeague()` - Create league with owner member
+- `updateLeagueSettings()` - Modify league configuration
+- `getUserLeagues()` - Fetch all leagues user is member of
+- `getLeagueById()` - Fetch single league
+- `getLeagueMembers()` - Fetch all members
+
+**Member Management:**
+- `joinLeague()` - Add user as member
+- `updateMemberRole()` - Change member permissions
+- `buyPoints()` - Purchase additional points (Zero-Sum)
+
+#### user-service.ts
+
+**User Profile:**
+- `createUserProfile()` - Initialize user document
+- `updateUserProfile()` - Update user data + sync to all leagues
+- `uploadUserAvatar()` - Upload and resize avatar image
+- `getUserProfile()` - Fetch user document
+
+### State Management
+
+#### Local State (useState)
+- Component-specific UI state
+- Form inputs
+- Expand/collapse states
+- Loading indicators
+
+#### Context State (useContext)
+- `AuthContext` - User authentication state
+- Global user object
+- Loading states
+- Auth methods (login, logout)
+
+#### localStorage
+- Dismissed bets (per user)
+- UI preferences
+- Temporary client-side caching
+
+#### Real-time State (Firestore Listeners)
+```typescript
+// Real-time updates for live data
+useEffect(() => {
+  const unsubscribe = onSnapshot(
+    collection(db, "leagues", leagueId, "bets"),
+    (snapshot) => {
+      // Update local state with live data
+      setBets(snapshot.docs.map(doc => doc.data()));
+    }
+  );
+  return unsubscribe; // Cleanup
+}, [leagueId]);
+```
+
+### Firebase Security Rules
+
+Rules enforce data access patterns:
+
+```javascript
+// leagues/{leagueId}
+- read: allow all (for join links)
+- create: authenticated users
+- update: owner OR memberCount field only
+- delete: owner only
+
+// leagues/{leagueId}/members/{memberId}
+- read: authenticated users
+- write: authenticated users (for joining/updates)
+
+// leagues/{leagueId}/bets/{betId}
+- read: authenticated users
+- create: authenticated users
+- update: authenticated users
+- delete: league owner only
+
+// leagues/{leagueId}/bets/{betId}/wagers/{wagerId}
+- read: authenticated users
+- create: wager owner only
+- update: authenticated users (for resolution)
+```
+
+### Error Handling
+
+#### Service Layer
+```typescript
+try {
+  await placeWager(leagueId, betId, user, 50, "Option A");
+} catch (error) {
+  console.error("Wager failed:", error);
+  throw error; // Propagate to component
+}
+```
+
+#### Component Layer
+```typescript
+const handlePlaceWager = async () => {
+  setLoading(true);
+  try {
+    await executePlaceWager(amount, prediction);
+    // Success feedback
+  } catch (error) {
+    console.error(error);
+    alert("Failed to place wager");
+  } finally {
+    setLoading(false);
+  }
+};
+```
+
+### Performance Optimizations
+
+1. **Firestore Indexes** - Optimized queries for sorting/filtering
+2. **Pagination** - Limited results per query
+3. **Local Caching** - Dismissed bets in localStorage
+4. **Code Splitting** - Next.js automatic route-based splitting
+5. **Image Optimization** - Next.js Image component + Firebase Storage
+6. **Lazy Loading** - Components loaded on demand
+7. **Memoization** - React.memo for expensive renders
+
+### Testing Patterns
+
+**Service Testing:**
+```typescript
+// Mock Firestore
+jest.mock('@/lib/firebase/config');
+
+test('placeWager deducts points', async () => {
+  const result = await placeWager(leagueId, betId, user, 50, "Option A");
+  expect(result.newBalance).toBe(50);
+});
+```
+
+**Component Testing:**
+```typescript
+// Test with React Testing Library
+render(<BetCard bet={mockBet} userPoints={100} />);
+fireEvent.click(screen.getByText('Place Wager'));
+expect(screen.getByText('Success')).toBeInTheDocument();
+```
+
+### Internationalization (i18n)
+
+**Pattern:**
+```typescript
+// Component
+import { useTranslations } from 'next-intl';
+
+function MyComponent() {
+  const t = useTranslations('Dashboard');
+  return <h1>{t('title')}</h1>;
+}
+
+// Translation files
+messages/
+  ├── en.json  // { "Dashboard": { "title": "Dashboard" } }
+  └── de.json  // { "Dashboard": { "title": "Übersicht" } }
+```
+
+---
+
 ## 🔐 Security
 
 ### Firestore Rules

@@ -1,4 +1,5 @@
 import { Ticket, CheckCircle2 } from "lucide-react";
+import { useTranslations } from 'next-intl';
 
 interface BetTicketProps {
     amount: number;
@@ -6,37 +7,59 @@ interface BetTicketProps {
     selectionDisplay: string;
     status?: string;
     explanation?: string;
+    wagerStatus?: "WON" | "LOST" | "PUSH" | "PENDING"; // Add wager status
 }
 
-export function BetTicket({ amount, potential, selectionDisplay, status = "ACCEPTED", explanation }: BetTicketProps) {
+export function BetTicket({ amount, potential, selectionDisplay, status = "ACCEPTED", explanation, wagerStatus = "PENDING" }: BetTicketProps) {
+    const t = useTranslations('Bets.BetTicket');
+
+    // Determine colors based on wager status
+    const isResolved = wagerStatus && wagerStatus !== "PENDING";
+    const isWon = wagerStatus === "WON";
+    const isLost = wagerStatus === "LOST";
+    const isPush = wagerStatus === "PUSH";
+
+    const selectionBgColor = isWon ? "bg-green-100 border-green-600" :
+        isLost ? "bg-red-100 border-red-600" :
+            isPush ? "bg-yellow-100 border-yellow-600" :
+                "bg-gray-100 border-black";
+
+    const selectionTextColor = isWon ? "text-green-800" :
+        isLost ? "text-red-800" :
+            isPush ? "text-yellow-800" :
+                "text-black";
+
+    const resultLabel = isResolved ? t('netResult') : t('estProfit');
+    const resultColor = isWon ? "text-green-600" : isLost ? "text-red-600" : isPush ? "text-yellow-600" : "text-green-600";
+
     return (
         <div className="relative bg-white w-full max-w-[300px] mx-auto rounded-sm border-4 border-black shadow-[8px_8px_0_0_rgba(0,0,0,1)] overflow-hidden transform -rotate-2 hover:rotate-0 transition-all duration-300">
             {/* Yellow Header */}
             <div className="bg-yellow-400 p-3 border-b-4 border-black border-dashed flex items-center justify-between">
                 <div className="flex items-center gap-2">
                     <Ticket className="h-5 w-5 text-black" />
-                    <span className="font-black uppercase text-base">My Bet Slip</span>
+                    <span className="font-black uppercase text-base">{t('myBetSlip')}</span>
                 </div>
-                <span className="text-[10px] font-bold border-2 border-black rounded px-1 bg-white">ACTIVE</span>
+                <span className="text-[10px] font-bold border-2 border-black rounded px-1 bg-white">{t('active')}</span>
             </div>
 
             {/* Content */}
             <div className="p-5 space-y-4 bg-[radial-gradient(circle_at_center,_#ffffff_4px,_transparent_5px)] bg-[length:12px_12px]">
                 <div className="text-center">
-                    <p className="text-[10px] uppercase font-bold text-gray-500 mb-1">Selection</p>
-                    <p className="text-xl font-black text-black leading-tight bg-gray-100 p-2 rounded border border-black border-dashed break-words">
+                    <p className="text-[10px] uppercase font-bold text-gray-500 mb-1">{t('selection')}</p>
+                    <p className={`text-xl font-black leading-tight p-2 rounded border-2 border-dashed break-words ${selectionBgColor} ${selectionTextColor}`}>
                         {selectionDisplay}
                     </p>
                 </div>
 
                 <div className="flex justify-between items-center pt-2 border-t-2 border-black/10 border-dashed">
                     <div>
-                        <p className="text-[10px] uppercase font-bold text-gray-500">Wager</p>
-                        <p className="text-lg font-black">{amount > 0 ? amount : "FREE"}</p>
+                        <p className="text-[10px] uppercase font-bold text-gray-500">{t('wager')}</p>
+                        <p className="text-lg font-black">{amount > 0 ? amount : t('free')}</p>
                     </div>
                     <div className="text-right">
-                        <p className="text-[10px] uppercase font-bold text-gray-500">Est. Win</p>
-                        <p className="text-lg font-black text-green-600">{potential}</p>
+                        <p className="text-[10px] uppercase font-bold text-gray-500">{resultLabel}</p>
+                        <p className={`text-lg font-black ${resultColor}`}>{potential}</p>
                     </div>
                 </div>
                 {explanation && (

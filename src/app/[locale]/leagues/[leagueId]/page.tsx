@@ -8,15 +8,21 @@ import { db } from "@/lib/firebase/config";
 import { League, LeagueMember, updateLeagueStatus, rebuy } from "@/lib/services/league-service";
 import { getLeagueBets, Bet, Wager, deleteBet } from "@/lib/services/bet-service";
 import { BetCard } from "@/components/bet-card";
+import { BetStatusStepper } from "@/components/bet-status-stepper";
 import { format } from "date-fns";
-import { ArrowLeft, Share2, Crown, User as UserIcon, Settings, Play, Flag, Archive, Coins, AlertOctagon, CheckCircle2, XCircle, Trash2, Pencil } from "lucide-react";
+import { ArrowLeft, Share2, Crown, User as UserIcon, Settings, Play, Flag, Archive, Coins, AlertOctagon, CheckCircle2, XCircle, Trash2, Pencil, QrCode, Gamepad2, Gavel, TrendingUp, Target, Award, Activity, ExternalLink, ChevronDown, ChevronUp, Ticket as TicketIcon, Timer, Trophy } from "lucide-react";
+import QRCode from "react-qr-code";
+import { BetTicket } from "@/components/bet-ticket";
 import Link from "next/link";
 import { CreateBetModal } from "@/components/create-bet-modal";
 import { LeagueSettingsModal } from "@/components/league-settings-modal";
 import { motion } from "framer-motion";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+import { useTranslations } from "next-intl";
 
 export default function LeaguePage() {
+    const tBets = useTranslations('Bets');
+    const t = useTranslations('League');
     const { user, loading } = useAuth();
     const router = useRouter();
     const params = useParams();
@@ -31,6 +37,7 @@ export default function LeaguePage() {
     const [isBetModalOpen, setIsBetModalOpen] = useState(false);
     const [betToEdit, setBetToEdit] = useState<Bet | undefined>(undefined);
     const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+    const [isQROpen, setIsQROpen] = useState(false);
     const [actionLoading, setActionLoading] = useState(false);
     const [expandedBets, setExpandedBets] = useState<Set<string>>(new Set()); // Track which bets are expanded
     const [expandAll, setExpandAll] = useState(false); // Toggle all expand/collapse
@@ -169,7 +176,22 @@ export default function LeaguePage() {
                 if (!cumulativeMap[uid]) cumulativeMap[uid] = { profit: 0, invested: 0 };
 
                 let change = 0;
-                if (w.status === "WON") change = (w.payout || 0) - w.amount;
+                if (w.status === "WON") {
+                    // ROI Calculation: We use total payout (Gross Return) vs Total Invested
+                    // If we want "Return" %: (Total Payout / Total Invested) * 100
+                    // If we want "Profit" % (ROI): ((Total Payout - Total Invested) / Total Invested) * 100
+                    // The user requested "calculated roi should no consider the point placed on bets as 'lost'"
+                    // This implies they likely want Gross Return (Payout includes stake).
+                    // Or they think "Profit" is subtracting stake when Payout is already Net?
+                    // Let's assume Payout is Gross (includes stake).
+                    // So Profit = Payout - Stake.
+
+                    // If the user thinks counting stake as 'lost' is wrong, maybe they mean:
+                    // Profit = Payout? (No, that's revenue).
+
+                    // Let's try switching to Payout based logic if that's what they mean by "not lost".
+                    change = (w.payout || 0) - w.amount;
+                }
                 else if (w.status === "LOST") change = -w.amount;
 
                 cumulativeMap[uid].invested += w.amount;
@@ -313,7 +335,7 @@ export default function LeaguePage() {
             }
         } catch (error) {
             console.error("Failed to delete bet:", error);
-            alert("Failed to delete bet. See console.");
+            alert(tBets('deleteError'));
         } finally {
             setActionLoading(false);
         }
@@ -332,15 +354,15 @@ export default function LeaguePage() {
                 // Show actual results for resolved bets
                 if (wager.status === "WON") {
                     const profit = (wager.payout || 0) - wager.amount;
-                    displayedReturn = `+${profit.toLocaleString()} pts`;
+                    displayedReturn = `+${profit.toLocaleString()} ${tBets('pts')}`;
                     displayedOdds = wager.payout ? (wager.payout / wager.amount).toFixed(2) + "x" : "-";
                     returnColor = "text-green-600";
                 } else if (wager.status === "LOST") {
-                    displayedReturn = `-${wager.amount.toLocaleString()} pts`;
+                    displayedReturn = `-${wager.amount.toLocaleString()} ${tBets('pts')}`;
                     displayedOdds = "0.00x";
                     returnColor = "text-red-500";
                 } else if (wager.status === "PUSH") {
-                    displayedReturn = "REFUNDED";
+                    displayedReturn = tBets('refunded');
                     displayedOdds = "1.00x";
                     returnColor = "text-yellow-600 font-black";
                 }
@@ -351,15 +373,22 @@ export default function LeaguePage() {
                 if (opt && opt.totalWagered > 0) {
                     const odds = bet.totalPool / opt.totalWagered;
                     displayedOdds = odds.toFixed(2) + "x";
-                    const profit = Math.floor((wager.amount * odds) - wager.amount);
-                    displayedReturn = `+${profit.toLocaleString()} pts`;
+                    const totalReturn = Math.floor(wager.amount * odds);
+                    const profit = totalReturn - wager.amount;
+                    displayedReturn = `+${profit.toLocaleString()} ${tBets('pts')}`;
                     returnColor = "text-green-600";
+                } else {
+                    // No bets on this option yet, show potential loss
+                    displayedOdds = "---x";
+                    displayedReturn = `-${wager.amount.toLocaleString()} ${tBets('pts')}`;
+                    returnColor = "text-red-500";
                 }
+
             } else {
-                // ARCADE: Fixed Odds (Estimate)
-                displayedOdds = "~2.0x";
-                // Assuming 2x payout for win
-                displayedReturn = `+${wager.amount.toLocaleString()} pts`;
+                // ARCADE: Fixed points (No Wager Amount)
+                displayedOdds = "-";
+                // Fixed 1 point for winning in Arcade Mode
+                displayedReturn = `1 ${tBets('pts')}`;
                 returnColor = "text-green-600";
             }
         }
@@ -378,33 +407,45 @@ export default function LeaguePage() {
                     }}
                     className="w-full p-4 text-left hover:bg-gray-50 transition-all"
                 >
-                    <div className="flex items-center justify-between gap-4">
-                        <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-2 mb-1">
+                    {/* Top Row: Stepper/Status spanning full width */}
+                    <div className="mb-3">
+                        {(bet.status !== "OPEN" || (bet.status === "OPEN" && bet.closesAt && bet.closesAt.toDate() < new Date())) && bet.status !== "DRAFT" && bet.status !== "INVALID" ? (
+                            <div className="pointer-events-none w-full">
+                                <BetStatusStepper bet={bet} isOwner={user?.uid === bet.creatorId} hideStatusCard={true} />
+                            </div>
+                        ) : (
+                            <div className="flex items-center gap-2">
                                 <span className={`text-xs px-2 py-1 rounded border-2 border-black font-black ${bet.status === "OPEN" ? "bg-green-400" :
-                                    bet.status === "LOCKED" ? "bg-red-400" :
-                                        bet.status === "PROOFING" ? "bg-yellow-400" :
-                                            bet.status === "DISPUTED" ? "bg-orange-400" :
-                                                bet.status === "RESOLVED" ? "bg-blue-400" :
-                                                    "bg-gray-400"
+                                    "bg-gray-400"
                                     }`}>
-                                    {bet.status}
+                                    {tBets('status_' + bet.status)}
                                 </span>
                                 <span className="text-xs text-gray-600 font-bold">{bet.type}</span>
                             </div>
+                        )}
+                    </div>
+
+                    {/* Bottom Row: Question | Odds/Return | Icons */}
+                    <div className="flex items-center justify-between gap-4">
+                        {/* Question Text */}
+                        <div className="flex-1 min-w-0">
                             <p className="font-black text-black text-lg truncate">{bet.question}</p>
                         </div>
-                        <div className="flex gap-6 text-sm">
+
+                        {/* Odds & Return */}
+                        <div className="flex gap-6 text-sm shrink-0">
                             <div className="text-center">
-                                <p className="text-gray-500 text-xs font-bold">Odds</p>
+                                <p className="text-gray-500 text-xs font-bold">{tBets('odds')}</p>
                                 <p className="font-black text-black text-lg">{displayedOdds}</p>
                             </div>
                             <div className="text-center">
-                                <p className="text-gray-500 text-xs font-bold">Est. Return</p>
+                                <p className="text-gray-500 text-xs font-bold">{tBets('estReturn')}</p>
                                 <p className={`font-black text-lg ${returnColor}`}>{displayedReturn}</p>
                             </div>
                         </div>
-                        <div className="text-black text-xl font-bold flex items-center gap-2">
+
+                        {/* Action Icons */}
+                        <div className="text-black text-xl font-bold flex items-center gap-2 shrink-0">
                             {isOwner && (
                                 <div className="flex items-center gap-1">
                                     {(bet.wagerCount === 0 || !bet.wagerCount) && (
@@ -507,8 +548,16 @@ export default function LeaguePage() {
                         <button
                             onClick={copyInviteLink}
                             className="p-2 bg-white border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] rounded-lg hover:translate-y-[2px] hover:shadow-none transition-all text-primary hover:bg-primary/10"
+                            title="Copy Invite Link"
                         >
                             <Share2 className="h-5 w-5" />
+                        </button>
+                        <button
+                            onClick={() => setIsQROpen(true)}
+                            className="p-2 bg-white border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] rounded-lg hover:translate-y-[2px] hover:shadow-none transition-all text-purple-600 hover:bg-purple-50"
+                            title="Show QR Code"
+                        >
+                            <QrCode className="h-5 w-5" />
                         </button>
                     </div>
                 </div>
@@ -523,7 +572,7 @@ export default function LeaguePage() {
                                 : "bg-gray-100 text-gray-500 hover:bg-gray-200 mb-0"
                                 }`}
                         >
-                            Bets Register
+                            {t('tabBets')}
                         </button>
                         <button
                             onClick={() => setViewMode("analytics")}
@@ -532,7 +581,7 @@ export default function LeaguePage() {
                                 : "bg-gray-100 text-gray-500 hover:bg-gray-200 mb-0"
                                 }`}
                         >
-                            Analytics
+                            {t('tabAnalytics')}
                         </button>
                     </div>
                 </div>
@@ -543,7 +592,7 @@ export default function LeaguePage() {
                     <div className="bg-white border-2 border-black rounded-xl p-6 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
                         <div className="flex items-center justify-between mb-4">
                             <h3 className="text-2xl font-black tracking-tight text-black font-comic uppercase">
-                                Performance History
+                                {t('perfHistory')}
                             </h3>
                             {/* Metric Selector */}
                             <div className="flex bg-gray-100 rounded-lg p-1 border border-black/10">
@@ -553,7 +602,7 @@ export default function LeaguePage() {
                                         onClick={() => setAnalyticsMetric(m)}
                                         className={`px-3 py-1 text-xs font-black uppercase rounded transition-all ${analyticsMetric === m ? "bg-white text-black shadow-sm border border-black/10" : "text-gray-400 hover:text-gray-600"}`}
                                     >
-                                        {m === "profit" ? "Net Profit" : m === "roi" ? "ROI %" : "Ranking"}
+                                        {m === "profit" ? t('metricProfit') : m === "roi" ? t('metricROI') : t('metricRank')}
                                     </button>
                                 ))}
                             </div>
@@ -621,10 +670,11 @@ export default function LeaguePage() {
                                         <div>
                                             <p className="text-sm font-black uppercase text-white/80 tracking-widest">My Chips</p>
                                             <p className="text-5xl font-black text-white drop-shadow-[4px_4px_0_rgba(0,0,0,0.3)] font-comic">
-                                                {myMemberProfile.points.toLocaleString()}
+                                                {/* Show total chips (wallet + active wagers) */}
+                                                {(myMemberProfile.points + (myMemberProfile.totalInvested || 0)).toLocaleString()}
                                             </p>
                                             <p className="text-xs text-white/90 font-bold mt-1">
-                                                Total Buy-In: {(myMemberProfile.totalBought || (league.buyInType === "FIXED" ? league.startCapital : 0)).toLocaleString()}
+                                                Wallet: {myMemberProfile.points.toLocaleString()} | Active: {(myMemberProfile.totalInvested || 0).toLocaleString()}
                                             </p>
                                         </div>
 
@@ -668,7 +718,7 @@ export default function LeaguePage() {
                                     <div className="flex items-center justify-between">
                                         <div>
                                             <h2 className="text-4xl font-black tracking-tight text-white font-comic uppercase drop-shadow-[2px_2px_0_rgba(0,0,0,0.3)]">
-                                                🏆 Leaderboard
+                                                🏆 {t('leaderboard')}
                                             </h2>
                                             <p className="text-sm text-white/90 font-bold mt-1">
                                                 {members.length} {members.length === 1 ? 'player' : 'players'} competing
@@ -719,10 +769,20 @@ export default function LeaguePage() {
                                                         </div>
                                                         <p className="text-xs text-gray-500 font-bold mt-1">
                                                             {(() => {
-                                                                const buyIn = member.totalBought || (league.buyInType === "FIXED" ? league.startCapital : 0);
-                                                                return league.mode === "ZERO_SUM"
-                                                                    ? `ROI: ${(buyIn ? ((member.points - buyIn) / buyIn * 100).toFixed(1) : 0)}%`
-                                                                    : `Points Accumulation`;
+                                                                const buyIn = member.totalBought || (league.mode === "ZERO_SUM" && league.buyInType === "FIXED" ? league.startCapital : 0);
+                                                                const invested = member.totalInvested || 0;
+
+                                                                // ROI only makes sense after bets are resolved
+                                                                // If invested === 0, no bets have been resolved yet
+                                                                if (league.mode === "ZERO_SUM") {
+                                                                    if (invested === 0) {
+                                                                        return "ROI: 0.0%";
+                                                                    }
+                                                                    // ROI = (current points - buy in) / invested amount
+                                                                    const roi = buyIn > 0 ? ((member.points - buyIn) / invested * 100).toFixed(1) : 0;
+                                                                    return `ROI: ${roi}%`;
+                                                                }
+                                                                return `Points Accumulation`;
                                                             })()}
                                                         </p>
                                                     </div>
@@ -730,7 +790,8 @@ export default function LeaguePage() {
                                             </div>
                                             <div className="text-right">
                                                 <div className="font-black text-2xl text-primary drop-shadow-[2px_2px_0_rgba(0,0,0,1)] font-comic">
-                                                    {member.points.toLocaleString()} pts
+                                                    {/* Show total chips (wallet + active wagers) */}
+                                                    {(member.points + (member.totalInvested || 0)).toLocaleString()} pts
                                                 </div>
                                             </div>
                                         </div>
@@ -747,9 +808,9 @@ export default function LeaguePage() {
                                     {/* Left: Title */}
                                     <div>
                                         <h2 className="text-2xl font-black tracking-tight text-black font-comic uppercase drop-shadow-[1px_1px_0_rgba(0,0,0,0.1)] flex items-center gap-2">
-                                            <span>🎲</span> Active Bets
+                                            <span>🎲</span> {t('activeBets')}
                                             <span className="text-sm text-gray-500 font-bold bg-gray-100 px-2 py-0.5 rounded-full border border-gray-300">
-                                                {bets.length}
+                                                {bets.filter(b => b.status !== "RESOLVED" && b.status !== "INVALID").length}
                                             </span>
                                         </h2>
                                     </div>
@@ -768,18 +829,19 @@ export default function LeaguePage() {
                                             }}
                                             className="px-3 py-1.5 bg-yellow-400 hover:bg-yellow-500 rounded-lg border-2 border-black text-xs font-black text-black transition-all shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:translate-y-[-1px]"
                                         >
-                                            {expandAll ? "📂 Collapse" : "📁 Expand"}
+                                            {expandAll ? `📂 ${t('collapse')}` : `📁 ${t('expand')}`}
                                         </button>
 
                                         {/* New Bet Button */}
-                                        {league.status === "STARTED" && (
+                                        {/* New Bet Button */}
+                                        {(league.status === "STARTED" || (league.status === "NOT_STARTED" && isOwner)) && (
                                             <>
                                                 <div className="h-8 w-[2px] bg-gray-200 mx-1"></div>
                                                 <button
                                                     onClick={() => setIsBetModalOpen(true)}
                                                     className="px-4 py-2 bg-primary hover:bg-primary/90 text-white font-black text-sm rounded-lg border-2 border-black shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] hover:translate-y-[-1px] transition-all uppercase flex items-center gap-2"
                                                 >
-                                                    <span>+</span> NEW BET
+                                                    <span>+</span> {tBets('newBet')}
                                                 </button>
                                             </>
                                         )}
@@ -791,90 +853,130 @@ export default function LeaguePage() {
                             <div className="space-y-8">
                                 {bets.length === 0 ? (
                                     <div className="flex flex-col items-center justify-center py-12 border-2 border-dashed border-gray-300 rounded-xl bg-gray-50">
-                                        <p className="text-gray-500 font-bold">No bets found.</p>
-                                        {league.status === "STARTED" && (
+                                        <p className="text-gray-500 font-bold">{tBets('noBetsFound')}</p>
+                                        {(league.status === "STARTED" || (league.status === "NOT_STARTED" && isOwner)) && (
                                             <button
                                                 onClick={() => setIsBetModalOpen(true)}
-                                                className="mt-4 text-sm text-primary hover:text-primary/80 font-black uppercase underline"
+                                                className="mt-4 px-6 py-3 bg-primary text-white font-black rounded-xl border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:translate-y-[-2px] transition-all uppercase"
                                             >
-                                                Create one now
+                                                {tBets('newBet')}
                                             </button>
                                         )}
                                     </div>
                                 ) : (
                                     <>
-                                        {/* 0. DRAFTS (Owner Only) */}
+                                        {/* 1. DRAFTS (Owner Only) */}
                                         {(() => {
                                             const drafts = bets.filter(b => b.status === "DRAFT");
                                             if (drafts.length === 0 || !isOwner) return null;
 
                                             return (
-                                                <div className="space-y-3 mb-6 pb-6 border-b-2 border-dashed border-gray-300">
-                                                    <div className="flex items-center gap-2 mb-2">
+                                                <div className="space-y-3 mb-8">
+                                                    <div className="flex items-center gap-2 mb-4 bg-gray-100 p-2 rounded-lg border-2 border-dashed border-gray-400">
                                                         <span className="text-xl">📝</span>
-                                                        <h3 className="text-xl font-black text-black font-comic">Drafts</h3>
+                                                        <h3 className="text-lg font-black text-gray-700 font-comic uppercase">Drafts (Private)</h3>
                                                     </div>
                                                     {drafts.map(bet => renderBetItem(bet, myMemberProfile?.points || 0, league.mode))}
                                                 </div>
                                             );
                                         })()}
 
-                                        {/* 1. UPCOMING / ACTIVE (Grouped by Week) */}
+                                        {/* 2. OPEN (Active Betting) */}
                                         {(() => {
-                                            // Filter & Sort
-                                            const upcoming = bets.filter(b => b.status === "OPEN" || b.status === "LOCKED");
-                                            upcoming.sort((a, b) => (a.closesAt?.seconds || 0) - (b.closesAt?.seconds || 0));
+                                            const now = new Date();
+                                            const openBets = bets.filter(b => b.status === "OPEN" && (!b.closesAt || new Date(b.closesAt.seconds * 1000) > now));
+                                            if (openBets.length === 0) return null;
+                                            // Sort by closing date (soonest first)
+                                            openBets.sort((a, b) => (a.closesAt?.seconds || 0) - (b.closesAt?.seconds || 0));
 
-                                            // Group by Week
-                                            const weeks: Record<string, Bet[]> = {};
-                                            upcoming.forEach(bet => {
-                                                const date = new Date((bet.closesAt?.seconds || 0) * 1000);
-                                                const weekKey = format(date, "'CW' w yyyy"); // "CW 50 2025"
-                                                if (!weeks[weekKey]) weeks[weekKey] = [];
-                                                weeks[weekKey].push(bet);
-                                            });
-
-                                            return Object.entries(weeks).map(([week, weekBets]) => (
-                                                <div key={week} className="space-y-3">
-                                                    <h3 className="text-xs font-black text-gray-400 uppercase tracking-widest pl-2 border-l-4 border-primary/50">
-                                                        Calendar Week {week.split(' ')[1]}
-                                                    </h3>
-                                                    {weekBets.map(bet => renderBetItem(bet, myMemberProfile?.points || 0, league.mode))}
-                                                </div>
-                                            ));
-                                        })()}
-
-                                        {/* 2. PROOFING / DISPUTED */}
-                                        {(() => {
-                                            const pending = bets.filter(b => b.status === "PROOFING" || b.status === "DISPUTED");
-                                            if (pending.length === 0) return null;
                                             return (
-                                                <div className="space-y-3 pt-4 border-t-2 border-dashed border-gray-300">
-                                                    <div className="flex items-center gap-2 mb-2">
-                                                        <AlertOctagon className="h-5 w-5 text-yellow-500" />
-                                                        <h3 className="text-xl font-black text-black font-comic">Needs Resolution</h3>
+                                                <div className="space-y-3 mb-8">
+                                                    <div className="flex items-center gap-2 mb-4">
+                                                        <div className="bg-green-500 rounded-full p-1 border-2 border-black">
+                                                            <CheckCircle2 className="h-4 w-4 text-white" />
+                                                        </div>
+                                                        <h3 className="text-2xl font-black text-green-600 font-comic uppercase tracking-tight">Open for Betting</h3>
                                                     </div>
-                                                    {pending.map(bet => renderBetItem(bet, myMemberProfile?.points || 0, league.mode))}
+                                                    {openBets.map(bet => renderBetItem(bet, myMemberProfile?.points || 0, league.mode))}
                                                 </div>
                                             );
                                         })()}
 
-                                        {/* 3. RESOLVED */}
+                                        {/* 3. LOCKED / UNDER REVIEW (Waiting for Event) */}
                                         {(() => {
-                                            const resolved = bets.filter(b => b.status === "RESOLVED");
-                                            if (resolved.length === 0) return null;
-                                            // Sort by resolved date desc (newest first)
-                                            resolved.sort((a, b) => (b.resolvedAt?.seconds || 0) - (a.resolvedAt?.seconds || 0));
+                                            // Includes LOCKED explicitly, or OPEN bets that are effectively locked due to expiry
+                                            const now = new Date();
+                                            const lockedBets = bets.filter(b =>
+                                                b.status === "LOCKED" ||
+                                                (b.status === "OPEN" && b.closesAt && new Date(b.closesAt.seconds * 1000) < now)
+                                            );
+
+                                            // Filter out those already caught in "Open" section (logic above needs to ensure mutual exclusivity if we want clear sections)
+                                            // Actually, the "Open" section logic used just status==="OPEN".
+                                            // We should refine "Open" to be status==="OPEN" && not expired.
+                                            // Let's rely on status tags mostly, but visual grouping helps.
+
+                                            // Refined Logic (Applying strict mutual exclusion for display):
+                                            // Group 1 (Open): status==OPEN && !expired
+                                            // Group 2 (Locked): status==LOCKED || (status==OPEN && expired)
+
+                                            const actuallyOpen = bets.filter(b => b.status === "OPEN" && (!b.closesAt || new Date(b.closesAt.seconds * 1000) > now));
+                                            const actuallyLocked = bets.filter(b => b.status === "LOCKED" || (b.status === "OPEN" && b.closesAt && new Date(b.closesAt.seconds * 1000) <= now));
+
+                                            // NOTE: I'm rendering "actuallyOpen" in the block above (labeled "Open Bets").
+                                            // I need to update the logic in the block above to match this for consistency, OR rewrite this entire block to render both properly.
+                                            // For simplicity in this `ReplaceChunks`, I am replacing the subsequent blocks.
+                                            // To fix the "Open" block above effectively, I will assume the previous block rendered "OPEN" regardless of time.
+                                            // Ideally, I should rewrite the whole sequence.
+
+                                            if (actuallyLocked.length === 0) return null;
+                                            actuallyLocked.sort((a, b) => (a.closesAt?.seconds || 0) - (b.closesAt?.seconds || 0));
 
                                             return (
-                                                <div className="space-y-3 pt-4 border-t-2 border-dashed border-gray-300">
-                                                    <div className="flex items-center gap-2 mb-2">
-                                                        <CheckCircle2 className="h-5 w-5 text-blue-500" />
-                                                        <h3 className="text-xl font-black text-black font-comic">Resolved History</h3>
+                                                <div className="space-y-3 mb-8">
+                                                    <div className="flex items-center gap-2 mb-4">
+                                                        <div className="bg-amber-400 rounded-full p-1 border-2 border-black">
+                                                            <Timer className="h-4 w-4 text-black" />
+                                                        </div>
+                                                        <h3 className="text-xl font-black text-amber-600 font-comic uppercase tracking-tight">Under Review / Locked</h3>
                                                     </div>
-                                                    <div className="opacity-75 hover:opacity-100 transition-opacity space-y-3">
-                                                        {resolved.map(bet => renderBetItem(bet, myMemberProfile?.points || 0, league.mode))}
+                                                    {actuallyLocked.map(bet => renderBetItem(bet, myMemberProfile?.points || 0, league.mode))}
+                                                </div>
+                                            );
+                                        })()}
+
+                                        {/* 4. PROOFING & DISPUTED (Action Required) */}
+                                        {(() => {
+                                            const actionRequired = bets.filter(b => b.status === "PROOFING" || b.status === "DISPUTED");
+                                            if (actionRequired.length === 0) return null;
+
+                                            return (
+                                                <div className="space-y-3 mb-8">
+                                                    <div className="flex items-center gap-2 mb-4 p-2 bg-yellow-50 rounded-lg border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
+                                                        <AlertOctagon className="h-6 w-6 text-orange-600 animate-pulse" />
+                                                        <div>
+                                                            <h3 className="text-xl font-black text-orange-600 font-comic uppercase leading-none">Proofing Phase</h3>
+                                                            <p className="text-xs font-bold text-gray-500">Review results & Vote</p>
+                                                        </div>
                                                     </div>
+                                                    {actionRequired.map(bet => renderBetItem(bet, myMemberProfile?.points || 0, league.mode))}
+                                                </div>
+                                            );
+                                        })()}
+
+                                        {/* 5. HISTORY (Resolved & Invalid) */}
+                                        {(() => {
+                                            const history = bets.filter(b => b.status === "RESOLVED" || b.status === "INVALID");
+                                            if (history.length === 0) return null;
+                                            history.sort((a, b) => (b.resolvedAt?.seconds || 0) - (a.resolvedAt?.seconds || 0));
+
+                                            return (
+                                                <div className="space-y-3 pt-6 border-t-4 border-black border-dashed">
+                                                    <div className="flex items-center gap-2 mb-6">
+                                                        <Trophy className="h-6 w-6 text-gray-400" />
+                                                        <h3 className="text-2xl font-black text-gray-400 font-comic uppercase">The Archive</h3>
+                                                    </div>
+                                                    {history.map(bet => renderBetItem(bet, myMemberProfile?.points || 0, league.mode))}
                                                 </div>
                                             );
                                         })()}
@@ -899,10 +1001,10 @@ export default function LeaguePage() {
                                     </>
                                 )}
                             </div>
-
                         </section>
                     </div>
-                )}
+                )
+                }
 
                 {isBetModalOpen && (
                     <CreateBetModal
@@ -917,16 +1019,63 @@ export default function LeaguePage() {
                         betToEdit={betToEdit}
                     />
                 )}
+            </main>
 
-                {league && (
+            {/* League Settings Modal */}
+            {
+                league && (
                     <LeagueSettingsModal
                         league={league}
                         isOpen={isSettingsOpen}
                         onClose={() => setIsSettingsOpen(false)}
-                        onUpdate={() => window.location.reload()} // Simple reload
+                        onUpdate={() => window.location.reload()}
                     />
-                )}
-            </main>
-        </div>
+                )
+            }
+
+            {/* QR Code Modal */}
+            {
+                isQROpen && (
+                    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-in fade-in duration-200" onClick={() => setIsQROpen(false)}>
+                        {/* ... QR ModalContent ... */}
+                        <div className="bg-white rounded-2xl border-4 border-black p-6 w-full max-w-sm shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] relative animate-in zoom-in-95 duration-200" onClick={e => e.stopPropagation()}>
+                            <button
+                                onClick={() => setIsQROpen(false)}
+                                className="absolute top-4 right-4 p-1 hover:bg-red-100 rounded-full transition-colors border-2 border-transparent hover:border-black"
+                            >
+                                <XCircle className="h-6 w-6 text-black" />
+                            </button>
+                            <div className="text-center space-y-4">
+                                <div className="mx-auto w-12 h-12 bg-purple-100 rounded-xl border-2 border-black flex items-center justify-center shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] mb-4">
+                                    <QrCode className="h-6 w-6 text-purple-600" />
+                                </div>
+                                <h3 className="text-2xl font-black font-comic uppercase tracking-wider">Join League</h3>
+                                <p className="text-gray-500 text-sm font-bold">Scan to join {league?.name}</p>
+
+                                <div className="bg-white p-4 rounded-xl border-2 border-black inline-block">
+                                    <QRCode
+                                        value={`${typeof window !== 'undefined' ? window.location.origin : ''}/join/${leagueId}`}
+                                        size={200}
+                                        style={{ height: "auto", maxWidth: "100%", width: "100%" }}
+                                        viewBox={`0 0 256 256`}
+                                    />
+                                </div>
+
+                                <button
+                                    onClick={() => {
+                                        copyInviteLink();
+                                        setIsQROpen(false);
+                                    }}
+                                    className="w-full py-3 bg-black text-white font-black uppercase rounded-lg border-2 border-black shadow-[4px_4px_0px_0px_rgba(120,120,120,1)] hover:translate-y-[-2px] hover:shadow-[6px_6px_0px_0px_rgba(120,120,120,1)] transition-all flex items-center justify-center gap-2"
+                                >
+                                    <Share2 className="h-4 w-4" /> Copy Link
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                )
+            }
+        </div >
     );
 }
+

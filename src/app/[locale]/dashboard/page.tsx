@@ -11,11 +11,12 @@ import { CreateLeagueModal } from "@/components/create-league-modal";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { motion } from "framer-motion";
+import { BetStatusStepper } from "@/components/bet-status-stepper"; // Import Stepper
 import { getUserDashboardStats, DashboardBetWithWager, DashboardStats, dismissBet, clearDismissedSection } from "@/lib/services/bet-service";
 import { Gamepad2, Gavel, TrendingUp, Target, Award, Activity, ExternalLink, ChevronDown, ChevronUp, Ticket as TicketIcon } from "lucide-react";
 import { BetTicket } from "@/components/bet-ticket";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, BarChart, Bar } from 'recharts';
-import { format, subDays } from "date-fns";
+import { format, subDays, getISOWeek, startOfISOWeek, endOfISOWeek } from "date-fns";
 
 const container = {
     hidden: { opacity: 0 },
@@ -47,11 +48,13 @@ export default function DashboardPage() {
         wonBets: 0,
         lostBets: 0,
         toResolve: 0,
+        availableBets: 0,
         activeBetsList: [],
         pendingResultsList: [],
         wonBetsList: [],
         lostBetsList: [],
-        toResolveList: []
+        toResolveList: [],
+        availableBetsList: []
     });
     const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
     const [viewMode, setViewMode] = useState<"overview" | "analytics">("overview");
@@ -97,47 +100,7 @@ export default function DashboardPage() {
     }
 
     return (
-        <div className="min-h-screen text-foreground">
-            <header className="border-b-2 border-black bg-white py-4 relative z-50">
-                <div className="container mx-auto flex h-14 items-center justify-between">
-                    <div className="mr-4 flex items-center gap-3">
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img
-                            src="/GG_Logo.png"
-                            alt="GambleGang Logo"
-                            className="h-12 w-12 object-contain"
-                        />
-                        <h1 className="text-3xl font-black font-comic text-primary uppercase tracking-wider drop-shadow-[2px_2px_0_rgba(0,0,0,1)]">{t('title')}</h1>
-                    </div>
-                    <div className="flex items-center gap-4">
-                        <div className="flex items-center gap-2">
-                            {user.photoURL && (
-                                // eslint-disable-next-line @next/next/no-img-element
-                                <img
-                                    src={user.photoURL}
-                                    alt={user.displayName || "User"}
-                                    className="h-10 w-10 rounded-full border-2 border-black bg-gray-200"
-                                />
-                            )}
-                        </div>
-                        <Link href="/settings">
-                            <Button variant="outline" size="sm" className="h-10 w-10 p-0 rounded-full border-2 border-black hover:bg-gray-100 comic-shadow">
-                                <Settings className="h-5 w-5 text-black" />
-                                <span className="sr-only">Settings</span>
-                            </Button>
-                        </Link>
-                        <Button
-                            variant="danger"
-                            size="sm"
-                            onClick={logout}
-                            className="h-10 px-4 border-2 border-black comic-shadow bg-red-500 hover:bg-red-600 text-white font-bold"
-                        >
-                            <LogOut className="mr-2 h-4 w-4" />
-                            <span className="hidden sm:inline">{t('signOut')}</span>
-                        </Button>
-                    </div>
-                </div>
-            </header>
+        <div className="min-h-screen text-foreground relative">
             <main className="container mx-auto py-8">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-12">
                     <motion.div
@@ -477,6 +440,14 @@ export default function DashboardPage() {
                 <div className="space-y-6 mt-12">
                     {[
                         {
+                            id: 'available',
+                            title: '🎟️ Available Bets',
+                            count: stats.availableBets,
+                            list: stats.availableBetsList,
+                            description: 'Open bets you can place wagers on',
+                            showTicketBadge: true
+                        },
+                        {
                             id: 'active',
                             title: '🎯 Your Active Bets',
                             count: stats.activeBets,
@@ -484,36 +455,40 @@ export default function DashboardPage() {
                             description: 'Bets you can still place wagers on'
                         },
                         {
+                            id: 'toResolve',
+                            title: '🚨 To Resolve',
+                            ownerOnly: true,
+                            count: stats.toResolve,
+                            list: stats.toResolveList,
+                            description: 'Bets waiting for your decision',
+                            color: 'text-orange-600'
+                        },
+                        {
                             id: 'pending',
                             title: '⏳ Pending Results',
                             count: stats.pendingResults,
                             list: stats.pendingResultsList,
-                            description: 'Waiting for resolution'
+                            description: 'Waiting for official results',
+                            color: 'text-gray-600'
                         },
                         {
                             id: 'won',
-                            title: '✅ Won Bets',
+                            title: '🏆 Won Bets',
                             count: stats.wonBets,
                             list: stats.wonBetsList,
                             clearable: true,
-                            description: 'Bets you won'
+                            description: 'Your victories',
+                            color: 'text-green-600'
                         },
                         {
                             id: 'lost',
-                            title: '❌ Lost Bets',
+                            title: '💸 Lost Bets',
                             count: stats.lostBets,
                             list: stats.lostBetsList,
                             clearable: true,
-                            description: 'Bets you lost'
-                        },
-                        {
-                            id: 'toResolve',
-                            title: '⚖️ Bets to Resolve',
-                            count: stats.toResolve,
-                            list: stats.toResolveList,
-                            ownerOnly: true,
-                            description: 'Bets you need to resolve as owner'
-                        },
+                            description: 'Better luck next time',
+                            color: 'text-red-500'
+                        }
                     ].map(section => {
                         if (section.ownerOnly && section.count === 0) return null;
                         if (section.count === 0) return null; // Hide empty sections
@@ -525,7 +500,7 @@ export default function DashboardPage() {
                                 key={section.id}
                                 initial={{ opacity: 0, y: 20 }}
                                 animate={{ opacity: 1, y: 0 }}
-                                className="bg-white rounded-2xl border-4 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)]"
+                                className="bg-white rounded-2xl border-4 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]"
                             >
                                 <button
                                     onClick={() => {
@@ -568,132 +543,234 @@ export default function DashboardPage() {
 
                                 {isExpanded && (
                                     <div className="border-t-4 border-black p-6 space-y-3">
-                                        {section.list.map((bet: DashboardBetWithWager) => {
-                                            const isBetExpanded = expandedBets.has(bet.id);
-
-                                            return (
-                                                <div key={bet.id} className="bg-gray-50 rounded-xl border-2 border-black overflow-hidden hover:shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] transition-all">
-                                                    <button
-                                                        onClick={() => {
-                                                            const newExpanded = new Set(expandedBets);
-                                                            if (isBetExpanded) {
-                                                                newExpanded.delete(bet.id);
-                                                            } else {
-                                                                newExpanded.add(bet.id);
-                                                            }
-                                                            setExpandedBets(newExpanded);
-                                                        }}
-                                                        className="w-full p-4 text-left hover:bg-gray-100 transition-all"
-                                                    >
-                                                        <div className="flex items-center justify-between gap-4">
-                                                            <div className="flex-1 min-w-0">
-                                                                <div className="flex items-center gap-2 mb-2">
-                                                                    <span className={`text-xs px-2 py-1 rounded font-bold border-2 border-black ${bet.status === "OPEN" ? "bg-green-400" :
-                                                                        bet.status === "LOCKED" ? "bg-red-400" :
-                                                                            bet.status === "PROOFING" ? "bg-yellow-400" :
-                                                                                bet.status === "DISPUTED" ? "bg-orange-400" :
-                                                                                    bet.status === "RESOLVED" ? "bg-blue-400" :
-                                                                                        "bg-gray-400"
-                                                                        }`}>
-                                                                        {bet.status}
-                                                                    </span>
-                                                                    <span className="text-xs text-gray-500 font-bold">{bet.leagueName}</span>
-                                                                    {bet.wager && (
-                                                                        <span className="flex items-center gap-1 text-[10px] font-black uppercase bg-purple-100 text-purple-700 px-2 py-0.5 rounded border border-purple-300">
-                                                                            <TicketIcon className="h-3 w-3" /> Ticket
-                                                                        </span>
-                                                                    )}
-                                                                </div>
-                                                                <p className="font-black text-lg truncate">{bet.question}</p>
-                                                                {bet.closesAt && (
-                                                                    <p className="text-xs text-gray-500 font-bold mt-1">
-                                                                        Closes: {format(bet.closesAt.toDate(), "MMM dd, HH:mm")}
-                                                                    </p>
-                                                                )}
-                                                            </div>
-
-                                                            {bet.wager && (
-                                                                <div className="flex gap-6 text-sm">
-                                                                    <div className="text-center">
-                                                                        <p className="text-gray-500 text-xs font-bold">Wagered</p>
-                                                                        <p className="font-black text-lg">{bet.wager.amount} pts</p>
+                                        {(() => {
+                                            // Helper to render a single bet card
+                                            const renderBet = (bet: DashboardBetWithWager) => {
+                                                const isBetExpanded = expandedBets.has(bet.id);
+                                                return (
+                                                    <div key={bet.id} className="bg-gray-50 rounded-xl border-2 border-black overflow-hidden hover:shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] transition-all mb-3 last:mb-0">
+                                                        <button
+                                                            onClick={() => {
+                                                                const newExpanded = new Set(expandedBets);
+                                                                if (isBetExpanded) {
+                                                                    newExpanded.delete(bet.id);
+                                                                } else {
+                                                                    newExpanded.add(bet.id);
+                                                                }
+                                                                setExpandedBets(newExpanded);
+                                                            }}
+                                                            className="w-full p-4 text-left hover:bg-gray-100 transition-all"
+                                                        >
+                                                            {/* Top Row: Stepper/Status spanning full width */}
+                                                            <div className="mb-3">
+                                                                {(bet.status !== "OPEN" || (bet.status === "OPEN" && bet.closesAt && bet.closesAt.toDate() < new Date())) && bet.status !== "DRAFT" && bet.status !== "INVALID" ? (
+                                                                    <div className="pointer-events-none w-full">
+                                                                        <BetStatusStepper bet={bet} isOwner={user?.uid === bet.creatorId} hideStatusCard={true} />
                                                                     </div>
-                                                                    {bet.wager.payout && (
-                                                                        <div className="text-center">
-                                                                            <p className="text-gray-500 text-xs font-bold">Payout</p>
-                                                                            <p className="font-black text-lg text-green-600">+{bet.wager.payout} pts</p>
-                                                                        </div>
+                                                                ) : (
+                                                                    <div className="flex items-center gap-2">
+                                                                        <span className={`text-xs px-2 py-1 rounded font-bold border-2 border-black ${bet.status === "OPEN"
+                                                                            ? (bet.closesAt && bet.closesAt.toDate() < new Date() ? "bg-amber-400" : "bg-green-400")
+                                                                            : bet.status === "INVALID" ? "bg-gray-400"
+                                                                                : "bg-gray-300" // DRAFT or Fallback
+                                                                            }`}>
+                                                                            {bet.status === "OPEN" && bet.closesAt && bet.closesAt.toDate() < new Date()
+                                                                                ? "UNDER REVIEW"
+                                                                                : bet.status}
+                                                                        </span>
+                                                                        {section.showTicketBadge && (
+                                                                            <span className="inline-flex items-center gap-1 px-2 py-1 rounded bg-yellow-100 text-yellow-800 text-xs font-bold border-2 border-yellow-600">
+                                                                                <TicketIcon className="h-3 w-3" />
+                                                                                No Wager
+                                                                            </span>
+                                                                        )}
+                                                                        <span className="text-xs text-gray-500 font-bold">{bet.leagueName}</span>
+                                                                        {bet.wager && (
+                                                                            <span className="flex items-center gap-1 text-[10px] font-black uppercase bg-purple-100 text-purple-700 px-2 py-0.5 rounded border border-purple-300">
+                                                                                <TicketIcon className="h-3 w-3" /> Ticket
+                                                                            </span>
+                                                                        )}
+                                                                    </div>
+                                                                )}
+                                                            </div>
+
+                                                            {/* Bottom Row: Question | Wager/Payout | Clear/Expand */}
+                                                            <div className="flex items-center justify-between gap-4">
+                                                                {/* Question Text */}
+                                                                <div className="flex-1 min-w-0">
+                                                                    <p className="font-black text-lg truncate">{bet.question}</p>
+                                                                    {bet.closesAt && (
+                                                                        <p className="text-xs text-gray-500 font-bold mt-1">
+                                                                            Closes: {format(bet.closesAt.toDate(), "MMM dd, HH:mm")}
+                                                                        </p>
                                                                     )}
                                                                 </div>
-                                                            )}
 
-                                                            <div className="flex items-center gap-2">
-                                                                {section.clearable && user && (
-                                                                    <button
-                                                                        onClick={(e) => {
-                                                                            e.stopPropagation();
-                                                                            dismissBet(user.uid, bet.id);
-                                                                            getUserDashboardStats(user, leagues).then(setStats);
-                                                                        }}
-                                                                        className="px-3 py-1 bg-gray-600 text-white rounded text-xs font-bold hover:bg-gray-700 border-2 border-black"
-                                                                    >
-                                                                        Clear
-                                                                    </button>
+                                                                {/* Wager & Payout */}
+                                                                {bet.wager && (
+                                                                    <div className="flex gap-6 text-sm shrink-0">
+                                                                        <div className="text-center">
+                                                                            <p className="text-gray-500 text-xs font-bold">Wagered</p>
+                                                                            <p className="font-black text-lg">{bet.wager.amount} pts</p>
+                                                                        </div>
+                                                                        {bet.wager.payout && (
+                                                                            <div className="text-center">
+                                                                                <p className="text-gray-500 text-xs font-bold">Payout</p>
+                                                                                <p className="font-black text-lg text-green-600">+{bet.wager.payout} pts</p>
+                                                                            </div>
+                                                                        )}
+                                                                    </div>
                                                                 )}
-                                                                <span className="text-xl">{isBetExpanded ? '▲' : '▼'}</span>
-                                                            </div>
-                                                        </div>
-                                                    </button>
 
-                                                    {isBetExpanded && (
-                                                        <div className="border-t-2 border-black p-4 bg-white">
-
-                                                            {/* Show Ticket if Wager exists */}
-                                                            {bet.wager && (
-                                                                <div className="mb-6 flex justify-center">
-                                                                    {(() => {
-                                                                        let sel = String(bet.wager.selection);
-                                                                        let pot = "Pending";
-
-                                                                        // Calculate visual details (Same logic as BetCard)
-                                                                        if (bet.type === "CHOICE" && bet.options) {
-                                                                            const idx = Number(bet.wager.selection);
-                                                                            sel = bet.options[idx]?.text || "Option";
-                                                                            if (bet.options[idx].totalWagered > 0) {
-                                                                                const odds = (bet.totalPool || 0) / bet.options[idx].totalWagered;
-                                                                                pot = `~${(bet.wager.amount * odds).toFixed(0)} pts`;
-                                                                            }
-                                                                        } else if (bet.type === "MATCH" && typeof bet.wager.selection === "object") {
-                                                                            const s = bet.wager.selection as any;
-                                                                            sel = `${s.home} - ${s.away}`;
-                                                                            pot = "Dynamic";
-                                                                        } else if (bet.type === "RANGE") {
-                                                                            sel = `${bet.wager.selection} ${bet.rangeUnit || ""}`;
-                                                                        }
-
-                                                                        return (
-                                                                            <BetTicket
-                                                                                amount={bet.wager.amount}
-                                                                                selectionDisplay={sel}
-                                                                                potential={pot}
-                                                                                // If resolved/won/lost, we could pass status, but BetTicket defaults to ACTIVE/ACCEPTED.
-                                                                                status={bet.wager.status === "WON" ? "WON 🏆" : bet.wager.status === "LOST" ? "LOST" : "ACTIVE"}
-                                                                            />
-                                                                        );
-                                                                    })()}
+                                                                {/* Action Icons */}
+                                                                <div className="flex items-center gap-2 shrink-0">
+                                                                    {section.clearable && user && (
+                                                                        <button
+                                                                            onClick={(e) => {
+                                                                                e.stopPropagation();
+                                                                                dismissBet(user.uid, bet.id);
+                                                                                getUserDashboardStats(user, leagues).then(setStats);
+                                                                            }}
+                                                                            className="px-3 py-1 bg-gray-600 text-white rounded text-xs font-bold hover:bg-gray-700 border-2 border-black"
+                                                                        >
+                                                                            Clear
+                                                                        </button>
+                                                                    )}
+                                                                    <span className="text-xl">{isBetExpanded ? '▲' : '▼'}</span>
                                                                 </div>
-                                                            )}
+                                                            </div>
+                                                        </button>
 
-                                                            <Link href={`/leagues/${bet.leagueId}`}>
-                                                                <Button className="w-full bg-primary hover:bg-primary/90 text-white font-black border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:translate-y-[-2px] transition-all">
-                                                                    View in League <ExternalLink className="ml-2 h-4 w-4" />
-                                                                </Button>
-                                                            </Link>
-                                                        </div>
-                                                    )}
-                                                </div>
-                                            );
-                                        })}
+                                                        {isBetExpanded && (
+                                                            <div className="border-t-2 border-black p-4 bg-white">
+                                                                {bet.wager && (
+                                                                    <div className="mb-6 flex justify-center">
+                                                                        {(() => {
+                                                                            let sel = String(bet.wager.selection);
+                                                                            let pot = "Pending";
+                                                                            let wagerStatus: "WON" | "LOST" | "PUSH" | "PENDING" = "PENDING";
+
+                                                                            // Check if bet is resolved
+                                                                            if (bet.status === "RESOLVED") {
+                                                                                wagerStatus = bet.wager.status?.toUpperCase() as "WON" | "LOST" | "PUSH" || "PENDING";
+
+                                                                                // Show actual result
+                                                                                if (bet.wager.status === "WON") {
+                                                                                    const profit = (bet.wager.payout || 0) - bet.wager.amount;
+                                                                                    pot = `+${profit} pts`;
+                                                                                } else if (bet.wager.status === "LOST") {
+                                                                                    pot = `-${bet.wager.amount} pts`;
+                                                                                } else if (bet.wager.status === "PUSH") {
+                                                                                    pot = `0 pts (Refunded)`;
+                                                                                }
+                                                                            } else {
+                                                                                // For active bets, show estimate
+                                                                                if (bet.leagueMode === "ARCADE" || bet.leagueMode === "STANDARD") {
+                                                                                    // Arcade/Standard mode: fixed payout based on bet type
+                                                                                    if (bet.type === "MATCH") {
+                                                                                        // Match predictions have a range
+                                                                                        const settings = bet.leagueMatchSettings;
+                                                                                        if (settings) {
+                                                                                            pot = `${settings.winner}-${settings.exact} pts`;
+                                                                                        } else {
+                                                                                            pot = "1-3 pts";
+                                                                                        }
+                                                                                    } else if (bet.type === "CHOICE") {
+                                                                                        // Multiple choice has fixed points
+                                                                                        const settings = bet.leagueMatchSettings;
+                                                                                        pot = settings?.choice ? `${settings.choice} pt${settings.choice !== 1 ? 's' : ''}` : "1 pt";
+                                                                                    } else if (bet.type === "RANGE") {
+                                                                                        // Range/Guessing has fixed points
+                                                                                        const settings = bet.leagueMatchSettings;
+                                                                                        pot = settings?.range ? `${settings.range} pt${settings.range !== 1 ? 's' : ''}` : "1 pt";
+                                                                                    } else {
+                                                                                        pot = "1 pt";
+                                                                                    }
+                                                                                } else if (bet.type === "CHOICE" && bet.options) {
+                                                                                    // Zero-Sum mode
+                                                                                    const idx = Number(bet.wager.selection);
+                                                                                    if (bet.options[idx].totalWagered > 0) {
+                                                                                        const odds = (bet.totalPool || 0) / bet.options[idx].totalWagered;
+                                                                                        pot = `~${(bet.wager.amount * odds).toFixed(0)} pts`;
+                                                                                    }
+                                                                                } else if (bet.type === "MATCH") {
+                                                                                    pot = "Dynamic";
+                                                                                }
+                                                                            }
+
+                                                                            if (bet.type === "CHOICE" && bet.options) {
+                                                                                const idx = Number(bet.wager.selection);
+                                                                                sel = bet.options[idx]?.text || "Option";
+                                                                            } else if (bet.type === "MATCH" && typeof bet.wager.selection === "object") {
+                                                                                const s = bet.wager.selection as any;
+                                                                                sel = `${s.home} - ${s.away}`;
+                                                                            } else if (bet.type === "RANGE") {
+                                                                                sel = `${bet.wager.selection} ${bet.rangeUnit || ""}`;
+                                                                            }
+
+                                                                            return (
+                                                                                <BetTicket
+                                                                                    amount={bet.wager.amount}
+                                                                                    selectionDisplay={sel}
+                                                                                    potential={pot}
+                                                                                    wagerStatus={wagerStatus}
+                                                                                />
+                                                                            );
+                                                                        })()}
+                                                                    </div>
+                                                                )}
+
+                                                                <Link href={`/leagues/${bet.leagueId}`}>
+                                                                    <Button className="w-full bg-primary hover:bg-primary/90 text-white font-black border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:translate-y-[-2px] transition-all">
+                                                                        View in League <ExternalLink className="ml-2 h-4 w-4" />
+                                                                    </Button>
+                                                                </Link>
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                );
+                                            };
+
+                                            if (section.id === 'active') {
+                                                const groups: Record<string, typeof section.list> = {};
+                                                section.list.forEach(bet => {
+                                                    if (!bet.closesAt) {
+                                                        const key = "No Date";
+                                                        if (!groups[key]) groups[key] = [];
+                                                        groups[key].push(bet);
+                                                        return;
+                                                    }
+                                                    const date = bet.closesAt.toDate();
+                                                    const week = getISOWeek(date);
+                                                    const start = format(startOfISOWeek(date), "MMM dd");
+                                                    const end = format(endOfISOWeek(date), "MMM dd");
+                                                    const key = `Week ${week} (${start} - ${end})`;
+
+                                                    if (!groups[key]) groups[key] = [];
+                                                    groups[key].push(bet);
+                                                });
+                                                const sortedKeys = Object.keys(groups).sort();
+
+                                                return (
+                                                    <div className="space-y-6">
+                                                        {sortedKeys.map(key => (
+                                                            <div key={key}>
+                                                                <div className="flex items-center gap-2 mb-3">
+                                                                    <div className="h-px bg-black/20 flex-1" />
+                                                                    <h4 className="text-xs font-black uppercase text-gray-500 tracking-widest">{key}</h4>
+                                                                    <div className="h-px bg-black/20 flex-1" />
+                                                                </div>
+                                                                <div className="space-y-3">
+                                                                    {groups[key].map(bet => renderBet(bet))}
+                                                                </div>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                );
+                                            } else {
+                                                return section.list.map(bet => renderBet(bet));
+                                            }
+                                        })()}
                                     </div>
                                 )}
                             </motion.div>

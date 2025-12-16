@@ -5,6 +5,7 @@ import { User } from "firebase/auth";
 import { League, LeagueMember } from "./league-service";
 
 export type BetType = "CHOICE" | "RANGE" | "MATCH"; // Added MATCH
+export type BetStatus = "DRAFT" | "OPEN" | "LOCKED" | "RESOLVED" | "CANCELLED" | "PROOFING" | "DISPUTED" | "INVALID";
 
 export interface BetOption {
     id: string;
@@ -19,7 +20,7 @@ export interface Bet {
     creatorId: string;
     question: string;
     type: BetType;
-    status: "DRAFT" | "OPEN" | "LOCKED" | "RESOLVED" | "CANCELLED" | "PROOFING" | "DISPUTED" | "INVALID";
+    status: BetStatus;
     createdAt: any;
     closesAt: any;
     eventDate?: any; // New field for actual event time
@@ -158,12 +159,17 @@ export async function placeWager(
         const newPoints = member.points - amount;
         if (newPoints < 0) throw "Insufficient points";
 
+        // Fetch user profile from Firestore to get updated photoURL
+        const userProfileRef = doc(db, "users", user.uid);
+        const userProfileSnap = await transaction.get(userProfileRef);
+        const userProfile = userProfileSnap.exists() ? userProfileSnap.data() : null;
+
         // Create Wager
         const wagerData: Wager = {
             id: newWagerRef.id,
             userId: user.uid,
-            userName: user.displayName || "Anonymous",
-            userAvatar: user.photoURL || undefined,
+            userName: userProfile?.displayName || user.displayName || "Anonymous",
+            userAvatar: userProfile?.photoURL || user.photoURL || "",
             amount: amount,
             selection,
             status: "PENDING",
@@ -204,14 +210,11 @@ export function calculateOdds(totalPool: number, optionPool: number): string {
     return odds.toFixed(2);
 }
 
-export function getReturnPotential(wagerAmount: number, totalPool: number, optionPool: number): number {
-    // Current Quote * Wager?
-    // Start Quote = Total / Option
-    // If I bet X, Total becomes T+X, Option becomes O+X
-    // Final Quote = (T+X) / (O+X)
-    // Return = Wager * Final Quote
-    if (optionPool === 0) return 0;
-    const finalOdds = totalPool / optionPool;
+export function getReturnPotential(wagerAmount: number, newTotalPool: number, newOptionPool: number): number {
+    if (newOptionPool === 0) return 0;
+    // Basic Pari-mutuel: (Total Pool / Winning Pool) * Your Stake
+    // Since Your Stake is already IN Winning Pool, this returns your stake + profit.
+    const finalOdds = newTotalPool / newOptionPool;
     return Math.floor(wagerAmount * finalOdds);
 }
 
@@ -360,9 +363,16 @@ import { getDocs, writeBatch, getDoc } from "firebase/firestore";
 // AI Verification Hooks
 export async function startProofing(leagueId: string, betId: string, user: User, result: string) {
     const betRef = doc(db, "leagues", leagueId, "bets", betId);
+
+    // Set proofing/dispute deadline to 12 hours from now
+    const disputeDeadline = new Date();
+    disputeDeadline.setHours(disputeDeadline.getHours() + 12);
+
     await updateDoc(betRef, {
         status: "PROOFING",
-        aiVerification: result
+        aiVerification: result,
+        disputeDeadline: disputeDeadline,
+        disputeActive: false // Initialize
     });
 }
 
@@ -388,16 +398,23 @@ export interface DashboardBetInfo {
     leagueId: string;
     leagueName: string;
     question: string;
-    status: string;
+    status: BetStatus;
     closesAt: any;
     // Extended fields for display
-    type?: BetType;
+    type: BetType;
     options?: BetOption[];
-    totalPool?: number;
+    totalPool: number;
     rangeUnit?: string;
     rangeMin?: number;
     rangeMax?: number;
     matchDetails?: { homeTeam: string; awayTeam: string; date: string; };
+    // New fields for Stepper
+    creatorId: string;
+    createdAt: any;
+    winningOutcome?: any;
+    disputeDeadline?: any;
+    eventDate?: any;
+    votes?: { [userId: string]: "approve" | "reject" };
 }
 
 export interface DashboardBetWithWager extends DashboardBetInfo {
@@ -407,6 +424,14 @@ export interface DashboardBetWithWager extends DashboardBetInfo {
         status: "PENDING" | "WON" | "LOST" | "PUSH";
         payout?: number;
     };
+    leagueMode?: "ZERO_SUM" | "STANDARD" | "ARCADE";
+    leagueMatchSettings?: {
+        exact: number;
+        diff: number;
+        winner: number;
+        choice?: number;
+        range?: number;
+    };
 }
 
 export interface DashboardStats {
@@ -415,11 +440,13 @@ export interface DashboardStats {
     wonBets: number;
     lostBets: number;
     toResolve: number;
+    availableBets: number; // New: open bets without wager
     activeBetsList: DashboardBetWithWager[];
     pendingResultsList: DashboardBetWithWager[];
     wonBetsList: DashboardBetWithWager[];
     lostBetsList: DashboardBetWithWager[];
     toResolveList: DashboardBetInfo[];
+    availableBetsList: DashboardBetWithWager[]; // New: list of open bets without wager
 }
 
 // Helper functions for dismissed bets (localStorage)
@@ -449,11 +476,13 @@ export async function getUserDashboardStats(user: User, leagues: League[]): Prom
         wonBets: 0,
         lostBets: 0,
         toResolve: 0,
+        availableBets: 0,
         activeBetsList: [],
         pendingResultsList: [],
         wonBetsList: [],
         lostBetsList: [],
-        toResolveList: []
+        toResolveList: [],
+        availableBetsList: []
     };
 
     const { getDocs, collection, query, where } = await import("firebase/firestore");
@@ -463,6 +492,7 @@ export async function getUserDashboardStats(user: User, leagues: League[]): Prom
     const wonBetsList: DashboardBetWithWager[] = [];
     const lostBetsList: DashboardBetWithWager[] = [];
     const toResolveList: DashboardBetInfo[] = [];
+    const availableBetsList: DashboardBetWithWager[] = [];
 
     // Get dismissed bets
     const dismissedBets = getDismissedBets(user.uid);
@@ -497,6 +527,14 @@ export async function getUserDashboardStats(user: User, leagues: League[]): Prom
                 rangeMin: bet.rangeMin,
                 rangeMax: bet.rangeMax,
                 matchDetails: bet.matchDetails,
+                creatorId: bet.creatorId,
+                createdAt: bet.createdAt,
+                winningOutcome: bet.winningOutcome,
+                disputeDeadline: bet.disputeDeadline,
+                eventDate: bet.eventDate,
+                votes: bet.votes,
+                leagueMode: league.mode,
+                leagueMatchSettings: league.matchSettings,
                 wager: userWager ? {
                     amount: userWager.amount,
                     selection: userWager.selection,
@@ -512,6 +550,13 @@ export async function getUserDashboardStats(user: User, leagues: League[]): Prom
                 const closesAt = bet.closesAt?.toDate();
                 if (!closesAt || closesAt > now) {
                     activeBetsList.push(betInfo);
+                }
+            } else if (bet.status === "OPEN" && !userWager) {
+                // Available - open bets where user hasn't placed a wager yet
+                const now = new Date();
+                const closesAt = bet.closesAt?.toDate();
+                if (!closesAt || closesAt > now) {
+                    availableBetsList.push(betInfo);
                 }
             } else if ((bet.status === "LOCKED" || bet.status === "PROOFING" || bet.status === "DISPUTED") && userWager) {
                 // Pending results - waiting for resolution
@@ -532,7 +577,7 @@ export async function getUserDashboardStats(user: User, leagues: League[]): Prom
                 const isPastEvent = bet.eventDate && new Date(bet.eventDate.toDate()) < new Date();
 
                 const needsResolution = (
-                    (bet.status === "LOCKED" && (isPastClose || isPastEvent)) ||
+                    ((bet.status === "LOCKED" || bet.status === "OPEN") && (isPastClose || isPastEvent)) ||
                     bet.status === "PROOFING" ||
                     bet.status === "DISPUTED"
                 );
@@ -544,25 +589,46 @@ export async function getUserDashboardStats(user: User, leagues: League[]): Prom
                         leagueName: league.name,
                         question: bet.question,
                         status: bet.status,
-                        closesAt: bet.closesAt
+                        closesAt: bet.closesAt,
+                        type: bet.type,
+                        totalPool: bet.totalPool,
+                        creatorId: bet.creatorId,
+                        createdAt: bet.createdAt,
+                        winningOutcome: bet.winningOutcome,
+                        disputeDeadline: bet.disputeDeadline,
+                        eventDate: bet.eventDate,
+                        votes: bet.votes
                     });
                 }
             }
         }
     }
 
-    // Sort all lists by time (newest first)
-    const sortByTime = (a: any, b: any) => {
+    // Sort Active Bets: Ascending (Soonest closing first)
+    activeBetsList.sort((a: any, b: any) => {
+        const timeA = a.closesAt?.toDate?.() || new Date(0);
+        const timeB = b.closesAt?.toDate?.() || new Date(0);
+        return timeA.getTime() - timeB.getTime();
+    });
+
+    // Sort Available Bets: Ascending (Soonest closing first)
+    availableBetsList.sort((a: any, b: any) => {
+        const timeA = a.closesAt?.toDate?.() || new Date(0);
+        const timeB = b.closesAt?.toDate?.() || new Date(0);
+        return timeA.getTime() - timeB.getTime();
+    });
+
+    // Sort Others: Descending (Newest first)
+    const sortByTimeDesc = (a: any, b: any) => {
         const timeA = a.closesAt?.toDate?.() || new Date(0);
         const timeB = b.closesAt?.toDate?.() || new Date(0);
         return timeB.getTime() - timeA.getTime();
     };
 
-    activeBetsList.sort(sortByTime);
-    pendingResultsList.sort(sortByTime);
-    wonBetsList.sort(sortByTime);
-    lostBetsList.sort(sortByTime);
-    toResolveList.sort(sortByTime);
+    pendingResultsList.sort(sortByTimeDesc);
+    wonBetsList.sort(sortByTimeDesc);
+    lostBetsList.sort(sortByTimeDesc);
+    toResolveList.sort(sortByTimeDesc);
 
     return {
         activeBets: activeBetsList.length,
@@ -570,11 +636,13 @@ export async function getUserDashboardStats(user: User, leagues: League[]): Prom
         wonBets: wonBetsList.length,
         lostBets: lostBetsList.length,
         toResolve: toResolveList.length,
+        availableBets: availableBetsList.length,
         activeBetsList,
         pendingResultsList,
         wonBetsList,
         lostBetsList,
-        toResolveList
+        toResolveList,
+        availableBetsList
     };
 }
 

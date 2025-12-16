@@ -227,3 +227,59 @@ export async function deleteLeague(leagueId: string) {
     const leagueRef = doc(db, "leagues", leagueId);
     await deleteDoc(leagueRef);
 }
+
+export async function joinLeague(leagueId: string, user: User) {
+    if (!user) throw new Error("User must be logged in");
+
+    const leagueRef = doc(db, "leagues", leagueId);
+
+    await runTransaction(db, async (transaction) => {
+        const leagueSnap = await transaction.get(leagueRef);
+        if (!leagueSnap.exists()) throw new Error("League not found");
+
+        const leagueData = leagueSnap.data() as League;
+        const memberRef = doc(db, "leagues", leagueId, "members", user.uid);
+        const memberSnap = await transaction.get(memberRef);
+
+        if (memberSnap.exists()) {
+            // Already a member
+            return;
+        }
+
+        let initialPoints = 0;
+        let initialBought = 0;
+
+        // In STANDARD mode, everyone starts with 0.
+        // In ZERO_SUM, depends on buyInType.
+        if (leagueData.mode === "ZERO_SUM") {
+            if (leagueData.buyInType === "FIXED") {
+                initialPoints = leagueData.startCapital;
+                initialBought = leagueData.startCapital;
+            }
+            // FLEXIBLE starts at 0, user buys in later
+        }
+
+        // Fetch user profile from Firestore to get updated photoURL
+        const userProfileRef = doc(db, "users", user.uid);
+        const userProfileSnap = await transaction.get(userProfileRef);
+        const userProfile = userProfileSnap.exists() ? userProfileSnap.data() : null;
+
+        const memberData: LeagueMember = {
+            uid: user.uid,
+            leagueId,
+            role: "MEMBER",
+            points: initialPoints,
+            totalBought: initialBought,
+            totalInvested: 0,
+            joinedAt: serverTimestamp(),
+            displayName: userProfile?.displayName || user.displayName || "Anonymous",
+            photoURL: userProfile?.photoURL || user.photoURL || ""
+        };
+
+        transaction.set(memberRef, memberData);
+        // Increment member count
+        transaction.update(leagueRef, {
+            memberCount: (leagueData.memberCount || 0) + 1
+        });
+    });
+}
