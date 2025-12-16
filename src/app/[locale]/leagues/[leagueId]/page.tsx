@@ -6,10 +6,10 @@ import { useEffect, useState, useMemo } from "react";
 import { doc, getDoc, collection, getDocs, query, where, onSnapshot } from "firebase/firestore";
 import { db } from "@/lib/firebase/config";
 import { League, LeagueMember, updateLeagueStatus, rebuy } from "@/lib/services/league-service";
-import { getLeagueBets, Bet, Wager } from "@/lib/services/bet-service";
+import { getLeagueBets, Bet, Wager, deleteBet } from "@/lib/services/bet-service";
 import { BetCard } from "@/components/bet-card";
 import { format } from "date-fns";
-import { ArrowLeft, Share2, Crown, User as UserIcon, Settings, Play, Flag, Archive, Coins, AlertOctagon, CheckCircle2, XCircle } from "lucide-react";
+import { ArrowLeft, Share2, Crown, User as UserIcon, Settings, Play, Flag, Archive, Coins, AlertOctagon, CheckCircle2, XCircle, Trash2, Pencil } from "lucide-react";
 import Link from "next/link";
 import { CreateBetModal } from "@/components/create-bet-modal";
 import { LeagueSettingsModal } from "@/components/league-settings-modal";
@@ -29,6 +29,7 @@ export default function LeaguePage() {
     const [dataLoading, setDataLoading] = useState(true);
 
     const [isBetModalOpen, setIsBetModalOpen] = useState(false);
+    const [betToEdit, setBetToEdit] = useState<Bet | undefined>(undefined);
     const [isSettingsOpen, setIsSettingsOpen] = useState(false);
     const [actionLoading, setActionLoading] = useState(false);
     const [expandedBets, setExpandedBets] = useState<Set<string>>(new Set()); // Track which bets are expanded
@@ -302,6 +303,22 @@ export default function LeaguePage() {
     const myMemberProfile = members.find(m => m.uid === user?.uid);
 
     // Helper to render bet item
+    const handleDeleteBet = async (betId: string) => {
+        setActionLoading(true);
+        try {
+            await deleteBet(leagueId, betId);
+            // If using real-time listeners, this might be redundant but harmless
+            if (typeof fetchLeagueData === 'function') {
+                await fetchLeagueData();
+            }
+        } catch (error) {
+            console.error("Failed to delete bet:", error);
+            alert("Failed to delete bet. See console.");
+        } finally {
+            setActionLoading(false);
+        }
+    };
+
     const renderBetItem = (bet: Bet, userPoints: number, mode: League["mode"]) => {
         const isExpanded = expandedBets.has(bet.id);
         const wager = myActiveWagers[bet.id];
@@ -311,7 +328,24 @@ export default function LeaguePage() {
         let returnColor = "text-gray-400";
 
         if (wager) {
-            if (bet.type === "CHOICE" && bet.options) {
+            if (bet.status === "RESOLVED") {
+                // Show actual results for resolved bets
+                if (wager.status === "WON") {
+                    const profit = (wager.payout || 0) - wager.amount;
+                    displayedReturn = `+${profit.toLocaleString()} pts`;
+                    displayedOdds = wager.payout ? (wager.payout / wager.amount).toFixed(2) + "x" : "-";
+                    returnColor = "text-green-600";
+                } else if (wager.status === "LOST") {
+                    displayedReturn = `-${wager.amount.toLocaleString()} pts`;
+                    displayedOdds = "0.00x";
+                    returnColor = "text-red-500";
+                } else if (wager.status === "PUSH") {
+                    displayedReturn = "REFUNDED";
+                    displayedOdds = "1.00x";
+                    returnColor = "text-yellow-600 font-black";
+                }
+            } else if (mode === "ZERO_SUM" && bet.type === "CHOICE" && bet.options) {
+                // ZERO SUM: Parimutuel Odds
                 const optIdx = Number(wager.selection);
                 const opt = bet.options[optIdx];
                 if (opt && opt.totalWagered > 0) {
@@ -322,7 +356,9 @@ export default function LeaguePage() {
                     returnColor = "text-green-600";
                 }
             } else {
+                // ARCADE: Fixed Odds (Estimate)
                 displayedOdds = "~2.0x";
+                // Assuming 2x payout for win
                 displayedReturn = `+${wager.amount.toLocaleString()} pts`;
                 returnColor = "text-green-600";
             }
@@ -368,7 +404,38 @@ export default function LeaguePage() {
                                 <p className={`font-black text-lg ${returnColor}`}>{displayedReturn}</p>
                             </div>
                         </div>
-                        <div className="text-black text-xl font-bold">
+                        <div className="text-black text-xl font-bold flex items-center gap-2">
+                            {isOwner && (
+                                <div className="flex items-center gap-1">
+                                    {(bet.wagerCount === 0 || !bet.wagerCount) && (
+                                        <div
+                                            role="button"
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                setBetToEdit(bet);
+                                                setIsBetModalOpen(true);
+                                            }}
+                                            className="p-1.5 hover:bg-blue-100 rounded-lg text-gray-300 hover:text-blue-500 transition-colors"
+                                            title="Edit Bet (No Wagers Yet)"
+                                        >
+                                            <Pencil className="h-4 w-4" />
+                                        </div>
+                                    )}
+                                    <div
+                                        role="button"
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            if (confirm("Delete this bet? ALL existing wagers will be refunded to players.")) {
+                                                handleDeleteBet(bet.id);
+                                            }
+                                        }}
+                                        className="p-1.5 hover:bg-red-100 rounded-lg text-gray-300 hover:text-red-500 transition-colors"
+                                        title="Delete Bet (Refunds Players)"
+                                    >
+                                        <Trash2 className="h-4 w-4" />
+                                    </div>
+                                </div>
+                            )}
                             {isExpanded ? "▲" : "▼"}
                         </div>
                     </div>
@@ -389,7 +456,7 @@ export default function LeaguePage() {
     };
 
     return (
-        <div className="min-h-screen bg-background text-foreground pb-20">
+        <div className="min-h-screen text-foreground pb-20">
             {/* Header with Admin Controls */}
             {/* Header with Admin Controls */}
             <header className="bg-white sticky top-0 z-30">
@@ -580,8 +647,9 @@ export default function LeaguePage() {
                                         {/* Rebuy */}
                                         <button
                                             onClick={handleRebuy}
-                                            disabled={actionLoading}
-                                            className="flex items-center gap-2 px-6 py-3 bg-yellow-400 hover:bg-yellow-500 border-2 border-black rounded-xl text-lg font-black text-black transition-all shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:translate-y-[-2px]"
+                                            disabled={actionLoading || league.buyInType === "FIXED"}
+                                            title={league.buyInType === "FIXED" ? "Rebuys disabled in Fixed mode" : "Buy more chips"}
+                                            className={`flex items-center gap-2 px-6 py-3 border-2 border-black rounded-xl text-lg font-black text-black transition-all shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:translate-y-[-2px] ${league.buyInType === "FIXED" ? "bg-gray-300 cursor-not-allowed opacity-70" : "bg-yellow-400 hover:bg-yellow-500"}`}
                                         >
                                             <Coins className="h-5 w-5 text-black" />
                                             REBUY
@@ -836,26 +904,29 @@ export default function LeaguePage() {
                     </div>
                 )}
 
+                {isBetModalOpen && (
+                    <CreateBetModal
+                        leagueId={leagueId}
+                        leagueMode={league.mode}
+                        isOpen={isBetModalOpen}
+                        onClose={() => {
+                            setIsBetModalOpen(false);
+                            setBetToEdit(undefined);
+                        }}
+                        onSuccess={fetchLeagueData}
+                        betToEdit={betToEdit}
+                    />
+                )}
+
+                {league && (
+                    <LeagueSettingsModal
+                        league={league}
+                        isOpen={isSettingsOpen}
+                        onClose={() => setIsSettingsOpen(false)}
+                        onUpdate={() => window.location.reload()} // Simple reload
+                    />
+                )}
             </main>
-
-            <CreateBetModal
-                leagueId={leagueId}
-                isOpen={isBetModalOpen}
-                onClose={() => setIsBetModalOpen(false)}
-                onSuccess={async () => {
-                    const updatedBets = await getLeagueBets(leagueId);
-                    setBets(updatedBets);
-                }}
-            />
-
-            {league && (
-                <LeagueSettingsModal
-                    league={league}
-                    isOpen={isSettingsOpen}
-                    onClose={() => setIsSettingsOpen(false)}
-                    onUpdate={() => window.location.reload()} // Simple reload
-                />
-            )}
         </div>
     );
 }

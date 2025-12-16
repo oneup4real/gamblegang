@@ -4,6 +4,7 @@ import { useState, useRef } from "react";
 import { Upload, X, Check } from "lucide-react";
 import { uploadUserAvatar } from "@/lib/services/user-service";
 import { Button } from "@/components/ui/button";
+import { ImageCropper } from "@/components/image-cropper";
 
 interface AvatarSelectorProps {
     uid: string;
@@ -25,6 +26,7 @@ const PREDEFINED_AVATARS = [
 export function AvatarSelector({ uid, currentAvatar, onAvatarChange }: AvatarSelectorProps) {
     const [uploading, setUploading] = useState(false);
     const [selectedAvatar, setSelectedAvatar] = useState<string | null>(currentAvatar);
+    const [cropSrc, setCropSrc] = useState<string | null>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
     const handlePredefinedSelect = (url: string) => {
@@ -32,18 +34,33 @@ export function AvatarSelector({ uid, currentAvatar, onAvatarChange }: AvatarSel
         onAvatarChange(url);
     };
 
-    const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (!file) return;
 
+        // Read for cropping
+        const reader = new FileReader();
+        reader.onload = () => {
+            if (typeof reader.result === "string") {
+                setCropSrc(reader.result);
+            }
+        };
+        reader.readAsDataURL(file);
+        e.target.value = ""; // Reset
+    };
+
+    const handleCropComplete = async (blob: Blob) => {
+        setCropSrc(null);
         setUploading(true);
         try {
+            // Create a File object from Blob
+            const file = new File([blob], "avatar.jpg", { type: "image/jpeg" });
             const url = await uploadUserAvatar(file, uid);
             setSelectedAvatar(url);
             onAvatarChange(url);
         } catch (error) {
             console.error("Upload failed", error);
-            // Could add toast here
+            alert("Failed to upload avatar.");
         } finally {
             setUploading(false);
         }
@@ -103,6 +120,13 @@ export function AvatarSelector({ uid, currentAvatar, onAvatarChange }: AvatarSel
                     ))}
                 </div>
             </div>
+            {cropSrc && (
+                <ImageCropper
+                    src={cropSrc}
+                    onCancel={() => setCropSrc(null)}
+                    onCrop={handleCropComplete}
+                />
+            )}
         </div>
     );
 }

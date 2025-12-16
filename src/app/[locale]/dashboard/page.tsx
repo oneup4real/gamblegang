@@ -97,7 +97,7 @@ export default function DashboardPage() {
     }
 
     return (
-        <div className="min-h-screen bg-background text-foreground">
+        <div className="min-h-screen text-foreground">
             <header className="border-b-2 border-black bg-white py-4 relative z-50">
                 <div className="container mx-auto flex h-14 items-center justify-between">
                     <div className="mr-4 flex items-center gap-3">
@@ -173,7 +173,8 @@ export default function DashboardPage() {
                     </motion.div>
                 </div>
 
-                {/* View Toggle */}\n                <div className="flex items-center gap-2 mb-8">
+                {/* View Toggle */}
+                <div className="flex items-center gap-2 mb-8">
                     <button
                         onClick={() => setViewMode("overview")}
                         className={`px-4 py-2 text-sm font-bold uppercase border-2 border-black rounded-lg shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] transition-all ${viewMode === "overview"
@@ -197,7 +198,7 @@ export default function DashboardPage() {
                 {viewMode === "overview" ? (
                     <>
                         <div className="flex items-center justify-between mb-8">
-                            <h2 className="text-3xl font-bold tracking-tight font-comic text-primary drop-shadow-sm">{t('yourLeagues')}</h2>
+                            <h2 className="text-5xl font-black tracking-wide font-comic text-primary drop-shadow-[3px_3px_0_rgba(0,0,0,1)] uppercase transform -rotate-1">{t('yourLeagues')}</h2>
                             <Button onClick={() => setIsCreateModalOpen(true)}>
                                 <Plus className="mr-2 h-4 w-4 comic-icon" />
                                 Create League

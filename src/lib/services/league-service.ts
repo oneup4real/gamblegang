@@ -13,12 +13,21 @@ export interface League {
     ownerId: string;
     startCapital: number;
     buyInType?: BuyInType; // Only for ZERO_SUM mode
+    matchSettings?: MatchSettings;
     startDate?: any;
     endDate?: any;
     createdAt: any;
     memberCount: number;
     mode: LeagueMode;
     status: LeagueStatus;
+}
+
+export interface MatchSettings {
+    exact: number;
+    diff: number;
+    winner: number;
+    choice?: number; // Multiple Choice points
+    range?: number; // Guessing points
 }
 
 export interface LeagueMember {
@@ -40,7 +49,8 @@ export async function createLeague(
     startCapital: number = 1000,
     buyInType: BuyInType = "FIXED",
     startDate?: Date,
-    endDate?: Date
+    endDate?: Date,
+    matchSettings?: MatchSettings
 ) {
     if (!user) throw new Error("User must be logged in");
 
@@ -52,19 +62,27 @@ export async function createLeague(
     // In Zero Sum FLEXIBLE, everyone starts with 0.
     const initialPoints = mode === "STANDARD" ? 0 : (buyInType === "FIXED" ? startCapital : 0);
 
-    const leagueData: League = {
+    const leagueData: Record<string, any> = {
         id: leagueId,
         name: leagueName,
         ownerId: user.uid,
+        mode,
         startCapital,
-        buyInType: mode === "ZERO_SUM" ? buyInType : undefined,
-        startDate: startDate || null,
-        endDate: endDate || null,
         createdAt: serverTimestamp(),
         memberCount: 1,
-        mode,
         status: "NOT_STARTED"
     };
+
+    if (mode === "ZERO_SUM") {
+        leagueData.buyInType = buyInType;
+    }
+
+    if (mode === "STANDARD") {
+        leagueData.matchSettings = matchSettings || { exact: 3, diff: 1, winner: 2, choice: 1, range: 1 };
+    }
+
+    if (startDate) leagueData.startDate = startDate;
+    if (endDate) leagueData.endDate = endDate;
 
     const ownerMember: LeagueMember = {
         uid: user.uid,

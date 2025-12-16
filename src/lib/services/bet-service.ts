@@ -217,42 +217,18 @@ export function getReturnPotential(wagerAmount: number, totalPool: number, optio
 
 
 export async function resolveBet(leagueId: string, betId: string, user: User, outcome: string | number | { home: number, away: number }) {
-    // 1. Mark bet as RESOLVED and set winning outcome
-    // 2. Fetch all wagers
-    // 3. For each winner, credit points
-    // 4. Update member stats
-
-    const betRef = doc(db, "leagues", leagueId, "bets", betId);
-
-    // We need to process this in a transaction or batch to ensure integrity
-    // But for many wagers, batch might be too small (500 limit).
-    // For MVP, we'll do it in a simpler way: Lock bet -> Process Wagers -> Unlock/Finish
-    // Or just run it. If it fails halfway, we have partial resolution.
-    // Better: Cloud Function. But here we do Client Side for MVP (Admin only).
-
-    let winnerCount = 0;
-
-    await runTransaction(db, async (transaction) => {
-        const betSnap = await transaction.get(betRef);
-        if (!betSnap.exists()) throw "Bet not found";
-        const bet = betSnap.data() as Bet;
-
-    });
-
-    // Fetch League to check Mode
+    // 0. Fetch League to check Settings & Mode
     const leagueRef = doc(db, "leagues", leagueId);
     const leagueSnap = await getDoc(leagueRef);
-    const league = leagueSnap.data() as League;
-    const isZeroSum = league?.mode === "ZERO_SUM";
+    const league = leagueSnap.exists() ? leagueSnap.data() as League : null;
 
-    // Re-implementation with simple batching
-    const wagersRef = collection(betRef, "wagers");
-    const wagersSnap = await getDocs(wagersRef);
-    const wagers = wagersSnap.docs.map(d => d.data() as Wager);
+    const betRef = doc(db, "leagues", leagueId, "bets", betId);
+    const betSnap = await getDoc(betRef);
+    if (!betSnap.exists()) throw new Error("Bet not found");
+    const bet = { id: betSnap.id, ...betSnap.data() } as Bet;
 
+    // 1. Mark bet as RESOLVED
     const batch = writeBatch(db);
-
-    // Update Bet
     batch.update(betRef, {
         status: "RESOLVED",
         winningOutcome: outcome,
@@ -260,68 +236,122 @@ export async function resolveBet(leagueId: string, betId: string, user: User, ou
         resolvedBy: user.uid
     });
 
-    // We need to iterate twice.
-    let totalWinningStake = 0;
-    const winningWagers: Wager[] = [];
+    const wagersRef = collection(db, "leagues", leagueId, "bets", betId, "wagers");
+    const wagersSnap = await getDocs(wagersRef);
+    const wagers = wagersSnap.docs.map(d => ({ id: d.id, ...d.data() } as Wager));
 
+    // Pre-calculate for Parimutuel (Zero Sum)
+    let zeroSumOdds = 1;
+    let isZeroSumRefund = false;
+
+    if (league?.mode === "ZERO_SUM") {
+        const winningWagers = wagers.filter(w => {
+            if (typeof outcome === 'object' && typeof w.selection === 'object') {
+                return outcome.home === w.selection.home && outcome.away === w.selection.away;
+            }
+            return String(w.selection) === String(outcome);
+        });
+
+        const winningPool = winningWagers.reduce((sum, w) => sum + w.amount, 0);
+
+        if (winningPool > 0) {
+            zeroSumOdds = bet.totalPool / winningPool;
+        } else {
+            // NO WINNERS -> REFUND EVERYONE
+            isZeroSumRefund = true;
+        }
+    }
+
+    // Calculate Winners & Payouts
     for (const wager of wagers) {
         let isWinner = false;
+        let payout = 0;
 
-        if (typeof outcome === "string") { // CHOICE (Index)
-            isWinner = String(wager.selection) === outcome;
-        } else if (typeof outcome === "number") { // RANGE
-            isWinner = Number(wager.selection) === outcome;
-        } else if (typeof outcome === "object") { // MATCH
-            const sel = wager.selection as { home: number, away: number };
-            isWinner = sel.home === outcome.home && sel.away === outcome.away;
+        // Check if won (Generic Check)
+        if (typeof outcome === 'object' && typeof wager.selection === 'object') {
+            // Exact match check for objects (Match score)
+            if (outcome.home === wager.selection.home && outcome.away === wager.selection.away) {
+                isWinner = true;
+            }
+        } else {
+            if (String(wager.selection) === String(outcome)) {
+                isWinner = true;
+            }
         }
 
-        if (isWinner) {
-            winningWagers.push(wager);
-            if (isZeroSum) {
-                totalWinningStake += wager.amount;
+        // ARCADE MODE LOGIC
+        if (league && league.mode === "STANDARD") {
+            const settings = league.matchSettings || { exact: 3, diff: 1, winner: 2 };
+
+            if (typeof outcome === 'object' && typeof wager.selection === 'object') {
+                // MATCH BET
+                const oH = outcome.home;
+                const oA = outcome.away;
+                const pH = wager.selection.home;
+                const pA = wager.selection.away;
+
+                let multiplier = 0;
+
+                // 1. Exact Result
+                if (oH === pH && oA === pA) {
+                    multiplier = Math.max(multiplier, settings.exact);
+                    isWinner = true; // Mark as winner for stats
+                }
+
+                // 2. Correct Difference
+                if ((oH - oA) === (pH - pA)) {
+                    multiplier = Math.max(multiplier, settings.diff);
+                    if (settings.diff > 0) isWinner = true;
+                }
+
+                // 3. Correct Winner (Tendency)
+                const outcomeTendency = oH > oA ? 'H' : (oH < oA ? 'A' : 'D');
+                const predTendency = pH > pA ? 'H' : (pH < pA ? 'A' : 'D');
+
+                if (outcomeTendency === predTendency) {
+                    multiplier = Math.max(multiplier, settings.winner);
+                    if (settings.winner > 0) isWinner = true;
+                }
+
+                payout = Math.floor(wager.amount * multiplier);
+
+            } else {
+                // Simple Choice/Range in Arcade
+                // Default to x2 for now if winner
+                if (isWinner) {
+                    payout = wager.amount * 2;
+                }
             }
+
+        } else {
+            // ZERO SUM logic (Parimutuel)
+            if (isZeroSumRefund) {
+                payout = wager.amount; // Refund
+            } else if (isWinner) {
+                payout = Math.floor(wager.amount * zeroSumOdds);
+            }
+        }
+
+        // Apply Updates
+        if (payout > 0) {
+            // Determine status
+            const status = isZeroSumRefund ? "PUSH" : "WON";
+
+            // Update Wager
+            batch.update(doc(wagersRef, wager.id), { status, payout });
+            // Update Member
+            const memberRef = doc(db, "leagues", leagueId, "members", wager.userId);
+            batch.update(memberRef, {
+                points: increment(payout)
+            });
         } else {
             batch.update(doc(wagersRef, wager.id), { status: "LOST", payout: 0 });
         }
     }
 
-    // Check Bet Pool for Zero Sum
-    let totalPool = 0;
-    if (isZeroSum) {
-        const betSnap = await getDoc(betRef);
-        const bet = betSnap.data() as Bet;
-        totalPool = bet.totalPool;
-    }
-
-    for (const wager of winningWagers) {
-        let payout = 0;
-
-        if (isZeroSum) {
-            // ZERO SUM: Parimutuel Share
-            if (totalWinningStake > 0) {
-                payout = Math.floor((wager.amount / totalWinningStake) * totalPool);
-            }
-        } else {
-            // ARCADE: Fixed Reward for winning
-            // For now, let's give a flat 100 points, or we could calculate based on odds.
-            // Given "fixed numbers", let's award 100.
-            payout = 100;
-        }
-
-        // Update Wager
-        batch.update(doc(wagersRef, wager.id), { status: "WON", payout });
-
-        // Update Member
-        const memberRef = doc(db, "leagues", leagueId, "members", wager.userId);
-        batch.update(memberRef, {
-            points: increment(payout)
-        });
-    }
-
     await batch.commit();
 
-    return { success: true, winnerCount: winningWagers.length };
+    return { success: true, winnerCount: wagers.filter(w => w.status === "WON").length };
 }
 
 // Helper needed for resolveBet - imports were missing
@@ -720,6 +750,7 @@ export async function resolveDispute(leagueId: string, betId: string) {
 
     const betRef = doc(db, "leagues", leagueId, "bets", betId);
 
+    // ... existing code ...
     if (voteResult === "approve") {
         // Proceed with original resolution
         await updateDoc(betRef, {
@@ -734,4 +765,42 @@ export async function resolveDispute(leagueId: string, betId: string) {
         // No consensus - owner can mark invalid
         return "no_consensus";
     }
+}
+
+/**
+ * Delete a bet completely.
+ * Refunds all wagers made on this bet.
+ */
+export async function deleteBet(leagueId: string, betId: string) {
+    const { getDocs, collection, deleteDoc, doc } = await import("firebase/firestore");
+    const betRef = doc(db, "leagues", leagueId, "bets", betId);
+    const wagersCol = collection(db, "leagues", leagueId, "bets", betId, "wagers");
+
+    await runTransaction(db, async (transaction) => {
+        const betSnap = await transaction.get(betRef);
+        if (!betSnap.exists()) throw new Error("Bet not found");
+
+        // Note: This read is not strictly transactional (Firestore Limitation for queries in txn)
+        // But practically safe for this use case if traffic is low.
+        // Ideally we mark bet as "LOCKED" first in a separate txn if high volume.
+        const wagersSnap = await getDocs(wagersCol);
+
+        // Refund each wager
+        for (const wagerDoc of wagersSnap.docs) {
+            const wager = wagerDoc.data() as Wager;
+            const memberRef = doc(db, "leagues", leagueId, "members", wager.userId);
+
+            // Refund points if member exists
+            transaction.update(memberRef, {
+                points: increment(wager.amount),
+                totalInvested: increment(-wager.amount)
+            });
+
+            // Delete wager doc
+            transaction.delete(wagerDoc.ref);
+        }
+
+        // Delete bet doc
+        transaction.delete(betRef);
+    });
 }

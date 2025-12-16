@@ -50,5 +50,34 @@
     },
     "Common": {
         "loading": "Loading..."
+    },
+    "League": {
+        "createTitle": "Create League",
+        "nameLabel": "League Name",
+        "namePlaceholder": "e.g. The Sunday Gamblers",
+        "modeLabel": "League Mode",
+        "zeroSum": "Zero Sum",
+        "zeroSumDesc": "Real stakes simulation. Buy-in, Re-buys.",
+        "arcade": "Arcade",
+        "arcadeDesc": "Points only. Climb the leaderboard.",
+        "buyInType": "Buy-In Type",
+        "fixed": "Fixed",
+        "fixedDesc": "Everyone gets starting capital",
+        "flexible": "Flexible",
+        "flexibleDesc": "Start at 0, buy points anytime",
+        "startCapital": "Starting Capital",
+        "rebuyUnit": "Rebuy Unit",
+        "chipsDesc": "Initial chips each player starts with.",
+        "startDate": "Start Date",
+        "endDate": "End Date",
+        "aiAutoPopulate": "✨ AI Auto-Populate",
+        "aiDesc": "Instantly fill league with games/events",
+        "aiTopic": "Topic / League",
+        "aiTopicPlaceholder": "e.g. Premier League, NBA...",
+        "aiTimeframe": "Timeframe",
+        "aiTimeframePlaceholder": "e.g. Next Week, This Weekend",
+        "btnCancel": "Cancel",
+        "btnCreate": "Create League",
+        "btnCreating": "Creating..."
     }
 }

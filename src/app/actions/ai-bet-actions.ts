@@ -59,7 +59,7 @@ export async function generateBetIdeas(topic: string) {
     }
 }
 
-export async function generateBulkBets(topic: string, timeframe: string, type: "CHOICE" | "MATCH") {
+export async function generateBulkBets(topic: string, timeframe: string, type: "CHOICE" | "MATCH", outcomeType?: "WINNER" | "WINNER_DRAW") {
     if (!apiKey) {
         console.warn("No Gemini API Key found. Returning mock bulk data.");
         await new Promise(r => setTimeout(r, 1000));
@@ -82,7 +82,8 @@ export async function generateBulkBets(topic: string, timeframe: string, type: "
             The user wants bets of type: "${type}".
             
             - If type is "MATCH", generate Match Prediction bets (Exact Score / Winner).
-            - If type is "CHOICE", generate 1x2 (Home/Draw/Away) bets.
+            - If type is "CHOICE":
+                ${outcomeType === 'WINNER' ? '- Generate 2-way bets (Winner/Loser) e.g. [HomeTeam, AwayTeam].' : '- Generate 1x2 bets (Home/Draw/Away) e.g. [HomeTeam, Draw, AwayTeam].'}
 
             Return ONLY a valid JSON array of objects.
             JSON Structure:

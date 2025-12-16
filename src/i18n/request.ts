@@ -3,22 +3,15 @@ import { notFound } from 'next/navigation';
 
 const locales = ['en', 'de'];
 
-export default getRequestConfig(async (params) => {
-    // console.log('--- i18n Request call:', params);
+export default getRequestConfig(async ({ requestLocale }) => {
+    let locale = await requestLocale;
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    let userLocale = (params as any).locale; // Try to get locale
-
-    // If undefined, maybe using newer next-intl with requestLocale?
-    // We will just default to 'en' if undefined to prevent 404, or use requestLocale if available.
-
-    if (!userLocale || !locales.includes(userLocale)) {
-        console.warn('--- Invalid or missing locale:', userLocale, 'Defaulting to en');
-        userLocale = 'en';
+    if (!locale || !locales.includes(locale)) {
+        locale = 'en';
     }
 
     return {
-        locale: userLocale,
-        messages: (await import(`../../messages/${userLocale}.json`)).default
+        locale,
+        messages: (await import(`../../messages/${locale}.json`)).default
     };
 });

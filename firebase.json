@@ -2,6 +2,9 @@
   "firestore": {
     "rules": "firestore.rules"
   },
+  "storage": {
+    "rules": "storage.rules"
+  },
   "hosting": {
     "source": ".",
     "ignore": [
@@ -23,6 +26,10 @@
     "firestore": {
       "rules": "firestore.rules",
       "port": 8080
+    },
+    "storage": {
+      "rules": "storage.rules",
+      "port": 9199
     },
     "ui": {
       "enabled": true

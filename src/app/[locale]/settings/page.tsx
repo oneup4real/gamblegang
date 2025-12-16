@@ -5,19 +5,23 @@ import { AvatarSelector } from "@/components/avatar-selector";
 import { UserProfile, updateUserProfile } from "@/lib/services/user-service";
 import { ArrowLeft, Loader2, Save } from "lucide-react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+// import { useRouter } from "next/navigation"; // REMOVED
+import { useRouter } from "@/i18n/navigation"; // ADDED
 import { useEffect, useState } from "react";
 import { doc, getDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase/config";
-import { useTranslations } from 'next-intl';
+import { useTranslations, useLocale } from 'next-intl'; // UPDATED
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
 
 export default function SettingsPage() {
     const t = useTranslations('Settings');
-    const { user, loading } = useAuth();
+    const currentLocale = useLocale();
     const router = useRouter();
+    const { user, loading } = useAuth();
+    // const router = useRouter(); // Removed standard router
+
     const [profile, setProfile] = useState<UserProfile | null>(null);
     const [fetchingProfile, setFetchingProfile] = useState(true);
     const [saving, setSaving] = useState(false);
@@ -68,8 +72,14 @@ export default function SettingsPage() {
                 photoURL: avatarUrl,
                 language: language
             });
-            // Show toast or confirmation? For now just simple alert or relying on button state
-            // maybe redirect or refresh?
+
+            // If language changed, redirect to new locale
+            if (language !== currentLocale) {
+                router.replace('/settings', { locale: language });
+            } else {
+                alert(t('saving') + " Done!"); // Simple feedback if no redirect
+            }
+
         } catch (error) {
             console.error("Failed to save settings", error);
             alert("Failed to save settings. Please try again.");
@@ -87,7 +97,7 @@ export default function SettingsPage() {
     }
 
     return (
-        <div className="min-h-screen bg-background text-foreground pb-20">
+        <div className="min-h-screen text-foreground pb-20">
             <header className="border-b border-border/40 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
                 <div className="container mx-auto flex h-14 items-center gap-4">
                     <Link
@@ -140,9 +150,6 @@ export default function SettingsPage() {
                                 >
                                     <option value="en">English</option>
                                     <option value="de">Deutsch</option>
-                                    <option value="fr">Français</option>
-                                    <option value="it">Italiano</option>
-                                    <option value="es">Español</option>
                                 </select>
                             </div>
                         </div>

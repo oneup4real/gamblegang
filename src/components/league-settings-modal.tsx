@@ -18,6 +18,13 @@ export function LeagueSettingsModal({ league, isOpen, onClose, onUpdate }: Leagu
     const { user } = useAuth();
     const [loading, setLoading] = useState(false);
     const [name, setName] = useState(league.name);
+    // Match Settings (Standard Mode)
+    const [exactMult, setExactMult] = useState(league.matchSettings?.exact || 3);
+    const [winnerMult, setWinnerMult] = useState(league.matchSettings?.winner || 2);
+    const [diffMult, setDiffMult] = useState(league.matchSettings?.diff || 1);
+    const [choicePoints, setChoicePoints] = useState(league.matchSettings?.choice || 1);
+    const [rangePoints, setRangePoints] = useState(league.matchSettings?.range || 1);
+
     const [activeTab, setActiveTab] = useState<"general" | "danger">("general");
 
     const handleUpdateName = async (e: React.FormEvent) => {
@@ -25,7 +32,19 @@ export function LeagueSettingsModal({ league, isOpen, onClose, onUpdate }: Leagu
         if (!name.trim()) return;
         setLoading(true);
         try {
-            await updateLeague(league.id, { name });
+            const updates: Partial<League> = { name };
+            if (league.mode === "STANDARD") {
+                updates.matchSettings = {
+                    exact: exactMult,
+                    winner: winnerMult,
+                    diff: diffMult,
+                    choice: choicePoints,
+                    range: rangePoints
+                };
+            }
+            // Ensure no undefined values in updates (though state should prevent this)
+            const cleanUpdates = JSON.parse(JSON.stringify(updates));
+            await updateLeague(league.id, cleanUpdates);
             onUpdate();
             alert("League updated");
         } catch (e) {
@@ -103,6 +122,52 @@ export function LeagueSettingsModal({ league, isOpen, onClose, onUpdate }: Leagu
                                         className="flex h-12 w-full rounded-xl border-2 border-black bg-white px-3 text-lg font-bold shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] focus:outline-none focus:ring-4 focus:ring-primary/20"
                                     />
                                 </div>
+
+                                {league.mode === "STANDARD" && (
+                                    <div className="space-y-3 p-4 bg-purple-50 border-2 border-purple-200 rounded-xl">
+                                        <h4 className="text-sm font-black uppercase text-purple-800 flex items-center gap-2">
+                                            Arcade Point Settings
+                                        </h4>
+                                        <div className="grid grid-cols-3 gap-2">
+                                            <div className="space-y-1">
+                                                <label className="text-xs font-bold text-gray-500 uppercase">Exact</label>
+                                                <input type="number" min={1} value={exactMult} onChange={(e) => setExactMult(Number(e.target.value))} className="w-full h-10 px-2 rounded-lg border-2 border-black font-bold text-center" />
+                                            </div>
+                                            <div className="space-y-1">
+                                                <label className="text-xs font-bold text-gray-500 uppercase">Winner</label>
+                                                <input type="number" min={1} value={winnerMult} onChange={(e) => setWinnerMult(Number(e.target.value))} className="w-full h-10 px-2 rounded-lg border-2 border-black font-bold text-center" />
+                                            </div>
+                                            <div className="space-y-1">
+                                                <label className="text-xs font-bold text-gray-500 uppercase">Diff</label>
+                                                <input type="number" min={1} value={diffMult} onChange={(e) => setDiffMult(Number(e.target.value))} className="w-full h-10 px-2 rounded-lg border-2 border-black font-bold text-center" />
+                                            </div>
+                                        </div>
+                                        <div className="grid grid-cols-2 gap-2 pt-2 border-t border-purple-200">
+                                            <div className="space-y-1">
+                                                <label className="text-xs font-bold text-gray-500 uppercase">Choice</label>
+                                                <input type="number" min={1} value={choicePoints} onChange={(e) => setChoicePoints(Number(e.target.value))} className="w-full h-10 px-2 rounded-lg border-2 border-black font-bold text-center" />
+                                            </div>
+                                            <div className="space-y-1">
+                                                <label className="text-xs font-bold text-gray-500 uppercase">Guess</label>
+                                                <input type="number" min={1} value={rangePoints} onChange={(e) => setRangePoints(Number(e.target.value))} className="w-full h-10 px-2 rounded-lg border-2 border-black font-bold text-center" />
+                                            </div>
+                                        </div>
+                                        <div className="text-[10px] font-bold text-purple-600 space-y-1 mt-2">
+                                            <p>Points awarded for correct predictions.</p>
+                                            <p className="opacity-75 italic border-t border-purple-200 pt-1">
+                                                Note: No fixed points can be set for Zero Sum betting, because the odds are calculated dynamically like in real life.
+                                            </p>
+                                        </div>
+                                    </div>
+                                )}
+                                {league.mode === "ZERO_SUM" && (
+                                    <div className="space-y-3 p-4 bg-gray-50 border-2 border-gray-200 rounded-xl">
+                                        <h4 className="text-sm font-black uppercase text-gray-500">Betting Settings</h4>
+                                        <p className="text-xs font-bold text-gray-400 italic">
+                                            Note: No fixed points can be set for Zero Sum betting, because the odds are calculated dynamically like in real life.
+                                        </p>
+                                    </div>
+                                )}
                                 <Button
                                     disabled={loading}
                                     className="w-full h-12 bg-primary text-white border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]"
