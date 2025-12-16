@@ -13,6 +13,9 @@ interface CreateLeagueModalProps {
     onClose: () => void;
 }
 
+import { createBet } from "@/lib/services/bet-service";
+import { generateBulkBets } from "@/app/actions/ai-bet-actions";
+
 export function CreateLeagueModal({ isOpen, onClose }: CreateLeagueModalProps) {
     const [name, setName] = useState("");
     const [startCapital, setStartCapital] = useState(1000);
@@ -20,7 +23,14 @@ export function CreateLeagueModal({ isOpen, onClose }: CreateLeagueModalProps) {
     const [buyInType, setBuyInType] = useState<BuyInType>("FIXED");
     const [startDate, setStartDate] = useState("");
     const [endDate, setEndDate] = useState("");
+
+    // AI Auto-Fill
+    const [useAi, setUseAi] = useState(false);
+    const [aiTopic, setAiTopic] = useState("");
+    const [aiTimeframe, setAiTimeframe] = useState("Upcoming"); // Default
+
     const [loading, setLoading] = useState(false);
+    const [loadingMessage, setLoadingMessage] = useState("");
     const { user } = useAuth();
     const router = useRouter();
 
@@ -28,7 +38,10 @@ export function CreateLeagueModal({ isOpen, onClose }: CreateLeagueModalProps) {
         e.preventDefault();
         if (!user) return;
         setLoading(true);
+        setLoadingMessage("Creating League...");
+
         try {
+            // 1. Create League
             const leagueId = await createLeague(
                 user,
                 name,
@@ -38,13 +51,40 @@ export function CreateLeagueModal({ isOpen, onClose }: CreateLeagueModalProps) {
                 startDate ? new Date(startDate) : undefined,
                 endDate ? new Date(endDate) : undefined
             );
+
+            // 2. AI Population
+            if (useAi && aiTopic.trim()) {
+                setLoadingMessage("🤖 AI is generating schedule...");
+                // Pass user defined timeframe
+                const bets = await generateBulkBets(aiTopic, aiTimeframe || "Upcoming", "MATCH");
+
+                if (Array.isArray(bets) && bets.length > 0) {
+                    setLoadingMessage(`Creating ${bets.length} bets...`);
+                    for (const bet of bets) {
+                        const date = bet.date ? new Date(bet.date) : new Date(Date.now() + 86400000);
+                        await createBet(
+                            leagueId,
+                            user,
+                            bet.question,
+                            bet.type,
+                            date, // closesAt
+                            date, // eventDate
+                            bet.type === "CHOICE" ? bet.options : undefined,
+                            undefined, // range
+                            bet.type === "MATCH" ? { home: bet.matchHome, away: bet.matchAway } : undefined
+                        );
+                    }
+                }
+            }
+
             onClose();
             router.push(`/leagues/${leagueId}`);
         } catch (error) {
             console.error(error);
-            // Ideally show toast error here
+            alert("Failed to create league. See console.");
         } finally {
             setLoading(false);
+            setLoadingMessage("");
         }
     };
 
@@ -63,7 +103,7 @@ export function CreateLeagueModal({ isOpen, onClose }: CreateLeagueModalProps) {
                         initial={{ opacity: 0, scale: 0.95, y: 20 }}
                         animate={{ opacity: 1, scale: 1, y: 0 }}
                         exit={{ opacity: 0, scale: 0.95, y: 20 }}
-                        className="fixed left-[50%] top-[50%] z-50 w-full max-w-lg translate-x-[-50%] translate-y-[-50%] rounded-xl border-2 border-black bg-white p-6 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)]"
+                        className="fixed left-[50%] top-[50%] z-50 w-full max-w-lg translate-x-[-50%] translate-y-[-50%] rounded-xl border-2 border-black bg-white p-6 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] max-h-[90vh] overflow-y-auto"
                     >
                         <div className="flex items-center justify-between mb-6">
                             <h2 className="text-2xl font-black tracking-tight font-comic uppercase">Create League</h2>
@@ -134,8 +174,8 @@ export function CreateLeagueModal({ isOpen, onClose }: CreateLeagueModalProps) {
                                                 type="button"
                                                 onClick={() => setBuyInType("FIXED")}
                                                 className={`flex flex-col gap-1 rounded-xl border-2 p-3 text-left transition-all ${buyInType === "FIXED"
-                                                        ? "border-black bg-green-100 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] -translate-y-[2px]"
-                                                        : "border-gray-200 bg-white hover:bg-gray-50"
+                                                    ? "border-black bg-green-100 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] -translate-y-[2px]"
+                                                    : "border-gray-200 bg-white hover:bg-gray-50"
                                                     }`}
                                             >
                                                 <span className={`font-black text-sm ${buyInType === "FIXED" ? "text-green-900" : "text-gray-500"}`}>
@@ -149,8 +189,8 @@ export function CreateLeagueModal({ isOpen, onClose }: CreateLeagueModalProps) {
                                                 type="button"
                                                 onClick={() => setBuyInType("FLEXIBLE")}
                                                 className={`flex flex-col gap-1 rounded-xl border-2 p-3 text-left transition-all ${buyInType === "FLEXIBLE"
-                                                        ? "border-black bg-yellow-100 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] -translate-y-[2px]"
-                                                        : "border-gray-200 bg-white hover:bg-gray-50"
+                                                    ? "border-black bg-yellow-100 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] -translate-y-[2px]"
+                                                    : "border-gray-200 bg-white hover:bg-gray-50"
                                                     }`}
                                             >
                                                 <span className={`font-black text-sm ${buyInType === "FLEXIBLE" ? "text-yellow-900" : "text-gray-500"}`}>
@@ -203,6 +243,55 @@ export function CreateLeagueModal({ isOpen, onClose }: CreateLeagueModalProps) {
                                 </div>
                             </div>
 
+                            {/* AI Auto-Fill Section */}
+                            <div className="space-y-4 pt-4 border-t-2 border-dashed border-gray-300">
+                                <button
+                                    type="button"
+                                    onClick={() => setUseAi(!useAi)}
+                                    className={`w-full p-4 rounded-xl border-2 flex items-center justify-between transition-all ${useAi ? "bg-purple-100 border-purple-600 shadow-[4px_4px_0px_0px_rgba(147,51,234,1)]" : "bg-gray-50 border-gray-200 hover:border-black"}`}
+                                >
+                                    <div className="text-left">
+                                        <p className={`font-black uppercase ${useAi ? "text-purple-700" : "text-gray-500"}`}>✨ AI Auto- Populate</p>
+                                        <p className="text-xs font-bold text-gray-400">Instantly fill league with games/events</p>
+                                    </div>
+                                    <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center transition-colors ${useAi ? "bg-purple-600 border-purple-600" : "border-gray-300 bg-white"}`}>
+                                        {useAi && <div className="w-2.5 h-2.5 bg-white rounded-full" />}
+                                    </div>
+                                </button>
+
+                                <AnimatePresence>
+                                    {useAi && (
+                                        <motion.div
+                                            initial={{ height: 0, opacity: 0 }}
+                                            animate={{ height: "auto", opacity: 1 }}
+                                            exit={{ height: 0, opacity: 0 }}
+                                            className="overflow-hidden"
+                                        >
+                                            <div className="space-y-2 p-1">
+                                                <label className="text-sm font-black uppercase text-purple-800">Topic / League</label>
+                                                <input
+                                                    type="text"
+                                                    value={aiTopic}
+                                                    onChange={(e) => setAiTopic(e.target.value)}
+                                                    placeholder="e.g. Premier League, NBA..."
+                                                    className="flex h-12 w-full rounded-xl border-2 border-purple-200 bg-white px-3 py-2 text-black font-bold focus:outline-none focus:ring-4 focus:ring-purple-200 transition-all"
+                                                />
+                                            </div>
+                                            <div className="space-y-2 p-1">
+                                                <label className="text-sm font-black uppercase text-purple-800">Timeframe</label>
+                                                <input
+                                                    type="text"
+                                                    value={aiTimeframe}
+                                                    onChange={(e) => setAiTimeframe(e.target.value)}
+                                                    placeholder="e.g. Next Week, This Weekend"
+                                                    className="flex h-12 w-full rounded-xl border-2 border-purple-200 bg-white px-3 py-2 text-black font-bold focus:outline-none focus:ring-4 focus:ring-purple-200 transition-all"
+                                                />
+                                            </div>
+                                        </motion.div>
+                                    )}
+                                </AnimatePresence>
+                            </div>
+
                             <div className="flex justify-end gap-3 pt-4">
                                 <Button
                                     type="button"
@@ -215,9 +304,9 @@ export function CreateLeagueModal({ isOpen, onClose }: CreateLeagueModalProps) {
                                 <Button
                                     type="submit"
                                     disabled={loading}
-                                    className="px-8 h-12 bg-gradient-to-r from-primary to-green-400 text-black border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] text-lg"
+                                    className="px-8 h-12 bg-gradient-to-r from-primary to-green-400 text-black border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] text-lg uppercase font-black tracking-widest hover:translate-y-[-2px] transition-all"
                                 >
-                                    {loading ? "Creating..." : "Create League"}
+                                    {loading ? (loadingMessage || "Creating...") : "Create League"}
                                 </Button>
                             </div>
                         </form>

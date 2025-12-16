@@ -452,8 +452,8 @@ export default function LeaguePage() {
                         <button
                             onClick={() => setViewMode("bets")}
                             className={`relative px-6 py-2 rounded-t-xl border-t-2 border-x-2 border-black font-black uppercase tracking-wider transition-all duration-200 ${viewMode === "bets"
-                                    ? "bg-background -mb-[4px] pb-3 z-10 text-black shadow-[0_-4px_0_0_rgba(0,0,0,0)]"
-                                    : "bg-gray-100 text-gray-500 hover:bg-gray-200 mb-0"
+                                ? "bg-background -mb-[4px] pb-3 z-10 text-black shadow-[0_-4px_0_0_rgba(0,0,0,0)]"
+                                : "bg-gray-100 text-gray-500 hover:bg-gray-200 mb-0"
                                 }`}
                         >
                             Bets Register
@@ -461,8 +461,8 @@ export default function LeaguePage() {
                         <button
                             onClick={() => setViewMode("analytics")}
                             className={`relative px-6 py-2 rounded-t-xl border-t-2 border-x-2 border-black font-black uppercase tracking-wider transition-all duration-200 ${viewMode === "analytics"
-                                    ? "bg-background -mb-[4px] pb-3 z-10 text-black shadow-[0_-4px_0_0_rgba(0,0,0,0)]"
-                                    : "bg-gray-100 text-gray-500 hover:bg-gray-200 mb-0"
+                                ? "bg-background -mb-[4px] pb-3 z-10 text-black shadow-[0_-4px_0_0_rgba(0,0,0,0)]"
+                                : "bg-gray-100 text-gray-500 hover:bg-gray-200 mb-0"
                                 }`}
                         >
                             Analytics
@@ -735,6 +735,22 @@ export default function LeaguePage() {
                                     </div>
                                 ) : (
                                     <>
+                                        {/* 0. DRAFTS (Owner Only) */}
+                                        {(() => {
+                                            const drafts = bets.filter(b => b.status === "DRAFT");
+                                            if (drafts.length === 0 || !isOwner) return null;
+
+                                            return (
+                                                <div className="space-y-3 mb-6 pb-6 border-b-2 border-dashed border-gray-300">
+                                                    <div className="flex items-center gap-2 mb-2">
+                                                        <span className="text-xl">📝</span>
+                                                        <h3 className="text-xl font-black text-black font-comic">Drafts</h3>
+                                                    </div>
+                                                    {drafts.map(bet => renderBetItem(bet, myMemberProfile?.points || 0, league.mode))}
+                                                </div>
+                                            );
+                                        })()}
+
                                         {/* 1. UPCOMING / ACTIVE (Grouped by Week) */}
                                         {(() => {
                                             // Filter & Sort

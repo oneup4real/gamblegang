@@ -78,7 +78,7 @@ export async function createBet(
         creatorId: user.uid,
         question,
         type,
-        status: "DRAFT", // Start as DRAFT by default now
+        status: "OPEN", // Default to OPEN so they appear immediately
         createdAt: serverTimestamp(),
         closesAt: closesAt,
         eventDate: eventDate, // Save eventDate
