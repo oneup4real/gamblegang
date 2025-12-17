@@ -5,7 +5,7 @@ import { Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { useTranslations } from 'next-intl';
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { signInWithEmailAndPassword, createUserWithEmailAndPassword, updateProfile } from "firebase/auth";
 import { auth } from "@/lib/firebase/config";
 import { createUserProfile, updateUserProfile } from "@/lib/services/user-service";
@@ -14,7 +14,7 @@ import { useRouter } from "next/navigation";
 
 export default function LoginPage() {
     const t = useTranslations('Login');
-    const { signInWithGoogle, loading } = useAuth();
+    const { signInWithGoogle, loading, user } = useAuth();
     const router = useRouter();
 
     const [mode, setMode] = useState<"login" | "register">("login");
@@ -25,6 +25,13 @@ export default function LoginPage() {
     const [password, setPassword] = useState("");
     const [username, setUsername] = useState("");
     const [error, setError] = useState("");
+
+    // Redirect if already logged in
+    useEffect(() => {
+        if (!loading && user) {
+            router.push("/dashboard");
+        }
+    }, [user, loading, router]);
 
     if (loading) {
         return (

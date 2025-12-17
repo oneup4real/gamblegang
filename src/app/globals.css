@@ -178,4 +178,23 @@
     /* Refined glass for comic style */
     @apply bg-white/10 backdrop-blur-md border border-white/20;
   }
+
+  .bg-pattern {
+    background-image: radial-gradient(hsl(var(--primary) / 0.15) 2px, transparent 2px);
+    background-size: 32px 32px;
+    background-color: hsl(var(--background));
+  }
+
+  .bg-pattern-pink {
+    background-color: hsl(320 100% 97%);
+    /* Light Pink background */
+    background-image: radial-gradient(hsl(var(--secondary) / 0.2) 2px, transparent 2px);
+    background-size: 10px 10px;
+  }
+
+  .bg-pattern-blueprint {
+    background-color: #ffffff;
+    background-image: linear-gradient(#e5e7eb 1px, transparent 1px), linear-gradient(90deg, #e5e7eb 1px, transparent 1px);
+    background-size: 20px 20px;
+  }
 }

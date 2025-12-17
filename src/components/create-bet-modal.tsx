@@ -105,8 +105,12 @@ export function CreateBetModal({ leagueId, leagueMode, isOpen, onClose, onSucces
                 setEventDateStr("");
             }
 
-            if (betToEdit.type === "CHOICE" && betToEdit.options) {
-                setOptions(betToEdit.options.map((o: any) => o.text));
+            if (betToEdit.type === "CHOICE") {
+                if (betToEdit.options && betToEdit.options.length > 0) {
+                    setOptions(betToEdit.options.map((o: any) => o.text));
+                } else {
+                    setOptions(["", ""]);
+                }
             }
 
             if (betToEdit.type === "RANGE") {

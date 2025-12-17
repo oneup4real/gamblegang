@@ -61,5 +61,17 @@ service cloud.firestore {
     match /{path=**}/members/{memberId} {
         allow read: if request.auth != null;
     }
+
+    // Notifications Collection Group
+    match /{path=**}/notifications/{notificationId} {
+        // Read: Users can query their own notifications (requires userId field on doc)
+        allow read: if request.auth != null && resource.data.userId == request.auth.uid;
+        
+        // Create: Allow auth users to create notifications (e.g. triggering events)
+        allow create: if request.auth != null; 
+        
+        // Update/Delete: Users can manage their own notifications (mark read, delete)
+        allow update, delete: if request.auth != null && resource.data.userId == request.auth.uid;
+    }
   }
 }

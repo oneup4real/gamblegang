@@ -3,6 +3,7 @@ import { db } from "@/lib/firebase/config";
 import { collection, doc, runTransaction, serverTimestamp, setDoc, increment, updateDoc } from "firebase/firestore";
 import { User } from "firebase/auth";
 import { League, LeagueMember } from "./league-service";
+import { createNotification, createNotificationsForUsers } from "./notification-service";
 
 export type BetType = "CHOICE" | "RANGE" | "MATCH"; // Added MATCH
 export type BetStatus = "DRAFT" | "OPEN" | "LOCKED" | "RESOLVED" | "CANCELLED" | "PROOFING" | "DISPUTED" | "INVALID";
@@ -287,6 +288,23 @@ export async function resolveBet(
 
         batch.update(betRef, updateData);
         await batch.commit();
+
+        // Notify all wagerers that proofing has started
+        const wagersRef = collection(db, "leagues", leagueId, "bets", betId, "wagers");
+        const wagersSnap = await getDocs(wagersRef);
+        const wagererIds = wagersSnap.docs.map(d => d.data().userId as string);
+
+        // Fire and forget
+        Promise.all(
+            wagererIds.map(userId =>
+                createNotification(userId, "PROOFING_STARTED", "🗳️ Vote Required!", `Result submitted for "${bet.question}". Review and vote!`, {
+                    betId,
+                    leagueId,
+                    leagueName: league?.name
+                })
+            )
+        ).catch(console.error);
+
         return; // Don't process payouts yet - wait for dispute period
     }
 
@@ -414,6 +432,28 @@ export async function resolveBet(
 
     await batch.commit();
 
+    // Send notifications to all players about the result
+    const winnerIds = wagers.filter(w => w.status === "WON" || (w as any).payout > 0).map(w => w.userId);
+    const loserIds = wagers.filter(w => w.status === "LOST" || ((w as any).payout === 0 && !isZeroSumRefund)).map(w => w.userId);
+
+    // Don't await - fire and forget to not block the resolution
+    Promise.all([
+        ...winnerIds.map(userId =>
+            createNotification(userId, "BET_WON", "🏆 You Won!", `You won on "${bet.question}"!`, {
+                betId,
+                leagueId,
+                leagueName: league?.name
+            })
+        ),
+        ...loserIds.map(userId =>
+            createNotification(userId, "BET_LOST", "Better luck next time", `Bet resolved: "${bet.question}"`, {
+                betId,
+                leagueId,
+                leagueName: league?.name
+            })
+        )
+    ]).catch(console.error);
+
     return { success: true, winnerCount: wagers.filter(w => w.status === "WON").length };
 }
 
@@ -514,6 +554,7 @@ export interface DashboardBetInfo {
         method: "AI_GROUNDING" | "MANUAL" | "API";
         confidence?: "high" | "medium" | "low";
     };
+    resolvedAt?: any; // Added resolvedAt
 }
 
 export interface DashboardBetWithWager extends DashboardBetInfo {
@@ -538,12 +579,14 @@ export interface DashboardStats {
     pendingResults: number;
     wonBets: number;
     lostBets: number;
+    refundedBets: number; // New: tracking refunds
     toResolve: number;
     availableBets: number; // New: open bets without wager
     activeBetsList: DashboardBetWithWager[];
     pendingResultsList: DashboardBetWithWager[];
     wonBetsList: DashboardBetWithWager[];
     lostBetsList: DashboardBetWithWager[];
+    refundedBetsList: DashboardBetWithWager[]; // New: list of refunded bets
     toResolveList: DashboardBetInfo[];
     availableBetsList: DashboardBetWithWager[]; // New: list of open bets without wager
 }
@@ -574,12 +617,14 @@ export async function getUserDashboardStats(user: User, leagues: League[]): Prom
         pendingResults: 0,
         wonBets: 0,
         lostBets: 0,
+        refundedBets: 0,
         toResolve: 0,
         availableBets: 0,
         activeBetsList: [],
         pendingResultsList: [],
         wonBetsList: [],
         lostBetsList: [],
+        refundedBetsList: [],
         toResolveList: [],
         availableBetsList: []
     };
@@ -590,6 +635,7 @@ export async function getUserDashboardStats(user: User, leagues: League[]): Prom
     const pendingResultsList: DashboardBetWithWager[] = [];
     const wonBetsList: DashboardBetWithWager[] = [];
     const lostBetsList: DashboardBetWithWager[] = [];
+    const refundedBetsList: DashboardBetWithWager[] = [];
     const toResolveList: DashboardBetInfo[] = [];
     const availableBetsList: DashboardBetWithWager[] = [];
 
@@ -639,7 +685,8 @@ export async function getUserDashboardStats(user: User, leagues: League[]): Prom
                     selection: userWager.selection,
                     status: userWager.status,
                     payout: userWager.payout
-                } : undefined
+                } : undefined,
+                resolvedAt: bet.resolvedAt
             };
 
             // Categorize the bet
@@ -660,12 +707,14 @@ export async function getUserDashboardStats(user: User, leagues: League[]): Prom
             } else if ((bet.status === "LOCKED" || bet.status === "PROOFING" || bet.status === "DISPUTED") && userWager) {
                 // Pending results - waiting for resolution
                 pendingResultsList.push(betInfo);
-            } else if (bet.status === "RESOLVED" && userWager) {
-                // Resolved - check if won or lost
+            } else if ((bet.status === "RESOLVED" || bet.status === "INVALID") && userWager) {
+                // Resolved or Invalid
                 if (userWager.status === "WON") {
                     wonBetsList.push(betInfo);
                 } else if (userWager.status === "LOST") {
                     lostBetsList.push(betInfo);
+                } else if (userWager.status === "PUSH" || bet.status === "INVALID") {
+                    refundedBetsList.push(betInfo);
                 }
             }
 
@@ -734,12 +783,14 @@ export async function getUserDashboardStats(user: User, leagues: League[]): Prom
         pendingResults: pendingResultsList.length,
         wonBets: wonBetsList.length,
         lostBets: lostBetsList.length,
+        refundedBets: refundedBetsList.length,
         toResolve: toResolveList.length,
         availableBets: availableBetsList.length,
         activeBetsList,
         pendingResultsList,
         wonBetsList,
         lostBetsList,
+        refundedBetsList,
         toResolveList,
         availableBetsList
     };
@@ -792,16 +843,116 @@ export async function disputeBetResult(leagueId: string, betId: string, userId: 
             disputedBy.push(userId);
         }
 
+        // Create transaction update
         transaction.update(betRef, {
             status: "DISPUTED",
             disputeActive: true,
             disputedBy
         });
+
+        // Notify league Owner and other players
+        // We can't do this inside transaction easily if we want to be sure, or we do fire and forget after.
+        // Since we need league context, we assume client has it or we pass it? 
+        // We have leagueId. We can fetch league owner if needed, but for now let's just 
+        // rely on the fact that DISPUTED status updates usually trigger UI refreshments.
+        // BUT user asked for notifications. 
+        // Let's notify everyone who wagered that a dispute started.
+
+        // We can't query inside transaction efficiently for all wagers, so we do it AFTER.
+        // We'll return a flag to trigger it.
+        return { success: true };
+    });
+
+    // Notify ALL wagerers
+    try {
+        const wagersRef = collection(db, "leagues", leagueId, "bets", betId, "wagers");
+        const wagersSnap = await getDocs(wagersRef);
+        const wagererIds = wagersSnap.docs.map(d => d.data().userId as string);
+
+        // Unique users
+        const uniqueUsers = [...new Set(wagererIds)];
+
+        await createNotificationsForUsers(uniqueUsers, "DISPUTE_STARTED", "⚠️ Result Disputed!", "A player has disputed the result. Please review and vote.", {
+            betId,
+            leagueId
+        });
+    } catch (e) {
+        console.error("Failed to send dispute notifications", e);
+    }
+}
+
+/**
+ * Player votes on bet result (approve or reject)
+ * Works during PROOFING or DISPUTED status
+ * Auto-resolves when >50% of league members approve (finalize) or reject (refund)
+ */
+export async function voteOnProofingResult(
+    leagueId: string,
+    betId: string,
+    userId: string,
+    vote: "approve" | "reject"
+): Promise<{ autoResolved: boolean; resolution?: "approved" | "rejected"; approvePercent: number; rejectPercent: number }> {
+    const betRef = doc(db, "leagues", leagueId, "bets", betId);
+
+    return await runTransaction(db, async (transaction) => {
+        const betSnap = await transaction.get(betRef);
+        if (!betSnap.exists()) throw new Error("Bet not found");
+
+        const bet = betSnap.data() as Bet;
+
+        if (bet.status !== "PROOFING" && bet.status !== "DISPUTED") {
+            throw new Error("Bet is not in proofing or disputed status");
+        }
+
+        // Add/update vote
+        const votes = bet.votes || {};
+        votes[userId] = vote;
+
+        // Get all league members to calculate majority
+        const membersColRef = collection(db, "leagues", leagueId, "members");
+        const membersSnapshot = await getDocs(membersColRef);
+        const totalLeagueMembers = membersSnapshot.size;
+
+        // Calculate vote counts
+        const approveCount = Object.values(votes).filter(v => v === "approve").length;
+        const rejectCount = Object.values(votes).filter(v => v === "reject").length;
+
+        // Calculate percentages based on total league members
+        const approvePercent = totalLeagueMembers > 0 ? Math.round((approveCount / totalLeagueMembers) * 100) : 0;
+        const rejectPercent = totalLeagueMembers > 0 ? Math.round((rejectCount / totalLeagueMembers) * 100) : 0;
+
+        // Check for majority (>50% of league members)
+        const majorityThreshold = Math.floor(totalLeagueMembers / 2) + 1;
+
+        let autoResolved = false;
+        let resolution: "approved" | "rejected" | undefined;
+
+        const updateData: any = { votes };
+
+        if (approveCount >= majorityThreshold) {
+            // Auto-approve: Set to PROOFING with immediate deadline for auto-finalization
+            autoResolved = true;
+            resolution = "approved";
+            updateData.status = "PROOFING";
+            updateData.disputeActive = false;
+            updateData.autoFinalize = true;
+            updateData.disputeDeadline = new Date(); // Immediate deadline
+        } else if (rejectCount >= majorityThreshold) {
+            // Auto-reject: Mark as INVALID and refund (handled separately)
+            autoResolved = true;
+            resolution = "rejected";
+            // We'll handle the refund logic after the transaction
+        }
+
+        transaction.update(betRef, updateData);
+
+        return { autoResolved, resolution, approvePercent, rejectPercent };
     });
 }
 
 /**
  * Player votes on disputed bet (approve or reject the result)
+ * @deprecated Use voteOnProofingResult instead
  */
 export async function voteOnDisputedBet(
     leagueId: string,
@@ -809,26 +960,8 @@ export async function voteOnDisputedBet(
     userId: string,
     vote: "approve" | "reject"
 ) {
-    const betRef = doc(db, "leagues", leagueId, "bets", betId);
-
-    await runTransaction(db, async (transaction) => {
-        const betSnap = await transaction.get(betRef);
-        if (!betSnap.exists()) throw new Error("Bet not found");
-
-        const bet = betSnap.data() as Bet;
-
-        if (bet.status !== "DISPUTED") {
-            throw new Error("Bet is not in disputed status");
-        }
-
-        // Add/update vote
-        const votes = bet.votes || {};
-        votes[userId] = vote;
-
-        transaction.update(betRef, {
-            votes
-        });
-    });
+    // Delegate to the new function for backwards compatibility
+    return await voteOnProofingResult(leagueId, betId, userId, vote);
 }
 
 /**
@@ -871,7 +1004,7 @@ export async function checkDisputeVoting(leagueId: string, betId: string): Promi
 
 /**
  * Submit a result during dispute - players can submit what they think the correct result is
- * If all players submit the same result, consensus is reached
+ * If more than half of the league players submit the same result, consensus is reached (majority rule)
  */
 export async function submitDisputeResult(
     leagueId: string,
@@ -879,7 +1012,7 @@ export async function submitDisputeResult(
     userId: string,
     result: string | number | { home: number; away: number },
     displayName?: string
-): Promise<{ consensus: boolean; consensusResult?: typeof result }> {
+): Promise<{ consensus: boolean; consensusResult?: typeof result; majorityReached?: boolean }> {
     const betRef = doc(db, "leagues", leagueId, "bets", betId);
 
     return await runTransaction(db, async (transaction) => {
@@ -900,25 +1033,36 @@ export async function submitDisputeResult(
             displayName
         };
 
-        // Get all wagerers to check if everyone has submitted
-        const wagersColRef = collection(db, "leagues", leagueId, "bets", betId, "wagers");
-        const wagersSnapshot = await getDocs(wagersColRef);
-        const wagererIds = wagersSnapshot.docs.map(d => d.id);
+        // Get all league members to calculate majority
+        const membersColRef = collection(db, "leagues", leagueId, "members");
+        const membersSnapshot = await getDocs(membersColRef);
+        const totalLeagueMembers = membersSnapshot.size;
 
-        // Check for consensus - all wagerers must have submitted and agree
-        const allSubmitted = wagererIds.every(id => submissions[id]);
+        // Calculate majority threshold (more than half)
+        const majorityThreshold = Math.floor(totalLeagueMembers / 2) + 1;
+
+        // Count submissions by result value
+        const resultCounts: { [key: string]: { count: number; result: typeof result } } = {};
+
+        for (const [, submission] of Object.entries(submissions)) {
+            const resultKey = JSON.stringify(submission.result);
+            if (!resultCounts[resultKey]) {
+                resultCounts[resultKey] = { count: 0, result: submission.result };
+            }
+            resultCounts[resultKey].count++;
+        }
+
+        // Check if any result has majority approval (more than half of league members)
         let consensus = false;
         let consensusResult: typeof result | undefined;
+        let majorityReached = false;
 
-        if (allSubmitted && wagererIds.length > 0) {
-            // Check if all submissions are the same
-            const firstResult = JSON.stringify(submissions[wagererIds[0]].result);
-            consensus = wagererIds.every(id =>
-                JSON.stringify(submissions[id].result) === firstResult
-            );
-
-            if (consensus) {
-                consensusResult = submissions[wagererIds[0]].result;
+        for (const [, data] of Object.entries(resultCounts)) {
+            if (data.count >= majorityThreshold) {
+                consensus = true;
+                majorityReached = true;
+                consensusResult = data.result;
+                break;
             }
         }
 
@@ -928,7 +1072,7 @@ export async function submitDisputeResult(
             disputeConsensus: consensus
         };
 
-        // If consensus reached, update the winning outcome and mark for auto-finalization
+        // If majority consensus reached, update the winning outcome and mark for auto-finalization
         if (consensus && consensusResult !== undefined) {
             updateData.winningOutcome = consensusResult;
             updateData.status = "PROOFING";
@@ -940,7 +1084,7 @@ export async function submitDisputeResult(
 
         transaction.update(betRef, updateData);
 
-        return { consensus, consensusResult };
+        return { consensus, consensusResult, majorityReached };
     });
 }
 
@@ -951,15 +1095,25 @@ export async function submitDisputeResult(
  * Mark bet as INVALID and refund all wagers
  */
 export async function markBetInvalidAndRefund(leagueId: string, betId: string) {
-    const { getDocs, collection } = await import("firebase/firestore");
+    const { getDocs, collection, getDoc } = await import("firebase/firestore");
     const betRef = doc(db, "leagues", leagueId, "bets", betId);
+
+    // Get bet data and league name for notification before transaction
+    const betSnap = await getDoc(betRef);
+    const bet = betSnap.exists() ? { id: betSnap.id, ...betSnap.data() } as Bet : null;
+    const leagueSnap = await getDoc(doc(db, "leagues", leagueId));
+    const leagueName = leagueSnap.exists() ? leagueSnap.data().name : undefined;
+
+    // Get wagerer IDs before transaction
+    const wagersCol = collection(db, "leagues", leagueId, "bets", betId, "wagers");
+    const wagersSnapForNotifs = await getDocs(wagersCol);
+    const wagererIds = wagersSnapForNotifs.docs.map(d => d.data().userId as string);
 
     await runTransaction(db, async (transaction) => {
         const betSnap = await transaction.get(betRef);
         if (!betSnap.exists()) throw new Error("Bet not found");
 
         // Get all wagers
-        const wagersCol = collection(db, "leagues", leagueId, "bets", betId, "wagers");
         const wagersSnap = await getDocs(wagersCol);
 
         // Refund each wager
@@ -984,6 +1138,17 @@ export async function markBetInvalidAndRefund(leagueId: string, betId: string) {
             resolvedAt: serverTimestamp()
         });
     });
+
+    // Send refund notifications (fire and forget)
+    Promise.all(
+        wagererIds.map(userId =>
+            createNotification(userId, "BET_REFUNDED", "♻️ Bet Refunded", `"${bet?.question || 'Bet'}" was marked invalid. Your wager has been refunded.`, {
+                betId,
+                leagueId,
+                leagueName
+            })
+        )
+    ).catch(console.error);
 }
 
 /**

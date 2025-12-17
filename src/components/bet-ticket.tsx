@@ -138,6 +138,20 @@ export function BetTicket({ amount, potential, selectionDisplay, status = "ACCEP
             {/* Decorative Circles */}
             <div className="absolute -left-2 top-1/2 w-4 h-4 bg-yellow-400 border-r-2 border-black rounded-full" />
             <div className="absolute -right-2 top-1/2 w-4 h-4 bg-yellow-400 border-l-2 border-black rounded-full" />
+
+            {/* Refund Overlay */}
+            {wagerStatus === "PUSH" && (
+                <div className="absolute inset-0 bg-black/60 flex items-center justify-center z-10 p-4">
+                    <div className="bg-white border-4 border-black p-3 transform -rotate-12 shadow-[4px_4px_0_0_rgba(255,255,255,0.5)]">
+                        <p className="text-2xl font-black text-black uppercase tracking-widest text-center leading-none">
+                            REFUNDED
+                        </p>
+                        <p className="text-[10px] font-bold text-center mt-1 uppercase bg-yellow-400 px-1">
+                            Full Amount Returned
+                        </p>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }
