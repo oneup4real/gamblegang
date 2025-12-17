@@ -8,9 +8,17 @@ interface BetTicketProps {
     status?: string;
     explanation?: string;
     wagerStatus?: "WON" | "LOST" | "PUSH" | "PENDING"; // Add wager status
+    eventDate?: any; // Event date (Firebase Timestamp or Date)
+    verification?: {
+        verified: boolean;
+        source: string;
+        verifiedAt: string;
+        method: "AI_GROUNDING" | "MANUAL" | "API";
+        confidence?: "high" | "medium" | "low";
+    };
 }
 
-export function BetTicket({ amount, potential, selectionDisplay, status = "ACCEPTED", explanation, wagerStatus = "PENDING" }: BetTicketProps) {
+export function BetTicket({ amount, potential, selectionDisplay, status = "ACCEPTED", explanation, wagerStatus = "PENDING", eventDate, verification }: BetTicketProps) {
     const t = useTranslations('Bets.BetTicket');
 
     // Determine colors based on wager status
@@ -29,8 +37,9 @@ export function BetTicket({ amount, potential, selectionDisplay, status = "ACCEP
             isPush ? "text-yellow-800" :
                 "text-black";
 
-    const resultLabel = isResolved ? t('netResult') : t('estProfit');
-    const resultColor = isWon ? "text-green-600" : isLost ? "text-red-600" : isPush ? "text-yellow-600" : "text-green-600";
+    // Ticket always shows "Total Cashout" (full payout amount, not profit)
+    const resultLabel = "Total Cashout";
+    const resultColor = isWon ? "text-green-600" : isLost ? "text-red-600" : isPush ? "text-yellow-600" : "text-blue-600";
 
     return (
         <div className="relative bg-white w-full max-w-[300px] mx-auto rounded-sm border-4 border-black shadow-[8px_8px_0_0_rgba(0,0,0,1)] overflow-hidden transform -rotate-2 hover:rotate-0 transition-all duration-300">
@@ -50,6 +59,29 @@ export function BetTicket({ amount, potential, selectionDisplay, status = "ACCEP
                     <p className={`text-xl font-black leading-tight p-2 rounded border-2 border-dashed break-words ${selectionBgColor} ${selectionTextColor}`}>
                         {selectionDisplay}
                     </p>
+
+                    {/* Event Date */}
+                    {eventDate && (
+                        <div className="mt-2 flex items-center justify-center gap-1">
+                            <span className="text-[10px] font-bold text-gray-400">📅</span>
+                            <p className="text-[10px] font-bold text-gray-600">
+                                {(() => {
+                                    try {
+                                        const date = eventDate.toDate ? eventDate.toDate() : new Date(eventDate);
+                                        return date.toLocaleDateString('en-US', {
+                                            weekday: 'short',
+                                            month: 'short',
+                                            day: 'numeric',
+                                            hour: '2-digit',
+                                            minute: '2-digit'
+                                        });
+                                    } catch (e) {
+                                        return 'Date TBD';
+                                    }
+                                })()}
+                            </p>
+                        </div>
+                    )}
                 </div>
 
                 <div className="flex justify-between items-center pt-2 border-t-2 border-black/10 border-dashed">
@@ -66,6 +98,34 @@ export function BetTicket({ amount, potential, selectionDisplay, status = "ACCEP
                     <p className="text-[9px] text-gray-400 font-bold text-center mt-2 italic leading-tight">
                         {explanation}
                     </p>
+                )}
+
+                {/* Verification Stamp - shown on all resolved bets */}
+                {verification && verification.verified && (
+                    <div className="mt-3 p-2 bg-green-50 border-2 border-green-300 border-dashed rounded-lg">
+                        <div className="flex items-center justify-center gap-1 mb-1">
+                            <CheckCircle2 className="h-3 w-3 text-green-600" />
+                            <span className="text-[10px] font-black text-green-700 uppercase">Verified Result</span>
+                        </div>
+                        <div className="space-y-0.5 text-center">
+                            <p className="text-[9px] font-bold text-gray-600">
+                                📰 Source: {verification.source}
+                            </p>
+                            <p className="text-[9px] font-bold text-gray-500">
+                                🕒 {new Date(verification.verifiedAt).toLocaleDateString('en-US', {
+                                    month: 'short',
+                                    day: 'numeric',
+                                    hour: '2-digit',
+                                    minute: '2-digit'
+                                })}
+                            </p>
+                            <p className="text-[8px] font-bold text-gray-400 uppercase">
+                                {verification.method === "AI_GROUNDING" ? "⚡ AI Verified" :
+                                    verification.method === "API" ? "🔗 API Verified" : "👤 Manual"}
+                                {verification.confidence && ` • ${verification.confidence} confidence`}
+                            </p>
+                        </div>
+                    </div>
                 )}
             </div>
 

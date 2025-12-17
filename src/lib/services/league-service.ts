@@ -1,7 +1,7 @@
 import { db } from "@/lib/firebase/config";
-import { collection, doc, runTransaction, serverTimestamp, setDoc, deleteDoc } from "firebase/firestore";
+import { collection, doc, runTransaction, serverTimestamp, setDoc, deleteDoc, getDocs, query, where } from "firebase/firestore";
 import { User } from "firebase/auth";
-import { LeagueRole } from "@/lib/rbac";
+import { LeagueRole, hasPermission } from "@/lib/rbac";
 
 export type LeagueMode = "ZERO_SUM" | "STANDARD";
 export type LeagueStatus = "NOT_STARTED" | "STARTED" | "FINISHED" | "ARCHIVED";
@@ -20,6 +20,7 @@ export interface League {
     memberCount: number;
     mode: LeagueMode;
     status: LeagueStatus;
+    disputeWindowHours?: number; // Configurable dispute period (default: 12)
 }
 
 export interface MatchSettings {
@@ -282,4 +283,63 @@ export async function joinLeague(leagueId: string, user: User) {
             memberCount: (leagueData.memberCount || 0) + 1
         });
     });
+}
+
+/**
+ * Calculate active wagers for all members in a league
+ * Returns a map of userId -> activeWagered amount (excluding resolved/invalid bets)
+ */
+export async function getAllMembersActiveWagers(leagueId: string): Promise<Record<string, number>> {
+    const activeWagersByMember: Record<string, number> = {};
+
+    try {
+        // 1. Get all bets for this league
+        const betsRef = collection(db, "leagues", leagueId, "bets");
+        const betsSnap = await getDocs(betsRef);
+
+        // 2. For each non-resolved bet, get all wagers
+        for (const betDoc of betsSnap.docs) {
+            const bet = betDoc.data();
+
+            // Only count wagers from non-resolved bets
+            if (!["RESOLVED", "INVALID"].includes(bet.status)) {
+                // Get all wagers for this bet
+                const wagersRef = collection(db, "leagues", leagueId, "bets", betDoc.id, "wagers");
+                const wagersSnap = await getDocs(wagersRef);
+
+                // Sum up wagers by user
+                wagersSnap.docs.forEach(wagerDoc => {
+                    const wager = wagerDoc.data();
+                    const userId = wager.userId;
+                    const amount = wager.amount || 0;
+
+                    activeWagersByMember[userId] = (activeWagersByMember[userId] || 0) + amount;
+                });
+            }
+        }
+
+        return activeWagersByMember;
+    } catch (error) {
+        console.error("Error calculating active wagers:", error);
+        return {};
+    }
+}
+
+/**
+ * Update a member's role in the league
+ * Only OWNER can assign roles
+ */
+export async function updateMemberRole(
+    leagueId: string,
+    memberId: string,
+    newRole: LeagueRole,
+    currentUserRole: LeagueRole
+): Promise<void> {
+    // Permission check - only OWNER can assign roles
+    if (!hasPermission(currentUserRole, "ASSIGN_ROLE")) {
+        throw new Error("You don't have permission to assign roles");
+    }
+
+    const memberRef = doc(db, "leagues", leagueId, "members", memberId);
+    await setDoc(memberRef, { role: newRole }, { merge: true });
 }

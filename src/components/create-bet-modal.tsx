@@ -611,8 +611,22 @@ export function CreateBetModal({ leagueId, leagueMode, isOpen, onClose, onSucces
                                                             {selectedBulkIndices.includes(i) && <div className="w-2 h-2 bg-white rounded-sm" />}
                                                         </div>
                                                         <div className="flex-1">
-                                                            <p className="font-bold text-sm text-black">{bet.question}</p>
-                                                            <p className="text-xs text-gray-500 font-bold">{new Date(bet.date).toLocaleString()} • {bet.matchHome} vs {bet.matchAway}</p>
+                                                            <div className="flex items-center gap-2 mb-1">
+                                                                <p className="font-bold text-sm text-black truncate">{bet.question}</p>
+                                                                {bet.verified && (
+                                                                    <span className="px-2 py-0.5 bg-green-100 border border-green-300 rounded text-[10px] font-black text-green-700 uppercase shrink-0">
+                                                                        ✓ Verified
+                                                                    </span>
+                                                                )}
+                                                            </div>
+                                                            <p className="text-xs text-gray-500 font-bold">
+                                                                📅 {new Date(bet.date).toLocaleString()} • {bet.matchHome} vs {bet.matchAway}
+                                                            </p>
+                                                            {bet.source && (
+                                                                <p className="text-[10px] text-gray-400 font-bold mt-1">
+                                                                    📰 Source: {bet.source}
+                                                                </p>
+                                                            )}
                                                         </div>
                                                     </div>
                                                 ))}

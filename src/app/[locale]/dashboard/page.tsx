@@ -615,8 +615,8 @@ export default function DashboardPage() {
                                                                         </div>
                                                                         {bet.wager.payout && (
                                                                             <div className="text-center">
-                                                                                <p className="text-gray-500 text-xs font-bold">Payout</p>
-                                                                                <p className="font-black text-lg text-green-600">+{bet.wager.payout} pts</p>
+                                                                                <p className="text-gray-500 text-xs font-bold">Net Result</p>
+                                                                                <p className="font-black text-lg text-green-600">+{bet.wager.payout - bet.wager.amount} pts</p>
                                                                             </div>
                                                                         )}
                                                                     </div>
@@ -654,17 +654,16 @@ export default function DashboardPage() {
                                                                             if (bet.status === "RESOLVED") {
                                                                                 wagerStatus = bet.wager.status?.toUpperCase() as "WON" | "LOST" | "PUSH" || "PENDING";
 
-                                                                                // Show actual result
+                                                                                // TICKET SHOWS TOTAL CASHOUT (full payout amount)
                                                                                 if (bet.wager.status === "WON") {
-                                                                                    const profit = (bet.wager.payout || 0) - bet.wager.amount;
-                                                                                    pot = `+${profit} pts`;
+                                                                                    pot = `${bet.wager.payout || 0} pts`; // Total cashout
                                                                                 } else if (bet.wager.status === "LOST") {
-                                                                                    pot = `-${bet.wager.amount} pts`;
+                                                                                    pot = `0 pts`; // No cashout
                                                                                 } else if (bet.wager.status === "PUSH") {
-                                                                                    pot = `0 pts (Refunded)`;
+                                                                                    pot = `${bet.wager.amount} pts (Refunded)`; // Refund amount
                                                                                 }
                                                                             } else {
-                                                                                // For active bets, show estimate
+                                                                                // For active bets, show estimated total cashout
                                                                                 if (bet.leagueMode === "ARCADE" || bet.leagueMode === "STANDARD") {
                                                                                     // Arcade/Standard mode: fixed payout based on bet type
                                                                                     if (bet.type === "MATCH") {
@@ -687,11 +686,11 @@ export default function DashboardPage() {
                                                                                         pot = "1 pt";
                                                                                     }
                                                                                 } else if (bet.type === "CHOICE" && bet.options) {
-                                                                                    // Zero-Sum mode
+                                                                                    // Zero-Sum mode - estimated total cashout
                                                                                     const idx = Number(bet.wager.selection);
                                                                                     if (bet.options[idx].totalWagered > 0) {
                                                                                         const odds = (bet.totalPool || 0) / bet.options[idx].totalWagered;
-                                                                                        pot = `~${(bet.wager.amount * odds).toFixed(0)} pts`;
+                                                                                        pot = `~${(bet.wager.amount * odds).toFixed(0)} pts`; // Total cashout estimate
                                                                                     }
                                                                                 } else if (bet.type === "MATCH") {
                                                                                     pot = "Dynamic";
@@ -714,13 +713,15 @@ export default function DashboardPage() {
                                                                                     selectionDisplay={sel}
                                                                                     potential={pot}
                                                                                     wagerStatus={wagerStatus}
+                                                                                    eventDate={bet.eventDate}
+                                                                                    verification={bet.verification}
                                                                                 />
                                                                             );
                                                                         })()}
                                                                     </div>
                                                                 )}
 
-                                                                <Link href={`/leagues/${bet.leagueId}`}>
+                                                                <Link href={`/leagues/${bet.leagueId}?bet=${bet.id}`}>
                                                                     <Button className="w-full bg-primary hover:bg-primary/90 text-white font-black border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:translate-y-[-2px] transition-all">
                                                                         View in League <ExternalLink className="ml-2 h-4 w-4" />
                                                                     </Button>

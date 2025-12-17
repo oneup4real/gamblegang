@@ -10,7 +10,7 @@ import { getLeagueBets, Bet, Wager, deleteBet } from "@/lib/services/bet-service
 import { BetCard } from "@/components/bet-card";
 import { BetStatusStepper } from "@/components/bet-status-stepper";
 import { format } from "date-fns";
-import { ArrowLeft, Share2, Crown, User as UserIcon, Settings, Play, Flag, Archive, Coins, AlertOctagon, CheckCircle2, XCircle, Trash2, Pencil, QrCode, Gamepad2, Gavel, TrendingUp, Target, Award, Activity, ExternalLink, ChevronDown, ChevronUp, Ticket as TicketIcon, Timer, Trophy } from "lucide-react";
+import { ArrowLeft, Crown, User as UserIcon, Settings, Play, Flag, Archive, Coins, AlertOctagon, CheckCircle2, XCircle, Trash2, Pencil, QrCode, Gamepad2, Gavel, TrendingUp, Target, Award, Activity, ExternalLink, ChevronDown, ChevronUp, Ticket as TicketIcon, Timer, Trophy } from "lucide-react";
 import QRCode from "react-qr-code";
 import { BetTicket } from "@/components/bet-ticket";
 import Link from "next/link";
@@ -19,6 +19,7 @@ import { LeagueSettingsModal } from "@/components/league-settings-modal";
 import { motion } from "framer-motion";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { useTranslations } from "next-intl";
+import { hasPermission } from "@/lib/rbac";
 
 export default function LeaguePage() {
     const tBets = useTranslations('Bets');
@@ -26,7 +27,9 @@ export default function LeaguePage() {
     const { user, loading } = useAuth();
     const router = useRouter();
     const params = useParams();
+    const searchParams = new URLSearchParams(typeof window !== 'undefined' ? window.location.search : '');
     const leagueId = params.leagueId as string;
+    const targetBetId = searchParams.get('bet'); // Bet to auto-expand and scroll to
 
     const [league, setLeague] = useState<League | null>(null);
     const [members, setMembers] = useState<LeagueMember[]>([]);
@@ -107,6 +110,27 @@ export default function LeaguePage() {
 
         return () => unsub();
     }, [user, loading, leagueId, router]);
+
+    // Auto-expand and scroll to target bet when coming from dashboard
+    useEffect(() => {
+        if (targetBetId && bets.length > 0 && !dataLoading) {
+            // Expand the target bet
+            setExpandedBets(new Set([targetBetId]));
+
+            // Scroll to the bet element after a short delay
+            setTimeout(() => {
+                const betElement = document.getElementById(`bet-${targetBetId}`);
+                if (betElement) {
+                    betElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    // Add a brief highlight effect
+                    betElement.classList.add('ring-4', 'ring-purple-500', 'ring-opacity-75');
+                    setTimeout(() => {
+                        betElement.classList.remove('ring-4', 'ring-purple-500', 'ring-opacity-75');
+                    }, 2000);
+                }
+            }, 300);
+        }
+    }, [targetBetId, bets, dataLoading]);
 
     const refreshMyWagers = async (currentBets: Bet[]) => {
         if (!user || !leagueId) return;
@@ -277,8 +301,9 @@ export default function LeaguePage() {
 
         Object.entries(myActiveWagers).forEach(([betId, wager]) => {
             const bet = bets.find(b => b.id === betId);
-            // Only consider active bets for these stats
-            if (bet && ["OPEN", "LOCKED", "PROOFING", "DISPUTED"].includes(bet.status)) {
+            // Only consider NON-RESOLVED bets for active stats
+            // IMPORTANT: RESOLVED bets should NOT count toward active wagers
+            if (bet && !["RESOLVED", "INVALID"].includes(bet.status)) {
                 activeWagered += wager.amount;
 
                 // Calculate potential win for CHOICE bets where we know the pool distribution
@@ -286,7 +311,7 @@ export default function LeaguePage() {
                     const optIndex = Number(wager.selection);
                     const option = bet.options[optIndex];
                     if (option && option.totalWagered > 0) {
-                        // Simple Tote calculation: (My Stake / Total Stake on Option) * Total Pool
+                        //Simple Tote calculation: (My Stake / Total Stake on Option) * Total Pool
                         // Subtract stake to get just the "Win" amount (profit)
                         const estimatedReturn = (wager.amount / option.totalWagered) * bet.totalPool;
                         potentialWin += (estimatedReturn - wager.amount);
@@ -306,6 +331,20 @@ export default function LeaguePage() {
             potentialWin: Math.floor(potentialWin)
         };
     }, [myActiveWagers, bets]);
+
+    // Fetch all members' active wagers (public information in league)
+    const [allMembersActiveWagers, setAllMembersActiveWagers] = useState<Record<string, number>>({});
+
+    useEffect(() => {
+        async function fetchAllActiveWagers() {
+            if (league?.id) {
+                const { getAllMembersActiveWagers } = await import("@/lib/services/league-service");
+                const activeWagers = await getAllMembersActiveWagers(league.id);
+                setAllMembersActiveWagers(activeWagers);
+            }
+        }
+        fetchAllActiveWagers();
+    }, [league?.id, bets]); // Re-fetch when bets change
 
     if (loading || dataLoading) {
 
@@ -394,7 +433,7 @@ export default function LeaguePage() {
         }
 
         return (
-            <div key={bet.id} className="bg-white border-2 border-black rounded-xl overflow-hidden hover:shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] transition-all">
+            <div key={bet.id} id={`bet-${bet.id}`} className="bg-white border-2 border-black rounded-xl overflow-hidden hover:shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] transition-all">
                 <button
                     onClick={() => {
                         const newExpanded = new Set(expandedBets);
@@ -425,11 +464,50 @@ export default function LeaguePage() {
                         )}
                     </div>
 
-                    {/* Bottom Row: Question | Odds/Return | Icons */}
+                    {/* Bottom Row: Question | Date/Timer | Odds/Return | Icons */}
                     <div className="flex items-center justify-between gap-4">
                         {/* Question Text */}
                         <div className="flex-1 min-w-0">
                             <p className="font-black text-black text-lg truncate">{bet.question}</p>
+
+                            {/* Event Date & Betting Timer */}
+                            {(bet.eventDate || bet.closesAt) && (
+                                <div className="flex items-center gap-3 mt-1">
+                                    {/* Event Date */}
+                                    {bet.eventDate && (
+                                        <div className="flex items-center gap-1">
+                                            <span className="text-[10px] font-bold text-gray-400">📅</span>
+                                            <span className="text-[10px] font-bold text-gray-600">
+                                                {new Date(bet.eventDate.toDate()).toLocaleDateString('en-US', {
+                                                    month: 'short',
+                                                    day: 'numeric',
+                                                    hour: '2-digit',
+                                                    minute: '2-digit'
+                                                })}
+                                            </span>
+                                        </div>
+                                    )}
+
+                                    {/* Betting Timer */}
+                                    {bet.closesAt && bet.status === "OPEN" && (() => {
+                                        const now = new Date();
+                                        const closesAt = bet.closesAt.toDate();
+                                        const hoursLeft = Math.max(0, Math.floor((closesAt.getTime() - now.getTime()) / (1000 * 60 * 60)));
+                                        const minutesLeft = Math.max(0, Math.floor(((closesAt.getTime() - now.getTime()) % (1000 * 60 * 60)) / (1000 * 60)));
+
+                                        if (hoursLeft === 0 && minutesLeft === 0) return null;
+
+                                        return (
+                                            <div className="flex items-center gap-1">
+                                                <span className="text-[10px] font-bold text-gray-400">⏰</span>
+                                                <span className={`text-[10px] font-bold ${hoursLeft < 1 ? 'text-red-500' : 'text-green-600'}`}>
+                                                    {hoursLeft}h {minutesLeft}m left to bet
+                                                </span>
+                                            </div>
+                                        );
+                                    })()}
+                                </div>
+                            )}
                         </div>
 
                         {/* Odds & Return */}
@@ -439,7 +517,7 @@ export default function LeaguePage() {
                                 <p className="font-black text-black text-lg">{displayedOdds}</p>
                             </div>
                             <div className="text-center">
-                                <p className="text-gray-500 text-xs font-bold">{tBets('estReturn')}</p>
+                                <p className="text-gray-500 text-xs font-bold">Net Result</p>
                                 <p className={`font-black text-lg ${returnColor}`}>{displayedReturn}</p>
                             </div>
                         </div>
@@ -545,13 +623,6 @@ export default function LeaguePage() {
                                 </button>
                             </>
                         )}
-                        <button
-                            onClick={copyInviteLink}
-                            className="p-2 bg-white border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] rounded-lg hover:translate-y-[2px] hover:shadow-none transition-all text-primary hover:bg-primary/10"
-                            title="Copy Invite Link"
-                        >
-                            <Share2 className="h-5 w-5" />
-                        </button>
                         <button
                             onClick={() => setIsQROpen(true)}
                             className="p-2 bg-white border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] rounded-lg hover:translate-y-[2px] hover:shadow-none transition-all text-purple-600 hover:bg-purple-50"
@@ -670,11 +741,11 @@ export default function LeaguePage() {
                                         <div>
                                             <p className="text-sm font-black uppercase text-white/80 tracking-widest">My Chips</p>
                                             <p className="text-5xl font-black text-white drop-shadow-[4px_4px_0_rgba(0,0,0,0.3)] font-comic">
-                                                {/* Show total chips (wallet + active wagers) */}
-                                                {(myMemberProfile.points + (myMemberProfile.totalInvested || 0)).toLocaleString()}
+                                                {/* Show total chips (wallet + active wagers from non-resolved bets only) */}
+                                                {(myMemberProfile.points + stats.activeWagered).toLocaleString()}
                                             </p>
                                             <p className="text-xs text-white/90 font-bold mt-1">
-                                                Wallet: {myMemberProfile.points.toLocaleString()} | Active: {(myMemberProfile.totalInvested || 0).toLocaleString()}
+                                                Wallet: {myMemberProfile.points.toLocaleString()} | Active: {stats.activeWagered.toLocaleString()}
                                             </p>
                                             <p className="text-xs text-white/70 font-bold mt-0.5">
                                                 Total Invested: {(myMemberProfile.totalBought || (league.buyInType === "FIXED" ? league.startCapital : 0)).toLocaleString()} chips
@@ -796,8 +867,8 @@ export default function LeaguePage() {
                                             </div>
                                             <div className="text-right">
                                                 <div className="font-black text-2xl text-primary drop-shadow-[2px_2px_0_rgba(0,0,0,1)] font-comic">
-                                                    {/* Show total chips (wallet + active wagers) */}
-                                                    {(member.points + (member.totalInvested || 0)).toLocaleString()} pts
+                                                    {/* Show wallet + active wagers for all members */}
+                                                    {(member.points + (allMembersActiveWagers[member.uid] || 0)).toLocaleString()} pts
                                                 </div>
                                             </div>
                                         </div>
@@ -840,7 +911,7 @@ export default function LeaguePage() {
 
                                         {/* New Bet Button */}
                                         {/* New Bet Button */}
-                                        {(league.status === "STARTED" || (league.status === "NOT_STARTED" && isOwner)) && (
+                                        {(league.status === "STARTED" || (league.status === "NOT_STARTED" && isOwner)) && myMemberProfile && hasPermission(myMemberProfile.role, "CREATE_BET") && (
                                             <>
                                                 <div className="h-8 w-[2px] bg-gray-200 mx-1"></div>
                                                 <button
@@ -1074,7 +1145,7 @@ export default function LeaguePage() {
                                     }}
                                     className="w-full py-3 bg-black text-white font-black uppercase rounded-lg border-2 border-black shadow-[4px_4px_0px_0px_rgba(120,120,120,1)] hover:translate-y-[-2px] hover:shadow-[6px_6px_0px_0px_rgba(120,120,120,1)] transition-all flex items-center justify-center gap-2"
                                 >
-                                    <Share2 className="h-4 w-4" /> Copy Link
+                                    <CheckCircle2 className="h-4 w-4" /> Copy Link
                                 </button>
                             </div>
                         </div>

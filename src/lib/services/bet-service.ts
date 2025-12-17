@@ -40,11 +40,30 @@ export interface Bet {
     aiVerification?: string; // AI suggestion
     resolvedAt?: any;
     resolvedBy?: string;
+    // Verification stamp - shown on all bet tickets
+    verification?: {
+        verified: boolean;
+        source: string; // e.g., "ESPN", "NBA.com", "AI Web Search"
+        verifiedAt: string; // ISO timestamp
+        method: "AI_GROUNDING" | "MANUAL" | "API";
+        confidence?: "high" | "medium" | "low";
+    };
     // Dispute fields
     disputeDeadline?: any; // Timestamp when dispute period ends (24-48h after proofing)
     disputedBy?: string[]; // User IDs who disputed
     disputeActive?: boolean; // Whether dispute is currently active
     votes?: { [userId: string]: "approve" | "reject" }; // Voting on the result
+    pendingResolvedBy?: string; // Who submitted the result during proofing
+    // Dispute submissions - each player submits what they think the correct result is
+    disputeSubmissions?: {
+        [userId: string]: {
+            result: string | number | { home: number; away: number };
+            submittedAt: string;
+            displayName?: string;
+        }
+    };
+    disputeConsensus?: boolean; // True if all submissions agree
+    autoFinalize?: boolean; // Flag for automatic finalization after deadline/consensus
 }
 
 export interface Wager {
@@ -219,7 +238,19 @@ export function getReturnPotential(wagerAmount: number, newTotalPool: number, ne
 }
 
 
-export async function resolveBet(leagueId: string, betId: string, user: User, outcome: string | number | { home: number, away: number }) {
+export async function resolveBet(
+    leagueId: string,
+    betId: string,
+    user: User,
+    outcome: string | number | { home: number, away: number },
+    verification?: {
+        verified: boolean;
+        source: string;
+        verifiedAt: string;
+        method: "AI_GROUNDING" | "MANUAL" | "API";
+        confidence?: "high" | "medium" | "low";
+    }
+) {
     // 0. Fetch League to check Settings & Mode
     const leagueRef = doc(db, "leagues", leagueId);
     const leagueSnap = await getDoc(leagueRef);
@@ -230,14 +261,43 @@ export async function resolveBet(leagueId: string, betId: string, user: User, ou
     if (!betSnap.exists()) throw new Error("Bet not found");
     const bet = { id: betSnap.id, ...betSnap.data() } as Bet;
 
-    // 1. Mark bet as RESOLVED
+    // Check if this is finalizing a PROOFING bet (after dispute deadline) or starting proof
+    const isFinalizingProof = bet.status === "PROOFING" && bet.disputeDeadline;
+
     const batch = writeBatch(db);
-    batch.update(betRef, {
+
+    if (!isFinalizingProof) {
+        // First confirmation: Set to PROOFING with dispute deadline
+        const disputeWindowHours = league?.disputeWindowHours || 12; // Default 12 hours
+        const disputeDeadline = new Date();
+        disputeDeadline.setHours(disputeDeadline.getHours() + disputeWindowHours);
+
+        const updateData: any = {
+            status: "PROOFING",
+            winningOutcome: outcome,
+            disputeDeadline: disputeDeadline,
+            disputeActive: false,
+            pendingResolvedBy: user.uid
+        };
+
+        // Add verification stamp if provided
+        if (verification) {
+            updateData.verification = verification;
+        }
+
+        batch.update(betRef, updateData);
+        await batch.commit();
+        return; // Don't process payouts yet - wait for dispute period
+    }
+
+    // Finalizing: Mark bet as RESOLVED with verification metadata
+    const updateData: any = {
         status: "RESOLVED",
-        winningOutcome: outcome,
         resolvedAt: serverTimestamp(),
-        resolvedBy: user.uid
-    });
+        resolvedBy: bet.pendingResolvedBy || user.uid
+    };
+
+    batch.update(betRef, updateData);
 
     const wagersRef = collection(db, "leagues", leagueId, "bets", betId, "wagers");
     const wagersSnap = await getDocs(wagersRef);
@@ -382,6 +442,37 @@ export async function confirmVerification(leagueId: string, betId: string, user:
     // For now, assume it just keeps it in PROOFING but maybe validates it visually.
 }
 
+/**
+ * Finalize a bet after the dispute period has ended
+ * This processes payouts and sets the bet to RESOLVED
+ */
+export async function finalizeBet(leagueId: string, betId: string, user: User) {
+    const betRef = doc(db, "leagues", leagueId, "bets", betId);
+    const betSnap = await getDoc(betRef);
+    if (!betSnap.exists()) throw new Error("Bet not found");
+    const bet = { id: betSnap.id, ...betSnap.data() } as Bet;
+
+    // Verify bet is in PROOFING status
+    if (bet.status !== "PROOFING") {
+        throw new Error("Bet is not in proofing status");
+    }
+
+    // Verify dispute deadline has passed
+    if (bet.disputeDeadline) {
+        const deadline = bet.disputeDeadline.toDate ? bet.disputeDeadline.toDate() : new Date(bet.disputeDeadline);
+        if (new Date() < deadline) {
+            throw new Error("Dispute period has not ended yet");
+        }
+    }
+
+    // Call resolveBet which will detect PROOFING status and finalize
+    if (!bet.winningOutcome) {
+        throw new Error("No winning outcome set");
+    }
+    await resolveBet(leagueId, betId, user, bet.winningOutcome, bet.verification);
+}
+
+
 export async function getLeagueBets(leagueId: string) {
     const betsRef = collection(db, "leagues", leagueId, "bets");
     const snapshot = await getDocs(betsRef);
@@ -415,6 +506,14 @@ export interface DashboardBetInfo {
     disputeDeadline?: any;
     eventDate?: any;
     votes?: { [userId: string]: "approve" | "reject" };
+    // Verification stamp
+    verification?: {
+        verified: boolean;
+        source: string;
+        verifiedAt: string;
+        method: "AI_GROUNDING" | "MANUAL" | "API";
+        confidence?: "high" | "medium" | "low";
+    };
 }
 
 export interface DashboardBetWithWager extends DashboardBetInfo {
@@ -771,18 +870,96 @@ export async function checkDisputeVoting(leagueId: string, betId: string): Promi
 }
 
 /**
+ * Submit a result during dispute - players can submit what they think the correct result is
+ * If all players submit the same result, consensus is reached
+ */
+export async function submitDisputeResult(
+    leagueId: string,
+    betId: string,
+    userId: string,
+    result: string | number | { home: number; away: number },
+    displayName?: string
+): Promise<{ consensus: boolean; consensusResult?: typeof result }> {
+    const betRef = doc(db, "leagues", leagueId, "bets", betId);
+
+    return await runTransaction(db, async (transaction) => {
+        const betSnap = await transaction.get(betRef);
+        if (!betSnap.exists()) throw new Error("Bet not found");
+
+        const bet = betSnap.data() as Bet;
+
+        if (bet.status !== "DISPUTED") {
+            throw new Error("Bet is not in disputed status");
+        }
+
+        // Add/update submission
+        const submissions = bet.disputeSubmissions || {};
+        submissions[userId] = {
+            result,
+            submittedAt: new Date().toISOString(),
+            displayName
+        };
+
+        // Get all wagerers to check if everyone has submitted
+        const wagersColRef = collection(db, "leagues", leagueId, "bets", betId, "wagers");
+        const wagersSnapshot = await getDocs(wagersColRef);
+        const wagererIds = wagersSnapshot.docs.map(d => d.id);
+
+        // Check for consensus - all wagerers must have submitted and agree
+        const allSubmitted = wagererIds.every(id => submissions[id]);
+        let consensus = false;
+        let consensusResult: typeof result | undefined;
+
+        if (allSubmitted && wagererIds.length > 0) {
+            // Check if all submissions are the same
+            const firstResult = JSON.stringify(submissions[wagererIds[0]].result);
+            consensus = wagererIds.every(id =>
+                JSON.stringify(submissions[id].result) === firstResult
+            );
+
+            if (consensus) {
+                consensusResult = submissions[wagererIds[0]].result;
+            }
+        }
+
+        // Update bet with new submission
+        const updateData: any = {
+            disputeSubmissions: submissions,
+            disputeConsensus: consensus
+        };
+
+        // If consensus reached, update the winning outcome and mark for auto-finalization
+        if (consensus && consensusResult !== undefined) {
+            updateData.winningOutcome = consensusResult;
+            updateData.status = "PROOFING";
+            updateData.disputeActive = false;
+            updateData.autoFinalize = true; // Flag for auto-finalization
+            // Set immediate deadline (already passed)
+            updateData.disputeDeadline = new Date();
+        }
+
+        transaction.update(betRef, updateData);
+
+        return { consensus, consensusResult };
+    });
+}
+
+
+
+
+/**
  * Mark bet as INVALID and refund all wagers
  */
 export async function markBetInvalidAndRefund(leagueId: string, betId: string) {
     const { getDocs, collection } = await import("firebase/firestore");
     const betRef = doc(db, "leagues", leagueId, "bets", betId);
-    const wagersCol = collection(db, "leagues", leagueId, "bets", betId, "wagers");
 
     await runTransaction(db, async (transaction) => {
         const betSnap = await transaction.get(betRef);
         if (!betSnap.exists()) throw new Error("Bet not found");
 
         // Get all wagers
+        const wagersCol = collection(db, "leagues", leagueId, "bets", betId, "wagers");
         const wagersSnap = await getDocs(wagersCol);
 
         // Refund each wager

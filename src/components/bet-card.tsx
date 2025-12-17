@@ -1,6 +1,6 @@
 "use client";
 
-import { Bet, BetType, placeWager, resolveBet, calculateOdds, getReturnPotential, Wager, startProofing, confirmVerification, publishBet, disputeBetResult, voteOnDisputedBet, markBetInvalidAndRefund, checkDisputeVoting } from "@/lib/services/bet-service";
+import { Bet, BetType, placeWager, resolveBet, calculateOdds, getReturnPotential, Wager, startProofing, confirmVerification, publishBet, disputeBetResult, voteOnDisputedBet, markBetInvalidAndRefund, checkDisputeVoting, finalizeBet, submitDisputeResult } from "@/lib/services/bet-service";
 import { aiAutoResolveBet, verifyBetResult } from "@/app/actions/ai-bet-actions";
 import { useAuth } from "@/components/auth-provider";
 import { useState, useEffect } from "react";
@@ -54,6 +54,13 @@ export function BetCard({ bet, userPoints, userWager, mode, onEdit, onWagerSucce
     const [disputeLoading, setDisputeLoading] = useState(false);
     const [aiResolving, setAiResolving] = useState(false);
     const [aiHighlighted, setAiHighlighted] = useState(false);
+    // Track verification data from AI
+    const [verificationData, setVerificationData] = useState<any>(null);
+    // Dispute submission state
+    const [disputeHome, setDisputeHome] = useState<number | "">("");
+    const [disputeAway, setDisputeAway] = useState<number | "">("");
+    const [disputeSubmitting, setDisputeSubmitting] = useState(false);
+    const hasSubmittedDispute = bet.disputeSubmissions?.[user?.uid || ""] !== undefined;
 
     // Dynamic Odds (Zero Sum)
     const [dynamicMatchOdds, setDynamicMatchOdds] = useState<{ [key: string]: string }>({});
@@ -80,7 +87,7 @@ export function BetCard({ bet, userPoints, userWager, mode, onEdit, onWagerSucce
                     const pools: { [key: string]: number } = {};
                     wagers.forEach(w => {
                         const sel = w.selection as { home: number, away: number };
-                        const key = `${sel.home}-${sel.away}`;
+                        const key = `${sel.home} -${sel.away} `;
                         pools[key] = (pools[key] || 0) + w.amount;
                     });
                     const odds: { [key: string]: string } = {};
@@ -104,6 +111,30 @@ export function BetCard({ bet, userPoints, userWager, mode, onEdit, onWagerSucce
             fetchWagersForOdds();
         }
     }, [bet, mode]);
+
+    // Auto-finalize PROOFING bets when deadline has passed
+    useEffect(() => {
+        const checkAutoFinalize = async () => {
+            // Only proceed if bet is in PROOFING status and we're the owner or it's flagged for auto-finalize
+            if (bet.status !== "PROOFING" || !bet.disputeDeadline || !user) return;
+
+            const deadline = bet.disputeDeadline.toDate ? bet.disputeDeadline.toDate() : new Date(bet.disputeDeadline);
+            const isPastDeadline = new Date() >= deadline;
+
+            // Auto-finalize if deadline passed and (owner viewing OR autoFinalize flag set)
+            if (isPastDeadline && (isOwner || bet.autoFinalize)) {
+                try {
+                    console.log("Auto-finalizing bet:", bet.id);
+                    await finalizeBet(bet.leagueId, bet.id, user);
+                    console.log("Bet auto-finalized successfully");
+                } catch (err) {
+                    console.error("Auto-finalization failed:", err);
+                }
+            }
+        };
+
+        checkAutoFinalize();
+    }, [bet.id, bet.status, bet.disputeDeadline, bet.autoFinalize, user, isOwner]);
 
 
     // --- HANDLERS ---
@@ -182,10 +213,10 @@ export function BetCard({ bet, userPoints, userWager, mode, onEdit, onWagerSucce
                     potentialDisplay = `~${(amount * odds).toFixed(0)} pts`;
                 }
             } else if (bet.type === "MATCH") {
-                selectionDisplay = `${prediction.home} - ${prediction.away}`;
+                selectionDisplay = `${prediction.home} - ${prediction.away} `;
                 potentialDisplay = "High Return";
             } else if (bet.type === "RANGE") {
-                selectionDisplay = `${prediction} ${bet.rangeUnit || ""}`;
+                selectionDisplay = `${prediction} ${bet.rangeUnit || ""} `;
             }
 
             setLastWager({ amount, selectionDisplay, potential: potentialDisplay });
@@ -240,8 +271,22 @@ export function BetCard({ bet, userPoints, userWager, mode, onEdit, onWagerSucce
 
         setLoading(true);
         try {
-            const result = await resolveBet(bet.leagueId, bet.id, user, outcome);
-            alert(`Resolved! ${result.winnerCount} winners.`);
+            // Use AI verification data if available, otherwise mark as manual
+            const verification = verificationData || {
+                verified: true,
+                source: "Manual Entry",
+                verifiedAt: new Date().toISOString(),
+                method: "MANUAL" as const
+            };
+
+            const result = await resolveBet(bet.leagueId, bet.id, user, outcome, verification);
+            if (result) {
+                // Finalized - payouts processed
+                alert(`Resolved! ${result.winnerCount} winners.`);
+            } else {
+                // Sent to PROOFING - waiting for dispute period
+                alert("Result submitted! Players now have time to dispute before payouts are processed.");
+            }
         } catch (error) {
             console.error(error);
             alert("Failed to resolve bet");
@@ -271,7 +316,7 @@ export function BetCard({ bet, userPoints, userWager, mode, onEdit, onWagerSucce
         try {
             await voteOnDisputedBet(bet.leagueId, bet.id, user.uid, vote);
             setUserVote(vote);
-            alert(`Vote recorded: ${vote === "approve" ? "✅ Approved" : "❌ Rejected"}`);
+            alert(`Vote recorded: ${vote === "approve" ? "✅ Approved" : "❌ Rejected"} `);
             if (onWagerSuccess) onWagerSuccess();
         } catch (error: any) {
             alert(error.message || "Failed to vote");
@@ -302,7 +347,7 @@ export function BetCard({ bet, userPoints, userWager, mode, onEdit, onWagerSucce
         if (diff <= 0) return "Expired";
         const hours = Math.floor(diff / (1000 * 60 * 60));
         const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
-        return `${hours}h ${minutes}m`;
+        return `${hours}h ${minutes} m`;
     };
 
     const handleAIResolve = async () => {
@@ -320,6 +365,10 @@ export function BetCard({ bet, userPoints, userWager, mode, onEdit, onWagerSucce
                 setWinningOption(String(result.optionIndex));
             } else if (result.type === "RANGE") {
                 setWinningRange(result.value);
+            }
+            // Store verification data if provided
+            if (result.verification) {
+                setVerificationData(result.verification);
             }
             setAiHighlighted(true);
             setTimeout(() => setAiHighlighted(false), 3000);
@@ -368,7 +417,7 @@ export function BetCard({ bet, userPoints, userWager, mode, onEdit, onWagerSucce
                 <div className="w-full">
                     {/* Old Badge only if Stepper not active */}
                     {((bet.status === "OPEN" && !isExpired) || bet.status === "DRAFT" || bet.status === "INVALID") && (
-                        <span className={`inline-flex items-center border-2 border-black rounded-lg px-2 py-0.5 text-xs font-bold uppercase tracking-wider shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] ${getStatusBadgeClass()}`}>
+                        <span className={`inline - flex items - center border - 2 border - black rounded - lg px - 2 py - 0.5 text - xs font - bold uppercase tracking - wider shadow - [2px_2px_0px_0px_rgba(0, 0, 0, 1)] ${getStatusBadgeClass()} `}>
                             {bet.status === "INVALID" ? "♻️ INVALID (REFUNDED)" :
                                 bet.status === "OPEN" && isExpired ? "UNDER REVIEW" :
                                     bet.status} • {bet.type}
@@ -384,7 +433,7 @@ export function BetCard({ bet, userPoints, userWager, mode, onEdit, onWagerSucce
                     <p className="text-xs text-muted-foreground mt-1 font-bold">
                         {mode === "ZERO_SUM"
                             ? `Total Pot: ${bet.totalPool} pts`
-                            : `Total Bets: ${bet.wagerCount || 0}`}
+                            : `Total Bets: ${bet.wagerCount || 0} `}
                         {bet.eventDate && (
                             <span className="ml-2 bg-yellow-100 text-yellow-800 px-1 border border-black rounded-md">
                                 Kick-off: {new Date(bet.eventDate.seconds * 1000).toLocaleString()}
@@ -408,14 +457,14 @@ export function BetCard({ bet, userPoints, userWager, mode, onEdit, onWagerSucce
                     <p className="text-xl font-black mt-1 text-black">
                         {(() => {
                             if (bet.type === "MATCH" && typeof bet.winningOutcome === "object" && bet.winningOutcome) {
-                                return `${(bet.winningOutcome as any).home} - ${(bet.winningOutcome as any).away}`;
+                                return `${(bet.winningOutcome as any).home} - ${(bet.winningOutcome as any).away} `;
                             }
                             if (bet.type === "CHOICE" && bet.options) {
                                 const idx = Number(bet.winningOutcome);
                                 return bet.options[idx]?.text || String(bet.winningOutcome);
                             }
                             if (bet.type === "RANGE") {
-                                return `${bet.winningOutcome} ${bet.rangeUnit || ''}`;
+                                return `${bet.winningOutcome} ${bet.rangeUnit || ''} `;
                             }
                             return String(bet.winningOutcome);
                         })()}
@@ -445,17 +494,16 @@ export function BetCard({ bet, userPoints, userWager, mode, onEdit, onWagerSucce
                         if (bet.status === "RESOLVED") {
                             wagerStatus = userWager.status?.toUpperCase() as "WON" | "LOST" | "PUSH" || "PENDING";
 
-                            // Show actual result
+                            // TICKET SHOWS TOTAL CASHOUT (full payout amount)
                             if (userWager.status === "WON") {
-                                const profit = (userWager.payout || 0) - userWager.amount;
-                                pot = `+${profit} pts`;
+                                pot = `${userWager.payout || 0} pts`; // Total cashout
                             } else if (userWager.status === "LOST") {
-                                pot = `-${userWager.amount} pts`;
+                                pot = `0 pts`; // No cashout
                             } else if (userWager.status === "PUSH") {
-                                pot = `0 pts (Refunded)`;
+                                pot = `${userWager.amount} pts(Refunded)`; // Refund amount
                             }
                         } else {
-                            // For active bets, show estimate
+                            // For active bets, show estimated total cashout
                             // Arcade: Fixed 1 pt return
                             if (mode !== "ZERO_SUM") {
                                 pot = "1 pt";
@@ -467,16 +515,16 @@ export function BetCard({ bet, userPoints, userWager, mode, onEdit, onWagerSucce
                             sel = bet.options[idx]?.text || "Option";
                             if (mode === "ZERO_SUM" && bet.status !== "RESOLVED" && bet.options[idx].totalWagered > 0) {
                                 const odds = bet.totalPool / bet.options[idx].totalWagered;
-                                pot = `~${(userWager.amount * odds).toFixed(0)} pts`;
+                                pot = `~${(userWager.amount * odds).toFixed(0)} pts`; // Total cashout estimate
                             }
                         } else if (bet.type === "MATCH" && typeof userWager.selection === "object") {
                             const s = userWager.selection as any;
-                            sel = `${s.home} - ${s.away}`;
+                            sel = `${s.home} - ${s.away} `;
                             if (mode === "ZERO_SUM" && bet.status !== "RESOLVED") {
-                                pot = `~${(userWager.amount * 2).toFixed(0)} pts*`;
+                                pot = `~${(userWager.amount * 2).toFixed(0)} pts * `; // Total cashout estimate
                             }
                         } else if (bet.type === "RANGE") {
-                            sel = `${userWager.selection} ${bet.rangeUnit || ""}`;
+                            sel = `${userWager.selection} ${bet.rangeUnit || ""} `;
                         }
 
                         return (
@@ -485,6 +533,8 @@ export function BetCard({ bet, userPoints, userWager, mode, onEdit, onWagerSucce
                                 selectionDisplay={sel}
                                 potential={pot}
                                 wagerStatus={wagerStatus}
+                                eventDate={bet.eventDate}
+                                verification={bet.verification}
                                 explanation={pot.includes("*") ? "* Odds fluctuate based on total pool distribution" : undefined}
                             />
                         );
@@ -498,7 +548,7 @@ export function BetCard({ bet, userPoints, userWager, mode, onEdit, onWagerSucce
                     <div className="flex items-center gap-2 mb-2 p-2 bg-purple-100 border-2 border-black rounded-lg w-max">
                         <Wallet className="h-4 w-4 text-black" />
                         <span className="text-xs font-bold text-black uppercase">
-                            {mode === "ZERO_SUM" ? `Your Points: ${userPoints}` : "Arcade Mode: Free Entry"}
+                            {mode === "ZERO_SUM" ? `Your Points: ${userPoints} ` : "Arcade Mode: Free Entry"}
                         </span>
                     </div>
 
@@ -523,7 +573,7 @@ export function BetCard({ bet, userPoints, userWager, mode, onEdit, onWagerSucce
                                         if (calcWager > 0) {
                                             const totalReturn = getReturnPotential(calcWager, bet.totalPool + calcWager, opt.totalWagered + calcWager);
                                             const profit = totalReturn - calcWager;
-                                            potential = profit > 0 ? `+${profit.toFixed(0)} pts` : `${profit.toFixed(0)} pts`;
+                                            potential = profit > 0 ? `+ ${profit.toFixed(0)} pts` : `${profit.toFixed(0)} pts`;
                                         } else {
                                             potential = (1.0 * (Number(odds) || 1) * 10).toFixed(0);
                                         }
@@ -534,15 +584,15 @@ export function BetCard({ bet, userPoints, userWager, mode, onEdit, onWagerSucce
                                         <button
                                             key={opt.id}
                                             onClick={() => setSelectedOption(String(idx))}
-                                            className={`relative overflow-hidden flex flex-col items-center justify-center rounded-xl border-3 p-5 transition-all duration-200 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] active:translate-y-[2px] active:shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] min-h-[100px] ${selectedOption === String(idx)
+                                            className={`relative overflow - hidden flex flex - col items - center justify - center rounded - xl border - 3 p - 5 transition - all duration - 200 shadow - [4px_4px_0px_0px_rgba(0, 0, 0, 1)] active: translate - y - [2px] active: shadow - [2px_2px_0px_0px_rgba(0, 0, 0, 1)] min - h - [100px] ${selectedOption === String(idx)
                                                 ? "border-black bg-gradient-to-br from-blue-300 via-purple-300 to-pink-300 ring-4 ring-purple-400 ring-offset-2"
                                                 : "border-black bg-gradient-to-br from-blue-100 via-purple-100 to-pink-100 hover:from-blue-200 hover:via-purple-200 hover:to-pink-200"
-                                                }`}
+                                                } `}
                                         >
                                             {mode === "ZERO_SUM" && (
                                                 <div
-                                                    className={`absolute left-0 top-0 bottom-0 transition-all duration-500 ease-out z-0 ${selectedOption === String(idx) ? "bg-purple-400/30" : "bg-blue-100/40"}`}
-                                                    style={{ width: `${percentage}%` }}
+                                                    className={`absolute left - 0 top - 0 bottom - 0 transition - all duration - 500 ease - out z - 0 ${selectedOption === String(idx) ? "bg-purple-400/30" : "bg-blue-100/40"} `}
+                                                    style={{ width: `${percentage}% ` }}
                                                 />
                                             )}
                                             <div className="relative z-10 w-full text-center space-y-2">
@@ -577,7 +627,7 @@ export function BetCard({ bet, userPoints, userWager, mode, onEdit, onWagerSucce
                                 value={rangeValue}
                                 onChange={(e) => setRangeValue(Number(e.target.value))}
                                 className="flex h-12 w-full rounded-xl border-2 border-black bg-white px-3 py-2 text-sm text-black placeholder:text-gray-400 focus:outline-none focus:ring-4 focus:ring-primary/20 transition-all shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]"
-                                placeholder={`Enter number (${bet.rangeMin}-${bet.rangeMax})`}
+                                placeholder={`Enter number(${bet.rangeMin} - ${bet.rangeMax})`}
                             />
                             {mode === "ZERO_SUM" && rangeValue !== "" && (
                                 <p className="text-xs font-bold text-gray-500 mt-1 text-right">
@@ -638,11 +688,175 @@ export function BetCard({ bet, userPoints, userWager, mode, onEdit, onWagerSucce
                         <Button
                             onClick={handlePlaceWager}
                             disabled={loading}
-                            className={`h-12 border-2 border-black text-white font-black uppercase tracking-widest shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:translate-y-[-2px] hover:shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] transition-all ${mode === "ZERO_SUM" ? "w-32 bg-primary" : "w-full bg-green-500"}`}
+                            className={`h - 12 border - 2 border - black text - white font - black uppercase tracking - widest shadow - [4px_4px_0px_0px_rgba(0, 0, 0, 1)] hover: translate - y - [-2px] hover: shadow - [6px_6px_0px_0px_rgba(0, 0, 0, 1)] transition - all ${mode === "ZERO_SUM" ? "w-32 bg-primary" : "w-full bg-green-500"} `}
                         >
                             {loading ? <Loader2 className="animate-spin" /> : "Place Bet"}
                         </Button>
                     </div>
+                </div>
+            )}
+
+            {/* PLAYER DISPUTE CONTROLS - Show during PROOFING or DISPUTED status */}
+            {!isOwner && userWager && (bet.status === "PROOFING" || bet.status === "DISPUTED") && (
+                <div className="mt-6 pt-6 border-t-2 border-black border-dashed">
+                    <p className="text-xs font-black uppercase text-gray-500 mb-4">Player Actions</p>
+
+                    {bet.status === "PROOFING" && !bet.disputeActive && (
+                        <div className="p-4 bg-yellow-50 border-2 border-yellow-500 rounded-xl shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] mb-4">
+                            <h4 className="font-black uppercase mb-2 text-yellow-700">⏳ Result Proofing Period</h4>
+                            <p className="text-sm font-bold mb-3">
+                                The owner has submitted a result. You have {getDisputeTimeRemaining()} to dispute if you disagree.
+                            </p>
+                            <p className="text-xs font-bold text-gray-600 mb-3">
+                                Result: {typeof bet.winningOutcome === 'object'
+                                    ? `${bet.winningOutcome.home} - ${bet.winningOutcome.away} `
+                                    : bet.winningOutcome}
+                            </p>
+                            <Button
+                                onClick={handleDispute}
+                                disabled={disputeLoading}
+                                className="w-full bg-orange-500 text-white border-2 border-black hover:bg-orange-600 font-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
+                            >
+                                {disputeLoading ? "Filing..." : "⚠️ Dispute This Result"}
+                            </Button>
+                        </div>
+                    )}
+
+                    {bet.status === "DISPUTED" && (
+                        <div className="p-4 bg-orange-50 border-2 border-orange-500 rounded-xl shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] mb-4">
+                            <h4 className="font-black uppercase mb-2 text-orange-700">🗳️ Bet Under Dispute - Submit Your Result</h4>
+                            <p className="text-sm font-bold mb-3">
+                                The original result has been disputed. All players must submit what they believe is the correct result.
+                            </p>
+                            <p className="text-xs font-bold text-gray-600 mb-3">
+                                Original Result: {typeof bet.winningOutcome === 'object'
+                                    ? `${bet.winningOutcome.home} - ${bet.winningOutcome.away}`
+                                    : bet.winningOutcome}
+                            </p>
+
+                            {/* Show existing submissions */}
+                            {bet.disputeSubmissions && Object.keys(bet.disputeSubmissions).length > 0 && (
+                                <div className="mb-4 p-3 bg-white border-2 border-black rounded-lg">
+                                    <p className="text-xs font-black uppercase text-gray-500 mb-2">Submitted Results:</p>
+                                    <div className="space-y-1">
+                                        {Object.entries(bet.disputeSubmissions).map(([uid, submission]) => (
+                                            <div key={uid} className="flex justify-between text-sm">
+                                                <span className="font-bold">{submission.displayName || "Player"}</span>
+                                                <span className="font-black">
+                                                    {typeof submission.result === 'object'
+                                                        ? `${(submission.result as { home: number; away: number }).home} - ${(submission.result as { home: number; away: number }).away}`
+                                                        : submission.result}
+                                                </span>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+
+                            {hasSubmittedDispute ? (
+                                <div className="p-3 bg-green-100 border-2 border-green-500 rounded-lg">
+                                    <p className="text-sm font-black text-center text-green-700">
+                                        ✅ You submitted: {(() => {
+                                            const sub = bet.disputeSubmissions?.[user?.uid || ""];
+                                            if (!sub) return "N/A";
+                                            return typeof sub.result === 'object'
+                                                ? `${(sub.result as { home: number; away: number }).home} - ${(sub.result as { home: number; away: number }).away}`
+                                                : sub.result;
+                                        })()}
+                                    </p>
+                                    <p className="text-xs text-center text-gray-600 mt-1">
+                                        Waiting for all players to submit...
+                                    </p>
+                                </div>
+                            ) : bet.type === "MATCH" ? (
+                                <div className="space-y-3">
+                                    <p className="text-xs font-bold text-gray-600">Enter what you believe is the correct score:</p>
+                                    <div className="flex items-center gap-4">
+                                        <div className="flex-1">
+                                            <p className="text-[10px] font-bold uppercase text-gray-500 mb-1">{bet.matchDetails?.homeTeam}</p>
+                                            <input
+                                                type="number"
+                                                value={disputeHome}
+                                                onChange={(e) => setDisputeHome(e.target.value === "" ? "" : Number(e.target.value))}
+                                                className="flex h-10 w-full rounded-lg border-2 border-black bg-white px-3 py-2 text-sm font-bold text-center shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
+                                                placeholder="0"
+                                            />
+                                        </div>
+                                        <span className="font-black">-</span>
+                                        <div className="flex-1">
+                                            <p className="text-[10px] font-bold uppercase text-gray-500 mb-1">{bet.matchDetails?.awayTeam}</p>
+                                            <input
+                                                type="number"
+                                                value={disputeAway}
+                                                onChange={(e) => setDisputeAway(e.target.value === "" ? "" : Number(e.target.value))}
+                                                className="flex h-10 w-full rounded-lg border-2 border-black bg-white px-3 py-2 text-sm font-bold text-center shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
+                                                placeholder="0"
+                                            />
+                                        </div>
+                                    </div>
+                                    <Button
+                                        onClick={async () => {
+                                            if (!user || disputeHome === "" || disputeAway === "") return;
+                                            setDisputeSubmitting(true);
+                                            try {
+                                                const { consensus, consensusResult } = await submitDisputeResult(
+                                                    bet.leagueId,
+                                                    bet.id,
+                                                    user.uid,
+                                                    { home: disputeHome as number, away: disputeAway as number },
+                                                    user.displayName || "Player"
+                                                );
+                                                if (consensus) {
+                                                    alert("All players agree! The result has been updated. Owner can now finalize payouts.");
+                                                } else {
+                                                    alert("Your result has been submitted. Waiting for other players...");
+                                                }
+                                            } catch (err: any) {
+                                                alert(err.message || "Failed to submit");
+                                            } finally {
+                                                setDisputeSubmitting(false);
+                                            }
+                                        }}
+                                        disabled={disputeSubmitting || disputeHome === "" || disputeAway === ""}
+                                        className="w-full bg-orange-500 text-white border-2 border-black hover:bg-orange-600 font-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
+                                    >
+                                        {disputeSubmitting ? "Submitting..." : "📤 Submit My Result"}
+                                    </Button>
+                                </div>
+                            ) : (
+                                /* Fallback to voting for non-MATCH bets */
+                                <div className="grid grid-cols-2 gap-2">
+                                    <Button
+                                        onClick={() => handleVote("approve")}
+                                        disabled={votingLoading}
+                                        className="bg-green-500 text-white border-2 border-black hover:bg-green-600 font-black"
+                                    >
+                                        ✅ Approve
+                                    </Button>
+                                    <Button
+                                        onClick={() => handleVote("reject")}
+                                        disabled={votingLoading}
+                                        className="bg-red-500 text-white border-2 border-black hover:bg-red-600 font-black"
+                                    >
+                                        ❌ Reject
+                                    </Button>
+                                </div>
+                            )}
+                        </div>
+                    )}
+                </div>
+            )}
+
+            {/* NON-OWNER MESSAGE FOR LOCKED/PROOFING BETS */}
+            {!isOwner && !userWager && (bet.status === "LOCKED" || bet.status === "PROOFING") && (
+                <div className="mt-6 p-4 bg-yellow-50 border-2 border-yellow-400 border-dashed rounded-xl text-center">
+                    <div className="flex items-center justify-center gap-2 mb-2">
+                        <Timer className="h-5 w-5 text-yellow-600" />
+                        <p className="font-black text-yellow-800 uppercase">Waiting for Result</p>
+                    </div>
+                    <p className="text-sm font-bold text-gray-600">
+                        The league owner is reviewing and will confirm the result soon.
+                    </p>
                 </div>
             )}
 
@@ -655,13 +869,24 @@ export function BetCard({ bet, userPoints, userWager, mode, onEdit, onWagerSucce
                                 {loading ? "Publishing..." : "🚀 Publish Bet"}
                             </Button>
                         )}
-                        {/* Resolve Button - Shows for Owner if Locked/Proofing/Disputed */}
-                        {(bet.status === "LOCKED" || bet.status === "PROOFING" || (bet.status === "OPEN" && isExpired)) && !isResolving && (
+                        {/* Only show Resolve button for PROOFING or expired OPEN bets, not LOCKED */}
+                        {(bet.status === "PROOFING" || (bet.status === "OPEN" && isExpired)) && !isResolving && (
                             <Button onClick={() => setIsResolving(true)} className="bg-yellow-400 text-black border-2 border-black hover:bg-yellow-500 font-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
                                 🏆 Resolve Result
                             </Button>
                         )}
-                        {/* Start Proofing / AI Verify */}
+                        {/* Auto-Processing indicator - for PROOFING bets after deadline */}
+                        {bet.status === "PROOFING" && bet.disputeDeadline && (() => {
+                            const deadline = bet.disputeDeadline.toDate ? bet.disputeDeadline.toDate() : new Date(bet.disputeDeadline);
+                            const isPastDeadline = new Date() >= deadline;
+                            return isPastDeadline;
+                        })() && (
+                                <div className="flex items-center gap-2 px-4 py-2 bg-green-100 border-2 border-green-500 rounded-lg">
+                                    <Loader2 className="animate-spin h-4 w-4 text-green-600" />
+                                    <span className="font-bold text-green-700 text-sm">Processing payouts...</span>
+                                </div>
+                            )}
+                        {/* AI Verify button only for LOCKED (not when already resolving) */}
                         {bet.status === "LOCKED" && !isResolving && (
                             <Button onClick={handleAiverify} disabled={verifying} variant="secondary" className="border-2 border-black font-bold">
                                 {verifying ? <Loader2 className="animate-spin mr-2" /> : <BrainCircuit className="mr-2 h-4 w-4" />}
@@ -683,8 +908,8 @@ export function BetCard({ bet, userPoints, userWager, mode, onEdit, onWagerSucce
                         </div>
                     )}
 
-                    {/* RESOLUTION UI */}
-                    {isResolving && (
+                    {/* RESOLUTION UI - Auto-show for LOCKED bets */}
+                    {(isResolving || bet.status === "LOCKED") && (
                         <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} className="mt-4 bg-white border-2 border-black p-4 rounded-xl shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
                             <div className="flex justify-between items-center mb-4">
                                 <h4 className="font-black uppercase">Set Final Result</h4>
@@ -700,7 +925,7 @@ export function BetCard({ bet, userPoints, userWager, mode, onEdit, onWagerSucce
                                             <button
                                                 key={opt.id}
                                                 onClick={() => setWinningOption(String(i))}
-                                                className={`p-2 border-2 rounded-lg font-bold text-sm text-left ${winningOption === String(i) ? "bg-black text-white border-black" : "bg-white text-black border-black hover:bg-gray-50"}`}
+                                                className={`p - 2 border - 2 rounded - lg font - bold text - sm text - left ${winningOption === String(i) ? "bg-black text-white border-black" : "bg-white text-black border-black hover:bg-gray-50"} `}
                                             >
                                                 {opt.text}
                                             </button>
@@ -726,7 +951,7 @@ export function BetCard({ bet, userPoints, userWager, mode, onEdit, onWagerSucce
                                                 type="number"
                                                 value={resHome}
                                                 onChange={(e) => setResHome(e.target.value === "" ? "" : Number(e.target.value))}
-                                                className={`flex h-10 w-full rounded-lg border-2 border-black bg-white px-3 py-2 text-sm font-bold text-center shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] ${aiHighlighted ? "animate-pulse ring-4 ring-purple-500" : ""}`}
+                                                className={`flex h - 10 w - full rounded - lg border - 2 border - black bg - white px - 3 py - 2 text - sm font - bold text - center shadow - [2px_2px_0px_0px_rgba(0, 0, 0, 1)] ${aiHighlighted ? "animate-pulse ring-4 ring-purple-500" : ""} `}
                                                 placeholder="0"
                                             />
                                         </div>
@@ -737,7 +962,7 @@ export function BetCard({ bet, userPoints, userWager, mode, onEdit, onWagerSucce
                                                 type="number"
                                                 value={resAway}
                                                 onChange={(e) => setResAway(e.target.value === "" ? "" : Number(e.target.value))}
-                                                className={`flex h-10 w-full rounded-lg border-2 border-black bg-white px-3 py-2 text-sm font-bold text-center shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] ${aiHighlighted ? "animate-pulse ring-4 ring-purple-500" : ""}`}
+                                                className={`flex h - 10 w - full rounded - lg border - 2 border - black bg - white px - 3 py - 2 text - sm font - bold text - center shadow - [2px_2px_0px_0px_rgba(0, 0, 0, 1)] ${aiHighlighted ? "animate-pulse ring-4 ring-purple-500" : ""} `}
                                                 placeholder="0"
                                             />
                                         </div>
@@ -747,9 +972,11 @@ export function BetCard({ bet, userPoints, userWager, mode, onEdit, onWagerSucce
 
                             <div className="flex gap-2">
                                 <Button onClick={handleResolve} disabled={loading} className="flex-1 bg-yellow-400 text-black border-2 border-black hover:bg-yellow-500 font-bold shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
-                                    {loading ? "Processing..." : "Confirm & Payout"}
+                                    {loading ? "Processing..." : "✅ Confirm & Payout"}
                                 </Button>
-                                <Button onClick={() => setIsResolving(false)} variant="ghost" className="underline">Cancel</Button>
+                                {bet.status !== "LOCKED" && (
+                                    <Button onClick={() => setIsResolving(false)} variant="ghost" className="underline">Cancel</Button>
+                                )}
                             </div>
                         </motion.div>
                     )}

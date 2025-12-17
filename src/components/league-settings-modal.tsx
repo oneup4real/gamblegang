@@ -1,11 +1,14 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { X, Loader2, AlertTriangle, Save, RefreshCw, Trash } from "lucide-react";
+import { X, Loader2, AlertTriangle, Save, RefreshCw, Trash, Users, Crown, Shield, User } from "lucide-react";
 import { useAuth } from "@/components/auth-provider";
-import { League, updateLeague, resetLeague } from "@/lib/services/league-service";
+import { League, updateLeague, resetLeague, LeagueMember, updateMemberRole } from "@/lib/services/league-service";
 import { Button } from "@/components/ui/button";
+import { LeagueRole, hasPermission } from "@/lib/rbac";
+import { collection, getDocs } from "firebase/firestore";
+import { db } from "@/lib/firebase/config";
 
 interface LeagueSettingsModalProps {
     league: League;
@@ -25,14 +28,24 @@ export function LeagueSettingsModal({ league, isOpen, onClose, onUpdate }: Leagu
     const [choicePoints, setChoicePoints] = useState(league.matchSettings?.choice || 1);
     const [rangePoints, setRangePoints] = useState(league.matchSettings?.range || 1);
 
-    const [activeTab, setActiveTab] = useState<"general" | "danger">("general");
+    // Members tab
+    const [members, setMembers] = useState<LeagueMember[]>([]);
+    const [myRole, setMyRole] = useState<LeagueRole>("MEMBER");
+
+    // Dispute settings
+    const [disputeWindowHours, setDisputeWindowHours] = useState(league.disputeWindowHours || 12);
+
+    const [activeTab, setActiveTab] = useState<"general" | "members" | "danger">("general");
 
     const handleUpdateName = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!name.trim()) return;
         setLoading(true);
         try {
-            const updates: Partial<League> = { name };
+            const updates: Partial<League> = {
+                name,
+                disputeWindowHours
+            };
             if (league.mode === "STANDARD") {
                 updates.matchSettings = {
                     exact: exactMult,
@@ -49,6 +62,45 @@ export function LeagueSettingsModal({ league, isOpen, onClose, onUpdate }: Leagu
             alert("League updated");
         } catch (e) {
             alert("Error updating league");
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    // Fetch members when modal opens
+    useEffect(() => {
+        if (isOpen && league?.id) {
+            const fetchMembers = async () => {
+                const membersRef = collection(db, "leagues", league.id, "members");
+                const membersSnap = await getDocs(membersRef);
+                const membersList = membersSnap.docs.map(d => ({ ...d.data(), uid: d.id } as LeagueMember));
+                setMembers(membersList);
+
+                // Find my role
+                const me = membersList.find(m => m.uid === user?.uid);
+                if (me) setMyRole(me.role);
+            };
+            fetchMembers();
+        }
+    }, [isOpen, league?.id, user?.uid]);
+
+    const handleRoleChange = async (memberId: string, newRole: LeagueRole) => {
+        if (!hasPermission(myRole, "ASSIGN_ROLE")) {
+            alert("You don't have permission to change roles");
+            return;
+        }
+
+        setLoading(true);
+        try {
+            await updateMemberRole(league.id, memberId, newRole, myRole);
+            // Refresh members list
+            const membersRef = collection(db, "leagues", league.id, "members");
+            const membersSnap = await getDocs(membersRef);
+            const membersList = membersSnap.docs.map(d => ({ ...d.data(), uid: d.id } as LeagueMember));
+            setMembers(membersList);
+            onUpdate();
+        } catch (e: any) {
+            alert(e.message || "Failed to update role");
         } finally {
             setLoading(false);
         }
@@ -103,6 +155,12 @@ export function LeagueSettingsModal({ league, isOpen, onClose, onUpdate }: Leagu
                                 className={`pb-2 text-sm font-black uppercase tracking-wide transition-all ${activeTab === "general" ? "border-b-4 border-primary text-primary translate-y-[2px]" : "text-gray-500 hover:text-black"}`}
                             >
                                 General
+                            </button>
+                            <button
+                                onClick={() => setActiveTab("members")}
+                                className={`pb-2 text-sm font-black uppercase tracking-wide transition-all flex items-center gap-1 ${activeTab === "members" ? "border-b-4 border-purple-500 text-purple-500 translate-y-[2px]" : "text-gray-500 hover:text-black"}`}
+                            >
+                                <Users className="h-4 w-4" /> Members
                             </button>
                             <button
                                 onClick={() => setActiveTab("danger")}
@@ -168,6 +226,34 @@ export function LeagueSettingsModal({ league, isOpen, onClose, onUpdate }: Leagu
                                         </p>
                                     </div>
                                 )}
+
+                                {/* Dispute Window Setting */}
+                                <div className="space-y-3 p-4 bg-orange-50 border-2 border-orange-200 rounded-xl">
+                                    <h4 className="text-sm font-black uppercase text-orange-800 flex items-center gap-2">
+                                        ⏱️ Dispute Window
+                                    </h4>
+                                    <p className="text-xs font-bold text-gray-600">
+                                        How long players have to dispute a result before it&apos;s finalized:
+                                    </p>
+                                    <div className="flex gap-2 flex-wrap">
+                                        {[1, 6, 12, 24, 48].map((hours) => (
+                                            <button
+                                                key={hours}
+                                                type="button"
+                                                onClick={() => setDisputeWindowHours(hours)}
+                                                className={`px-4 py-2 rounded-lg border-2 font-bold text-sm transition-all ${disputeWindowHours === hours
+                                                        ? "bg-orange-500 text-white border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
+                                                        : "bg-white border-gray-300 hover:border-orange-500"
+                                                    }`}
+                                            >
+                                                {hours}h
+                                            </button>
+                                        ))}
+                                    </div>
+                                    <p className="text-[10px] font-bold text-orange-600">
+                                        Current: {disputeWindowHours} hours
+                                    </p>
+                                </div>
                                 <Button
                                     disabled={loading}
                                     className="w-full h-12 bg-primary text-white border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]"
@@ -176,6 +262,54 @@ export function LeagueSettingsModal({ league, isOpen, onClose, onUpdate }: Leagu
                                     Save Changes
                                 </Button>
                             </form>
+                        )}
+
+                        {activeTab === "members" && (
+                            <div className="space-y-4">
+                                <div className="max-h-[400px] overflow-y-auto space-y-2">
+                                    {members.map(member => {
+                                        const roleIcon = member.role === "OWNER" ? <Crown className="h-4 w-4 text-yellow-600" /> :
+                                            member.role === "ADMIN" ? <Shield className="h-4 w-4 text-purple-600" /> :
+                                                <User className="h-4 w-4 text-gray-600" />;
+
+                                        const canChangeRole = hasPermission(myRole, "ASSIGN_ROLE") && member.uid !== user?.uid;
+
+                                        return (
+                                            <div key={member.uid} className="flex items-center justify-between p-3 border-2 border-black rounded-lg bg-white hover:bg-gray-50 transition-all">
+                                                <div className="flex items-center gap-3">
+                                                    {member.photoURL && (
+                                                        <img src={member.photoURL} alt={member.displayName} className="w-10 h-10 rounded-full border-2 border-black" />
+                                                    )}
+                                                    <div>
+                                                        <p className="font-black text-sm">{member.displayName}</p>
+                                                        <div className="flex items-center gap-2 mt-1">
+                                                            {roleIcon}
+                                                            <span className="text-xs font-bold text-gray-500">{member.role}</span>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                                {canChangeRole ? (
+                                                    <select
+                                                        value={member.role}
+                                                        onChange={(e) => handleRoleChange(member.uid, e.target.value as LeagueRole)}
+                                                        disabled={loading}
+                                                        className="px-3 py-1 border-2 border-black rounded-lg font-bold text-sm bg-white hover:bg-gray-50 disabled:opacity-50"
+                                                    >
+                                                        <option value="MEMBER">👤 Member</option>
+                                                        <option value="ADMIN">⚙️ Admin</option>
+                                                        <option value="OWNER">👑 Owner</option>
+                                                    </select>
+                                                ) : member.uid === user?.uid ? (
+                                                    <span className="text-xs font-bold text-gray-400 italic">You</span>
+                                                ) : null}
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                                {members.length === 0 && (
+                                    <p className="text-center text-gray-400 font-bold py-8">No members found</p>
+                                )}
+                            </div>
                         )}
 
                         {activeTab === "danger" && (
