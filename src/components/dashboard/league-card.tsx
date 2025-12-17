@@ -28,10 +28,10 @@ export function LeagueCard({
     const isTopRank = rank <= 3;
 
     const rankBadge = () => {
-        if (rank === 1) return { emoji: "🥇", bg: "bg-yellow-400" };
-        if (rank === 2) return { emoji: "🥈", bg: "bg-gray-300" };
-        if (rank === 3) return { emoji: "🥉", bg: "bg-amber-600" };
-        return { emoji: `#${rank}`, bg: "bg-gray-200" };
+        if (rank === 1) return { emoji: "🥇", bg: "bg-white", border: "border-yellow-500" };
+        if (rank === 2) return { emoji: "🥈", bg: "bg-white", border: "border-gray-400" };
+        if (rank === 3) return { emoji: "🥉", bg: "bg-white", border: "border-amber-700" };
+        return { emoji: `#${rank}`, bg: "bg-gray-100", border: "border-gray-400" };
     };
 
     const badge = rankBadge();
@@ -51,7 +51,7 @@ export function LeagueCard({
                                 {league.name}
                             </h3>
                         </div>
-                        <div className={`${badge.bg} w-10 h-10 rounded-full border-2 border-black flex items-center justify-center font-black text-sm shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]`}>
+                        <div className={`${badge.bg} ${badge.border} w-10 h-10 rounded-full border-2 flex items-center justify-center font-black text-sm shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]`}>
                             {isTopRank ? badge.emoji : badge.emoji}
                         </div>
                     </div>

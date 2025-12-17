@@ -44,6 +44,7 @@ export default function DashboardPage() {
     });
     const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
     const [activityItems, setActivityItems] = useState<ActivityItem[]>([]);
+    const [selectedBetTab, setSelectedBetTab] = useState<"active" | "available" | "pending" | "history">("active");
 
     useEffect(() => {
         if (!loading && !user) {
@@ -176,10 +177,10 @@ export default function DashboardPage() {
                     pendingProofing={pendingProofing}
                     toResolve={stats.toResolve}
                     newBets={stats.availableBets}
-                    onVotesClick={() => document.getElementById('bet-tabs-section')?.scrollIntoView({ behavior: 'smooth' })}
-                    onPendingClick={() => document.getElementById('bet-tabs-section')?.scrollIntoView({ behavior: 'smooth' })}
-                    onResolveClick={() => document.getElementById('bet-tabs-section')?.scrollIntoView({ behavior: 'smooth' })}
-                    onNewBetsClick={() => document.getElementById('bet-tabs-section')?.scrollIntoView({ behavior: 'smooth' })}
+                    onVotesClick={() => { setSelectedBetTab('pending'); setTimeout(() => document.getElementById('bet-tabs-section')?.scrollIntoView({ behavior: 'smooth' }), 50); }}
+                    onPendingClick={() => { setSelectedBetTab('pending'); setTimeout(() => document.getElementById('bet-tabs-section')?.scrollIntoView({ behavior: 'smooth' }), 50); }}
+                    onResolveClick={() => { setSelectedBetTab('pending'); setTimeout(() => document.getElementById('bet-tabs-section')?.scrollIntoView({ behavior: 'smooth' }), 50); }}
+                    onNewBetsClick={() => { setSelectedBetTab('available'); setTimeout(() => document.getElementById('bet-tabs-section')?.scrollIntoView({ behavior: 'smooth' }), 50); }}
                 />
 
                 {/* Stats Gauges */}
@@ -279,6 +280,7 @@ export default function DashboardPage() {
                                     refreshStats();
                                 }}
                                 onRefresh={refreshStats}
+                                initialTab={selectedBetTab}
                             />
                         </div>
                     </div>

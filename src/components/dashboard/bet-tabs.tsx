@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Gamepad2, Ticket, Clock, History, ExternalLink, ChevronDown, ChevronUp } from "lucide-react";
 import { Link } from "@/i18n/navigation";
@@ -18,6 +18,7 @@ interface BetTabsProps {
     onDismiss?: (betId: string) => void;
     onClearAll?: (betIds: string[]) => void;
     onRefresh?: () => void;
+    initialTab?: "active" | "available" | "pending" | "history";
 }
 
 type TabType = "active" | "available" | "pending" | "history";
@@ -37,10 +38,18 @@ export function BetTabs({
     userId,
     onDismiss,
     onClearAll,
-    onRefresh
+    onRefresh,
+    initialTab
 }: BetTabsProps) {
-    const [activeTab, setActiveTab] = useState<TabType>("active");
+    const [activeTab, setActiveTab] = useState<TabType>(initialTab || "active");
     const [expandedBets, setExpandedBets] = useState<Set<string>>(new Set());
+
+    // Sync with external initialTab changes
+    useEffect(() => {
+        if (initialTab) {
+            setActiveTab(initialTab);
+        }
+    }, [initialTab]);
 
     const tabs: { key: TabType; bets: DashboardBetWithWager[] }[] = [
         { key: "active", bets: activeBets },
@@ -201,6 +210,7 @@ export function BetTabs({
                                                                 userWager={bet.wager ? { ...bet.wager, id: "dashboard", userId: userId, userName: "Me", placedAt: new Date() } as any : undefined}
                                                                 mode={bet.leagueMode === "ZERO_SUM" ? "ZERO_SUM" : "STANDARD"}
                                                                 onWagerSuccess={onRefresh} // Refresh dashboard on any successful action (vote, dispute, resolve)
+                                                                isOwnerOverride={bet.creatorId === userId} // Enable owner actions if user is bet creator
                                                             />
 
                                                             {/* Extra Actions */}

@@ -53,6 +53,11 @@ service cloud.firestore {
           allow read: if request.auth != null;
           allow create: if request.auth != null && request.auth.uid == request.resource.data.userId;
           allow update: if request.auth != null; // Allow updates for bet resolution (status changes to WON/LOST/PUSH)
+          // Allow delete if: bet creator OR league owner (same as parent bet delete rule)
+          allow delete: if request.auth != null && (
+            get(/databases/$(database)/documents/leagues/$(leagueId)/bets/$(betId)).data.creatorId == request.auth.uid ||
+            get(/databases/$(database)/documents/leagues/$(leagueId)).data.ownerId == request.auth.uid
+          );
         }
       }
     }

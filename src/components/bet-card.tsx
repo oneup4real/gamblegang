@@ -22,9 +22,10 @@ interface BetCardProps {
     mode: "ZERO_SUM" | "STANDARD";
     onEdit?: (bet: Bet) => void;
     onWagerSuccess?: () => void;
+    isOwnerOverride?: boolean; // Allow external context to specify ownership (for dashboard)
 }
 
-export function BetCard({ bet, userPoints, userWager, mode, onEdit, onWagerSuccess }: BetCardProps) {
+export function BetCard({ bet, userPoints, userWager, mode, onEdit, onWagerSuccess, isOwnerOverride }: BetCardProps) {
     const { user } = useAuth();
     const [isResolving, setIsResolving] = useState(false);
     const [wagerAmount, setWagerAmount] = useState<number | "">(mode === "STANDARD" ? 100 : "");
@@ -67,7 +68,7 @@ export function BetCard({ bet, userPoints, userWager, mode, onEdit, onWagerSucce
     const [dynamicRangeOdds, setDynamicRangeOdds] = useState<{ [key: number]: string }>({});
 
     const isExpired = new Date(bet.closesAt.seconds * 1000) < new Date();
-    const isOwner = user?.uid === bet.creatorId;
+    const isOwner = isOwnerOverride !== undefined ? isOwnerOverride : (user?.uid === bet.creatorId);
 
     useEffect(() => {
         if (userWager && userWager.status === "WON") {
@@ -502,6 +503,23 @@ export function BetCard({ bet, userPoints, userWager, mode, onEdit, onWagerSucce
                             } else if (userWager.status === "PUSH") {
                                 pot = `${userWager.amount} pts(Refunded)`; // Refund amount
                             }
+                        } else if ((bet.status === "PROOFING" || bet.status === "LOCKED") && bet.winningOutcome !== undefined) {
+                            // Calculate preliminary status based on proposed result for PROOFING/LOCKED bets
+                            const userSel = userWager.selection;
+                            const proposedResult = bet.winningOutcome;
+
+                            if (bet.type === "CHOICE") {
+                                // For CHOICE: compare option indices
+                                wagerStatus = String(userSel) === String(proposedResult) ? "WON" : "LOST";
+                            } else if (bet.type === "MATCH") {
+                                // For MATCH: compare home/away scores
+                                const uSel = typeof userSel === "object" ? userSel : { home: -1, away: -1 };
+                                const pRes = typeof proposedResult === "object" ? proposedResult : { home: -2, away: -2 };
+                                wagerStatus = (uSel.home === pRes.home && uSel.away === pRes.away) ? "WON" : "LOST";
+                            } else if (bet.type === "RANGE") {
+                                // For RANGE: compare numeric values
+                                wagerStatus = Number(userSel) === Number(proposedResult) ? "WON" : "LOST";
+                            }
                         } else {
                             // For active bets, show estimated total cashout
                             // Arcade: Fixed 1 pt return
@@ -718,9 +736,17 @@ export function BetCard({ bet, userPoints, userWager, mode, onEdit, onWagerSucce
                                 The owner submitted a result. If it looks correct, no action is needed. It will auto-resolve when the timer ends.
                             </p>
                             <p className="text-xs font-bold text-gray-600 mb-3">
-                                Proposed Result: {typeof bet.winningOutcome === 'object'
-                                    ? `${(bet.winningOutcome as any).home} - ${(bet.winningOutcome as any).away}`
-                                    : bet.winningOutcome}
+                                Proposed Result: {(() => {
+                                    if (typeof bet.winningOutcome === 'object') {
+                                        return `${(bet.winningOutcome as any).home} - ${(bet.winningOutcome as any).away}`;
+                                    } else if (bet.type === "CHOICE" && bet.options) {
+                                        const idx = Number(bet.winningOutcome);
+                                        return bet.options[idx]?.text || String(bet.winningOutcome);
+                                    } else if (bet.type === "RANGE") {
+                                        return `${bet.winningOutcome} ${bet.rangeUnit || ''}`;
+                                    }
+                                    return String(bet.winningOutcome);
+                                })()}
                             </p>
                             <p className="text-xs text-gray-500 font-bold mb-3">
                                 ⏱️ Time remaining: {getDisputeTimeRemaining()}
@@ -825,34 +851,26 @@ export function BetCard({ bet, userPoints, userWager, mode, onEdit, onWagerSucce
                                 You have submitted a result. Players are currently reviewing it.
                             </p>
                             <p className="text-xs font-bold text-gray-600 mb-3">
-                                Proposed Result: {typeof bet.winningOutcome === 'object'
-                                    ? `${(bet.winningOutcome as any).home} - ${(bet.winningOutcome as any).away}`
-                                    : bet.winningOutcome}
+                                Proposed Result: {(() => {
+                                    if (typeof bet.winningOutcome === 'object') {
+                                        return `${(bet.winningOutcome as any).home} - ${(bet.winningOutcome as any).away}`;
+                                    } else if (bet.type === "CHOICE" && bet.options) {
+                                        const idx = Number(bet.winningOutcome);
+                                        return bet.options[idx]?.text || String(bet.winningOutcome);
+                                    } else if (bet.type === "RANGE") {
+                                        return `${bet.winningOutcome} ${bet.rangeUnit || ''}`;
+                                    }
+                                    return String(bet.winningOutcome);
+                                })()}
                             </p>
 
                             <p className="text-xs text-gray-500 font-bold mb-3">
                                 ⏱️ Time remaining: {getDisputeTimeRemaining()}
                             </p>
 
-                            {/* Finalize Button (Force) */}
-                            <Button
-                                onClick={async () => {
-                                    if (!confirm("Force finalize this bet? This will process payouts immediately.")) return;
-                                    setLoading(true);
-                                    try {
-                                        await finalizeBet(bet.leagueId, bet.id, user);
-                                        alert("Bet finalized successfully!");
-                                    } catch (e: any) {
-                                        alert(e.message || "Failed to finalize");
-                                    } finally {
-                                        setLoading(false);
-                                    }
-                                }}
-                                disabled={loading}
-                                className="w-full bg-yellow-400 text-black border-2 border-black hover:bg-yellow-500 font-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
-                            >
-                                {loading ? "Processing..." : "🏆 Finalize & Payout Now"}
-                            </Button>
+                            <p className="text-[10px] text-gray-400 font-bold italic">
+                                Bet will auto-resolve when the timer ends.
+                            </p>
                         </div>
                     </div>
                 )
@@ -868,13 +886,7 @@ export function BetCard({ bet, userPoints, userWager, mode, onEdit, onWagerSucce
                                     {loading ? "Publishing..." : "🚀 Publish Bet"}
                                 </Button>
                             )}
-                            {/* Only show Resolve button for expired OPEN bets or LOCKED bets */}
-                            {/* REMOVED PROOFING from here essentially */}
-                            {(bet.status === "OPEN" && isExpired) && !isResolving && (
-                                <Button onClick={() => setIsResolving(true)} className="bg-yellow-400 text-black border-2 border-black hover:bg-yellow-500 font-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
-                                    🏆 Resolve Result
-                                </Button>
-                            )}
+                            {/* Resolve Result button removed - auto-showing resolution UI instead */}
                             {/* Auto-Processing indicator - for PROOFING bets after deadline */}
                             {bet.status === "PROOFING" && bet.disputeDeadline && (() => {
                                 const deadline = bet.disputeDeadline.toDate ? bet.disputeDeadline.toDate() : new Date(bet.disputeDeadline);
@@ -908,8 +920,8 @@ export function BetCard({ bet, userPoints, userWager, mode, onEdit, onWagerSucce
                             </div>
                         )}
 
-                        {/* RESOLUTION UI - Auto-show for LOCKED bets */}
-                        {(isResolving || bet.status === "LOCKED") && bet.status !== "PROOFING" && (
+                        {/* RESOLUTION UI - Auto-show for LOCKED bets AND expired OPEN bets */}
+                        {(isResolving || bet.status === "LOCKED" || (bet.status === "OPEN" && isExpired)) && bet.status !== "PROOFING" && (
                             <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} className="mt-4 bg-white border-2 border-black p-4 rounded-xl shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
                                 <div className="flex justify-between items-center mb-4">
                                     <h4 className="font-black uppercase">Set Final Result</h4>
@@ -920,14 +932,17 @@ export function BetCard({ bet, userPoints, userWager, mode, onEdit, onWagerSucce
 
                                 <div className="space-y-4 mb-4">
                                     {bet.type === "CHOICE" && bet.options && (
-                                        <div className="grid grid-cols-2 gap-2">
+                                        <div className="grid grid-cols-2 gap-3">
                                             {bet.options.map((opt, i) => (
                                                 <button
                                                     key={opt.id}
                                                     onClick={() => setWinningOption(String(i))}
-                                                    className={`p - 2 border - 2 rounded - lg font - bold text - sm text - left ${winningOption === String(i) ? "bg-black text-white border-black" : "bg-white text-black border-black hover:bg-gray-50"} `}
+                                                    className={`relative overflow-hidden flex flex-col items-center justify-center rounded-xl border-2 p-4 transition-all duration-200 shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] active:translate-y-[2px] active:shadow-[1px_1px_0px_0px_rgba(0,0,0,1)] min-h-[60px] ${winningOption === String(i)
+                                                        ? "border-black bg-gradient-to-br from-blue-300 via-purple-300 to-pink-300 ring-4 ring-purple-400 ring-offset-2"
+                                                        : "border-black bg-gradient-to-br from-blue-100 via-purple-100 to-pink-100 hover:from-blue-200 hover:via-purple-200 hover:to-pink-200"
+                                                        }`}
                                                 >
-                                                    {opt.text}
+                                                    <span className="font-black text-base text-black drop-shadow-sm">{opt.text}</span>
                                                 </button>
                                             ))}
                                         </div>
@@ -972,7 +987,7 @@ export function BetCard({ bet, userPoints, userWager, mode, onEdit, onWagerSucce
 
                                 <div className="flex gap-2">
                                     <Button onClick={handleResolve} disabled={loading} className="flex-1 bg-yellow-400 text-black border-2 border-black hover:bg-yellow-500 font-bold shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
-                                        {loading ? "Processing..." : "✅ Confirm & Payout"}
+                                        {loading ? "Processing..." : "✅ Confirm & Start Proofing Phase"}
                                     </Button>
                                     {bet.status !== "LOCKED" && (
                                         <Button onClick={() => setIsResolving(false)} variant="ghost" className="underline">Cancel</Button>

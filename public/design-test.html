@@ -1,0 +1,455 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Accordion + Ticket Design Proposals</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            background: #e8f4fc;
+            background-image: radial-gradient(circle, #c5e3f6 1px, transparent 1px);
+            background-size: 20px 20px;
+        }
+    </style>
+</head>
+
+<body class="min-h-screen p-6">
+    <div class="max-w-4xl mx-auto">
+        <h1 class="text-3xl font-black mb-2 text-center">🎫 Accordion + Ticket Designs</h1>
+        <p class="text-center text-gray-600 mb-8">Focus on tickets & verification stamps</p>
+
+        <!-- DESIGN A: Accordion with Side Ticket -->
+        <section class="mb-12">
+            <h2
+                class="text-xl font-black mb-4 bg-purple-500 text-white inline-block px-4 py-2 rounded-lg border-2 border-black">
+                Design A: Side Panel Ticket</h2>
+            <p class="text-gray-600 mb-4 text-sm">Ticket always visible on right. Accordion expands for details &
+                verification.</p>
+
+            <div class="space-y-3">
+                <!-- OPEN Bet -->
+                <details
+                    class="group bg-white rounded-xl border-2 border-black shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] overflow-hidden">
+                    <summary class="flex cursor-pointer list-none">
+                        <div class="flex-1 p-4">
+                            <div class="flex items-center gap-2 mb-1">
+                                <span class="text-xs font-bold px-2 py-0.5 bg-green-500 text-white rounded">OPEN</span>
+                                <span class="font-bold">Who wins Bayern vs Dortmund?</span>
+                            </div>
+                            <div class="text-xs text-gray-500 flex items-center gap-3">
+                                <span>⏱ 2h 34m</span>
+                                <span>💰 450 pts</span>
+                                <span>👥 12 bets</span>
+                                <svg class="w-4 h-4 ml-auto transition-transform group-open:rotate-180" fill="none"
+                                    stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                        d="M19 9l-7 7-7-7"></path>
+                                </svg>
+                            </div>
+                        </div>
+                        <!-- Always visible mini ticket -->
+                        <div
+                            class="w-28 bg-yellow-100 border-l-2 border-black p-3 flex flex-col justify-center text-center">
+                            <div class="text-[9px] font-bold text-gray-500 uppercase">My Bet</div>
+                            <div class="font-black text-lg">Bayern</div>
+                            <div class="text-xs font-bold text-green-600">~120 pts</div>
+                        </div>
+                    </summary>
+                    <div class="border-t-2 border-dashed border-gray-300 p-4 bg-gray-50">
+                        <div class="grid grid-cols-3 gap-4 text-sm mb-3">
+                            <div><span class="text-gray-500">Wager:</span> <span class="font-bold">50 pts</span></div>
+                            <div><span class="text-gray-500">Odds:</span> <span class="font-bold">2.4x</span></div>
+                            <div><span class="text-gray-500">Closes:</span> <span class="font-bold">Dec 18, 8PM</span>
+                            </div>
+                        </div>
+                    </div>
+                </details>
+
+                <!-- PROOFING Bet - With Verification -->
+                <details open
+                    class="group bg-white rounded-xl border-2 border-blue-400 shadow-[3px_3px_0px_0px_rgba(59,130,246,0.5)] overflow-hidden">
+                    <summary class="flex cursor-pointer list-none">
+                        <div class="flex-1 p-4">
+                            <div class="flex items-center gap-2 mb-1">
+                                <span
+                                    class="text-xs font-bold px-2 py-0.5 bg-blue-500 text-white rounded">PROOFING</span>
+                                <span class="font-bold">Man City vs Liverpool winner?</span>
+                            </div>
+                            <div class="text-xs text-gray-500 flex items-center gap-3">
+                                <span>⏱ 45m review</span>
+                                <span class="text-blue-600 font-bold">Proposed: Liverpool</span>
+                                <svg class="w-4 h-4 ml-auto transition-transform group-open:rotate-180" fill="none"
+                                    stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                        d="M19 9l-7 7-7-7"></path>
+                                </svg>
+                            </div>
+                        </div>
+                        <div
+                            class="w-28 bg-green-100 border-l-2 border-green-500 p-3 flex flex-col justify-center text-center">
+                            <div class="text-[9px] font-bold text-green-700 uppercase">✅ Winning</div>
+                            <div class="font-black text-lg text-green-700">Liverpool</div>
+                            <div class="text-xs font-bold text-green-600">+180 pts</div>
+                        </div>
+                    </summary>
+                    <div class="border-t-2 border-dashed border-blue-300 p-4 bg-blue-50">
+                        <!-- Verification Stamp -->
+                        <div class="flex items-start gap-3 mb-3 p-3 bg-green-50 border-2 border-green-300 rounded-lg">
+                            <div
+                                class="flex-shrink-0 w-10 h-10 bg-green-500 rounded-full flex items-center justify-center">
+                                <span class="text-white text-lg">✓</span>
+                            </div>
+                            <div class="flex-1">
+                                <div class="font-bold text-green-800 text-sm">Verified Result</div>
+                                <div class="text-xs text-gray-600">📰 Source: <span class="font-bold">ESPN</span></div>
+                                <div class="text-xs text-gray-500">🕒 Dec 17, 11:18 PM • ⚡ AI Verified • High confidence
+                                </div>
+                            </div>
+                        </div>
+                        <div class="flex gap-2">
+                            <button
+                                class="px-3 py-1.5 bg-red-100 text-red-600 rounded font-bold text-xs border border-red-300">🚩
+                                Dispute Result</button>
+                            <span class="text-xs text-gray-500 self-center">Auto-resolves when timer ends</span>
+                        </div>
+                    </div>
+                </details>
+
+                <!-- RESOLVED WON with Verification -->
+                <details
+                    class="group bg-white rounded-xl border-2 border-emerald-400 shadow-[3px_3px_0px_0px_rgba(16,185,129,0.5)] overflow-hidden">
+                    <summary class="flex cursor-pointer list-none">
+                        <div class="flex-1 p-4">
+                            <div class="flex items-center gap-2 mb-1">
+                                <span class="text-xs font-bold px-2 py-0.5 bg-emerald-500 text-white rounded">WON</span>
+                                <span class="font-bold">Real Madrid vs Barcelona?</span>
+                            </div>
+                            <div class="text-xs text-gray-500 flex items-center gap-3">
+                                <span>✅ Dec 15</span>
+                                <span class="text-emerald-600 font-bold">Result: Real Madrid</span>
+                                <span class="text-emerald-600">📰 ESPN</span>
+                                <svg class="w-4 h-4 ml-auto transition-transform group-open:rotate-180" fill="none"
+                                    stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                        d="M19 9l-7 7-7-7"></path>
+                                </svg>
+                            </div>
+                        </div>
+                        <div
+                            class="w-28 bg-emerald-100 border-l-2 border-emerald-500 p-3 flex flex-col justify-center text-center">
+                            <div class="text-[9px] font-bold text-emerald-700 uppercase">🎉 Won!</div>
+                            <div class="font-black text-2xl text-emerald-700">+180</div>
+                            <div class="text-xs font-bold text-emerald-600">pts</div>
+                        </div>
+                    </summary>
+                    <div class="border-t-2 border-dashed border-emerald-300 p-4 bg-emerald-50">
+                        <div class="flex items-start gap-3 p-3 bg-white border-2 border-emerald-300 rounded-lg">
+                            <div
+                                class="flex-shrink-0 w-10 h-10 bg-emerald-500 rounded-full flex items-center justify-center">
+                                <span class="text-white text-lg">✓</span>
+                            </div>
+                            <div class="flex-1">
+                                <div class="font-bold text-emerald-800 text-sm">Verified Result: Real Madrid</div>
+                                <div class="text-xs text-gray-600">📰 Source: <span class="font-bold">ESPN</span></div>
+                                <div class="text-xs text-gray-500">🕒 Dec 15, 10:45 PM • ⚡ AI Verified • High confidence
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </details>
+            </div>
+        </section>
+
+        <!-- DESIGN B: Inline Ticket with Verification Badge -->
+        <section class="mb-12">
+            <h2
+                class="text-xl font-black mb-4 bg-orange-500 text-white inline-block px-4 py-2 rounded-lg border-2 border-black">
+                Design B: Ticket + Verification Badge</h2>
+            <p class="text-gray-600 mb-4 text-sm">Floating rotated ticket. Verification badge inline. More playful.</p>
+
+            <div class="space-y-3">
+                <!-- OPEN -->
+                <details class="group bg-white rounded-xl border-2 border-black shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]">
+                    <summary class="p-4 cursor-pointer list-none">
+                        <div class="flex items-start justify-between gap-4">
+                            <div class="flex-1">
+                                <div class="flex items-center gap-2 mb-1">
+                                    <span
+                                        class="text-xs font-bold px-2 py-0.5 bg-green-500 text-white rounded">OPEN</span>
+                                    <span class="font-bold">Who wins Bayern vs Dortmund?</span>
+                                </div>
+                                <div class="text-xs text-gray-500 flex items-center gap-3">
+                                    <span>⏱ 2h 34m</span>
+                                    <span>💰 450 pts</span>
+                                    <svg class="w-4 h-4 transition-transform group-open:rotate-180" fill="none"
+                                        stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                            d="M19 9l-7 7-7-7"></path>
+                                    </svg>
+                                </div>
+                            </div>
+                            <!-- Rotated mini ticket -->
+                            <div class="flex-shrink-0 bg-yellow-100 border-2 border-black rounded-lg p-2 text-center transform rotate-3 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
+                                style="min-width: 80px;">
+                                <div class="text-[8px] font-bold text-gray-500 uppercase tracking-wider">🎫 My Bet</div>
+                                <div class="font-black text-base">Bayern</div>
+                                <div class="text-[10px] font-bold text-green-600">~120 pts</div>
+                            </div>
+                        </div>
+                    </summary>
+                    <div class="border-t-2 border-dashed border-gray-300 p-4 bg-gray-50">
+                        <div class="grid grid-cols-3 gap-4 text-sm">
+                            <div><span class="text-gray-500">Wager:</span> <span class="font-bold">50 pts</span></div>
+                            <div><span class="text-gray-500">Odds:</span> <span class="font-bold">2.4x</span></div>
+                            <div><span class="text-gray-500">Closes:</span> <span class="font-bold">Dec 18</span></div>
+                        </div>
+                    </div>
+                </details>
+
+                <!-- PROOFING with verification -->
+                <details open
+                    class="group bg-white rounded-xl border-2 border-blue-400 shadow-[3px_3px_0px_0px_rgba(59,130,246,0.5)]">
+                    <summary class="p-4 cursor-pointer list-none">
+                        <div class="flex items-start justify-between gap-4">
+                            <div class="flex-1">
+                                <div class="flex items-center gap-2 mb-1 flex-wrap">
+                                    <span
+                                        class="text-xs font-bold px-2 py-0.5 bg-blue-500 text-white rounded">PROOFING</span>
+                                    <span class="font-bold">Man City vs Liverpool winner?</span>
+                                    <!-- Inline verification badge -->
+                                    <span
+                                        class="text-[10px] font-bold px-2 py-0.5 bg-green-100 text-green-700 rounded-full border border-green-300 flex items-center gap-1">
+                                        ✓ ESPN
+                                    </span>
+                                </div>
+                                <div class="text-xs text-gray-500 flex items-center gap-3">
+                                    <span>⏱ 45m review</span>
+                                    <span class="text-blue-600 font-bold">Result: Liverpool</span>
+                                    <svg class="w-4 h-4 transition-transform group-open:rotate-180" fill="none"
+                                        stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                            d="M19 9l-7 7-7-7"></path>
+                                    </svg>
+                                </div>
+                            </div>
+                            <div class="flex-shrink-0 bg-green-100 border-2 border-green-500 rounded-lg p-2 text-center transform -rotate-2 shadow-[2px_2px_0px_0px_rgba(0,128,0,0.5)]"
+                                style="min-width: 80px;">
+                                <div class="text-[8px] font-bold text-green-700 uppercase tracking-wider">✅ Winning
+                                </div>
+                                <div class="font-black text-base text-green-700">Liverpool</div>
+                                <div class="text-[10px] font-bold text-green-600">+180 pts</div>
+                            </div>
+                        </div>
+                    </summary>
+                    <div class="border-t-2 border-dashed border-blue-300 p-4 bg-blue-50">
+                        <!-- Expanded verification details -->
+                        <div class="flex items-center gap-3 p-3 bg-white rounded-lg border-2 border-green-300 mb-3">
+                            <div
+                                class="w-8 h-8 bg-green-500 rounded-full flex items-center justify-center text-white font-bold">
+                                ✓</div>
+                            <div class="flex-1 text-sm">
+                                <span class="font-bold text-green-800">AI Verified</span>
+                                <span class="text-gray-500"> via ESPN • Dec 17, 11:18 PM • High confidence</span>
+                            </div>
+                        </div>
+                        <button
+                            class="px-3 py-1.5 bg-red-100 text-red-600 rounded font-bold text-xs border border-red-300">🚩
+                            Dispute</button>
+                    </div>
+                </details>
+
+                <!-- RESOLVED with full verification stamp -->
+                <details
+                    class="group bg-emerald-50 rounded-xl border-2 border-emerald-400 shadow-[3px_3px_0px_0px_rgba(16,185,129,0.5)]">
+                    <summary class="p-4 cursor-pointer list-none">
+                        <div class="flex items-start justify-between gap-4">
+                            <div class="flex-1">
+                                <div class="flex items-center gap-2 mb-1 flex-wrap">
+                                    <span
+                                        class="text-xs font-bold px-2 py-0.5 bg-emerald-500 text-white rounded">WON</span>
+                                    <span class="font-bold">Real Madrid vs Barcelona?</span>
+                                    <span
+                                        class="text-[10px] font-bold px-2 py-0.5 bg-emerald-200 text-emerald-700 rounded-full border border-emerald-300 flex items-center gap-1">
+                                        ✓ ESPN Verified
+                                    </span>
+                                </div>
+                                <div class="text-xs text-gray-600 flex items-center gap-3">
+                                    <span>✅ Dec 15</span>
+                                    <span class="text-emerald-700 font-bold">Result: Real Madrid</span>
+                                    <svg class="w-4 h-4 transition-transform group-open:rotate-180" fill="none"
+                                        stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                            d="M19 9l-7 7-7-7"></path>
+                                    </svg>
+                                </div>
+                            </div>
+                            <div class="flex-shrink-0 bg-emerald-200 border-2 border-emerald-600 rounded-lg p-2 text-center transform rotate-2 shadow-[2px_2px_0px_0px_rgba(0,128,0,0.5)]"
+                                style="min-width: 80px;">
+                                <div class="text-[8px] font-bold text-emerald-700 uppercase tracking-wider">🎉 Won!
+                                </div>
+                                <div class="font-black text-xl text-emerald-800">+180</div>
+                            </div>
+                        </div>
+                    </summary>
+                    <div class="border-t-2 border-dashed border-emerald-300 p-4 bg-white/50">
+                        <div class="flex items-center gap-3 p-3 bg-white rounded-lg border-2 border-emerald-300">
+                            <div
+                                class="w-8 h-8 bg-emerald-500 rounded-full flex items-center justify-center text-white font-bold">
+                                ✓</div>
+                            <div class="flex-1 text-sm">
+                                <span class="font-bold text-emerald-800">Verified Result</span><br>
+                                <span class="text-gray-500 text-xs">📰 ESPN • 🕒 Dec 15, 10:45 PM • ⚡ AI Verified • High
+                                    confidence</span>
+                            </div>
+                        </div>
+                    </div>
+                </details>
+            </div>
+        </section>
+
+        <!-- DESIGN C: Compact Cards with Embedded Ticket -->
+        <section class="mb-12">
+            <h2
+                class="text-xl font-black mb-4 bg-cyan-500 text-white inline-block px-4 py-2 rounded-lg border-2 border-black">
+                Design C: Embedded Ticket Row</h2>
+            <p class="text-gray-600 mb-4 text-sm">Ticket as inline row element. Very compact. Verification in expandable
+                details.</p>
+
+            <div class="space-y-2">
+                <!-- OPEN -->
+                <details class="group bg-white rounded-lg border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
+                    <summary class="p-3 cursor-pointer list-none flex items-center gap-3">
+                        <div class="w-1 h-12 bg-green-500 rounded-full flex-shrink-0"></div>
+                        <div class="flex-1 min-w-0">
+                            <div class="font-bold text-sm truncate">Who wins Bayern vs Dortmund?</div>
+                            <div class="text-xs text-gray-500">⏱ 2h 34m • 💰 450 pts</div>
+                        </div>
+                        <!-- Embedded ticket row -->
+                        <div class="flex items-center gap-2 px-3 py-1.5 bg-yellow-100 rounded border-2 border-black">
+                            <span class="text-xs font-bold text-gray-500">🎫</span>
+                            <span class="font-black text-sm">Bayern</span>
+                            <span class="text-xs font-bold text-green-600">~120</span>
+                        </div>
+                        <svg class="w-4 h-4 flex-shrink-0 transition-transform group-open:rotate-180" fill="none"
+                            stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7">
+                            </path>
+                        </svg>
+                    </summary>
+                    <div class="border-t border-gray-200 p-3 bg-gray-50 text-xs">
+                        <div class="flex gap-4">
+                            <span>Wager: <b>50 pts</b></span>
+                            <span>Odds: <b>2.4x</b></span>
+                            <span>Closes: <b>Dec 18, 8PM</b></span>
+                        </div>
+                    </div>
+                </details>
+
+                <!-- PROOFING -->
+                <details open
+                    class="group bg-blue-50 rounded-lg border-2 border-blue-400 shadow-[2px_2px_0px_0px_rgba(59,130,246,0.5)]">
+                    <summary class="p-3 cursor-pointer list-none flex items-center gap-3">
+                        <div class="w-1 h-12 bg-blue-500 rounded-full flex-shrink-0"></div>
+                        <div class="flex-1 min-w-0">
+                            <div class="font-bold text-sm truncate">Man City vs Liverpool?</div>
+                            <div class="text-xs text-gray-600 flex items-center gap-2">
+                                <span>⏱ 45m</span>
+                                <span class="text-blue-600 font-bold">Result: Liverpool</span>
+                                <span
+                                    class="text-[10px] px-1.5 py-0.5 bg-green-100 text-green-700 rounded-full border border-green-300">✓
+                                    ESPN</span>
+                            </div>
+                        </div>
+                        <div class="flex items-center gap-2 px-3 py-1.5 bg-green-100 rounded border-2 border-green-500">
+                            <span class="text-xs font-bold text-green-700">✅</span>
+                            <span class="font-black text-sm text-green-700">Liverpool</span>
+                            <span class="text-xs font-bold text-green-600">+180</span>
+                        </div>
+                        <svg class="w-4 h-4 flex-shrink-0 transition-transform group-open:rotate-180" fill="none"
+                            stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7">
+                            </path>
+                        </svg>
+                    </summary>
+                    <div class="border-t border-blue-300 p-3 bg-white text-xs">
+                        <div class="flex items-center justify-between">
+                            <div class="flex items-center gap-2">
+                                <span
+                                    class="w-5 h-5 bg-green-500 rounded-full flex items-center justify-center text-white text-xs">✓</span>
+                                <span><b>ESPN</b> • Dec 17, 11:18 PM • AI Verified</span>
+                            </div>
+                            <button class="px-2 py-1 bg-red-100 text-red-600 rounded font-bold border border-red-300">🚩
+                                Dispute</button>
+                        </div>
+                    </div>
+                </details>
+
+                <!-- RESOLVED WON -->
+                <details
+                    class="group bg-emerald-50 rounded-lg border-2 border-emerald-400 shadow-[2px_2px_0px_0px_rgba(16,185,129,0.5)]">
+                    <summary class="p-3 cursor-pointer list-none flex items-center gap-3">
+                        <div class="w-1 h-12 bg-emerald-500 rounded-full flex-shrink-0"></div>
+                        <div class="flex-1 min-w-0">
+                            <div class="font-bold text-sm truncate">Real Madrid vs Barcelona?</div>
+                            <div class="text-xs text-gray-600 flex items-center gap-2">
+                                <span>✅ Dec 15</span>
+                                <span
+                                    class="text-[10px] px-1.5 py-0.5 bg-emerald-100 text-emerald-700 rounded-full border border-emerald-300">✓
+                                    ESPN Verified</span>
+                            </div>
+                        </div>
+                        <div
+                            class="flex items-center gap-2 px-3 py-1.5 bg-emerald-200 rounded border-2 border-emerald-600">
+                            <span class="text-xs font-bold text-emerald-700">🎉</span>
+                            <span class="font-black text-lg text-emerald-800">+180</span>
+                        </div>
+                        <svg class="w-4 h-4 flex-shrink-0 transition-transform group-open:rotate-180" fill="none"
+                            stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7">
+                            </path>
+                        </svg>
+                    </summary>
+                    <div class="border-t border-emerald-300 p-3 bg-white text-xs">
+                        <div class="flex items-center gap-2">
+                            <span
+                                class="w-5 h-5 bg-emerald-500 rounded-full flex items-center justify-center text-white text-xs">✓</span>
+                            <span><b>Verified:</b> Real Madrid • ESPN • Dec 15, 10:45 PM • AI Verified</span>
+                        </div>
+                    </div>
+                </details>
+
+                <!-- RESOLVED LOST -->
+                <details
+                    class="group bg-red-50 rounded-lg border-2 border-red-300 shadow-[2px_2px_0px_0px_rgba(239,68,68,0.5)] opacity-80">
+                    <summary class="p-3 cursor-pointer list-none flex items-center gap-3">
+                        <div class="w-1 h-12 bg-red-500 rounded-full flex-shrink-0"></div>
+                        <div class="flex-1 min-w-0">
+                            <div class="font-bold text-sm truncate text-gray-600 line-through">PSG vs Monaco score?
+                            </div>
+                            <div class="text-xs text-gray-500">❌ Dec 14 • Result: 3-0</div>
+                        </div>
+                        <div class="flex items-center gap-2 px-3 py-1.5 bg-red-200 rounded border-2 border-red-500">
+                            <span class="font-black text-lg text-red-700">-50</span>
+                        </div>
+                        <svg class="w-4 h-4 flex-shrink-0 transition-transform group-open:rotate-180" fill="none"
+                            stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7">
+                            </path>
+                        </svg>
+                    </summary>
+                    <div class="border-t border-red-200 p-3 bg-white text-xs">
+                        <span>You picked: <b>2-1</b> • Actual: <b>3-0</b></span>
+                    </div>
+                </details>
+            </div>
+        </section>
+
+        <div class="text-center text-gray-500 text-sm mt-8">
+            <p>Which design do you prefer? I can implement any of these!</p>
+        </div>
+    </div>
+</body>
+
+</html>

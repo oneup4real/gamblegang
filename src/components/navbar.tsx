@@ -1,5 +1,4 @@
 'use client';
-import { useTranslations } from "next-intl";
 
 import { useAuth } from "@/components/auth-provider";
 import { Link } from '@/i18n/navigation';
@@ -39,13 +38,11 @@ export function NavBar() {
         fetchUserPhoto();
     }, [user]);
 
-    const t = useTranslations('NavBar');
-
     if (!user) return null;
 
     return (
         <>
-            <header className="border-b-2 border-black bg-pattern-blueprint py-4 sticky top-0 z-50">
+            <header className="bg-notebook shadow-md py-4 sticky top-0 z-50">
                 <div className="container mx-auto flex h-14 items-center justify-between px-4">
                     <Link href="/dashboard" className="flex items-center gap-3 group">
                         {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -59,7 +56,7 @@ export function NavBar() {
                         <button
                             onClick={() => setIsManualOpen(true)}
                             className="h-10 w-10 flex items-center justify-center rounded-full border-2 border-black bg-yellow-400 hover:scale-110 hover:shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] transition-all cursor-pointer shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
-                            title={t('howToPlay')}
+                            title="How to Play"
                         >
                             <HelpCircle className="w-6 h-6 text-black" />
                         </button>
@@ -73,10 +70,10 @@ export function NavBar() {
                                     src={userPhotoURL}
                                     alt="Profile"
                                     className="h-10 w-10 rounded-full border-2 border-black bg-gray-200 hover:scale-110 transition-transform cursor-pointer shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] object-cover"
-                                    title={t('profile')}
+                                    title="My Profile"
                                 />
                             ) : (
-                                <div className="h-10 w-10 rounded-full border-2 border-black bg-gray-200 flex items-center justify-center hover:scale-110 transition-transform cursor-pointer shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]" title={t('profile')}>
+                                <div className="h-10 w-10 rounded-full border-2 border-black bg-gray-200 flex items-center justify-center hover:scale-110 transition-transform cursor-pointer shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]" title="My Profile">
                                     <span className="font-bold text-xl">{user.displayName?.charAt(0) || 'U'}</span>
                                 </div>
                             )}

@@ -739,7 +739,12 @@ export async function getUserDashboardStats(user: User, leagues: League[]): Prom
                         status: bet.status,
                         closesAt: bet.closesAt,
                         type: bet.type,
+                        options: bet.options, // Added for resolution UI
                         totalPool: bet.totalPool,
+                        rangeUnit: bet.rangeUnit, // Added for resolution UI
+                        rangeMin: bet.rangeMin, // Added for resolution UI
+                        rangeMax: bet.rangeMax, // Added for resolution UI
+                        matchDetails: bet.matchDetails, // Added for resolution UI
                         creatorId: bet.creatorId,
                         createdAt: bet.createdAt,
                         winningOutcome: bet.winningOutcome,

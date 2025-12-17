@@ -185,16 +185,11 @@
     background-color: hsl(var(--background));
   }
 
-  .bg-pattern-pink {
-    background-color: hsl(320 100% 97%);
-    /* Light Pink background */
-    background-image: radial-gradient(hsl(var(--secondary) / 0.2) 2px, transparent 2px);
-    background-size: 10px 10px;
-  }
-
-  .bg-pattern-blueprint {
+  .bg-notebook {
     background-color: #ffffff;
-    background-image: linear-gradient(#e5e7eb 1px, transparent 1px), linear-gradient(90deg, #e5e7eb 1px, transparent 1px);
+    background-image:
+      linear-gradient(#e5e5f7 1px, transparent 1px),
+      linear-gradient(90deg, #e5e5f7 1px, transparent 1px);
     background-size: 20px 20px;
   }
 }
