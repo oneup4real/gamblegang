@@ -21,6 +21,7 @@ export interface League {
     mode: LeagueMode;
     status: LeagueStatus;
     disputeWindowHours?: number; // Configurable dispute period (default: 12)
+    aiAutoConfirmEnabled?: boolean;
 }
 
 export interface MatchSettings {
@@ -71,7 +72,8 @@ export async function createLeague(
         startCapital,
         createdAt: serverTimestamp(),
         memberCount: 1,
-        status: "NOT_STARTED"
+        status: "NOT_STARTED",
+        aiAutoConfirmEnabled: true // Default enabled
     };
 
     if (mode === "ZERO_SUM") {

@@ -1086,12 +1086,16 @@ export default function LeaguePage() {
                             <CreateBetModal
                                 leagueId={leagueId}
                                 leagueMode={league.mode}
+                                aiAutoConfirmEnabled={league.aiAutoConfirmEnabled}
                                 isOpen={isBetModalOpen}
                                 onClose={() => {
                                     setIsBetModalOpen(false);
                                     setBetToEdit(undefined);
                                 }}
-                                onSuccess={fetchLeagueData}
+                                onSuccess={() => {
+                                    fetchLeagueData();
+                                    setIsBetModalOpen(false);
+                                }}
                                 betToEdit={betToEdit}
                             />
                         )

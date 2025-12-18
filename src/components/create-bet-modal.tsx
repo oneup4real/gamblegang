@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { X, Plus, Trash, Wand2, Pencil, Loader2 } from "lucide-react";
+import { X, Plus, Trash, Pencil, Loader2 } from "lucide-react";
 import { useAuth } from "@/components/auth-provider";
 import { createBet, BetType, Bet, updateBet } from "@/lib/services/bet-service";
 import { Button } from "@/components/ui/button";
@@ -14,13 +14,14 @@ import { LeagueMode } from "@/lib/services/league-service";
 interface CreateBetModalProps {
     leagueId: string;
     leagueMode?: LeagueMode; // Add leagueMode
+    aiAutoConfirmEnabled?: boolean; // New prop
     isOpen: boolean;
     onClose: () => void;
     onSuccess?: () => void;
     betToEdit?: any;
 }
 
-export function CreateBetModal({ leagueId, leagueMode, isOpen, onClose, onSuccess, betToEdit }: CreateBetModalProps) {
+export function CreateBetModal({ leagueId, leagueMode, aiAutoConfirmEnabled, isOpen, onClose, onSuccess, betToEdit }: CreateBetModalProps) {
     const t = useTranslations('Bets');
     const tAi = useTranslations('AI');
     const { user } = useAuth();
@@ -32,6 +33,8 @@ export function CreateBetModal({ leagueId, leagueMode, isOpen, onClose, onSucces
     const [type, setType] = useState<BetType>("CHOICE");
     const [eventDateStr, setEventDateStr] = useState("");
     const [lockBufferMinutes, setLockBufferMinutes] = useState(0); // 0 = At Start
+    // Removed autoConfirm/delay config state as it is now league-level
+
 
     // Choice Logic
     const [options, setOptions] = useState<string[]>(["", ""]);
@@ -287,6 +290,8 @@ export function CreateBetModal({ leagueId, leagueMode, isOpen, onClose, onSucces
                     ...(type === "CHOICE" ? { options: options.filter(o => o.trim() !== "").map((t, i) => ({ id: String(i), text: t, totalWagered: 0, odds: 1 })) } : {}),
                     ...(type === "RANGE" ? { rangeMin: Number(rangeMin), rangeMax: Number(rangeMax), rangeUnit } : {}),
                     ...(type === "MATCH" ? { matchDetails: { homeTeam: matchHome, awayTeam: matchAway, date: evDate.toISOString() } } : {}),
+                    autoConfirm: aiAutoConfirmEnabled !== false, // Default true if undefined
+                    autoConfirmDelay: 120
                 });
                 alert("Draft Updated!");
             } else {
@@ -299,7 +304,9 @@ export function CreateBetModal({ leagueId, leagueMode, isOpen, onClose, onSucces
                     evDate,
                     type === "CHOICE" ? options.filter(o => o.trim() !== "") : undefined,
                     type === "RANGE" ? { min: Number(rangeMin), max: Number(rangeMax), unit: rangeUnit } : undefined,
-                    type === "MATCH" ? { home: matchHome, away: matchAway } : undefined
+                    type === "MATCH" ? { home: matchHome, away: matchAway } : undefined,
+                    aiAutoConfirmEnabled !== false, // Default true
+                    120 // Fixed delay
                 );
             }
             if (onSuccess) onSuccess();
@@ -427,9 +434,13 @@ export function CreateBetModal({ leagueId, leagueMode, isOpen, onClose, onSucces
                                                     <option value={60}>{t('lock1Hour')}</option>
                                                     <option value={1440}>{t('lock24Hours')}</option>
                                                 </select>
+                                                <div className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2">
+                                                    <svg className="h-4 w-4 fill-black" viewBox="0 0 20 20"><path d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" /></svg>
+                                                </div>
                                             </div>
                                         </div>
 
+                                        {/* Auto-Confirm Settings Removed (Now League Level) */}
                                         {type === "CHOICE" && (
                                             // ... Choice options UI ...
                                             <div className="space-y-3">

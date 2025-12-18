@@ -44,8 +44,7 @@ export function BetCard({ bet, userPoints, userWager, mode, onEdit, onWagerSucce
 
     // UI States
     const [loading, setLoading] = useState(false);
-    const [aiSuggestion, setAiSuggestion] = useState<string | null>(null);
-    const [verifying, setVerifying] = useState(false);
+
     const [showCoinFlow, setShowCoinFlow] = useState(false);
     const [showAllInModal, setShowAllInModal] = useState(false);
     const [pendingWagerData, setPendingWagerData] = useState<{ amount: number, prediction: any } | null>(null);
@@ -114,59 +113,68 @@ export function BetCard({ bet, userPoints, userWager, mode, onEdit, onWagerSucce
     }, [bet, mode]);
 
     // Auto-finalize PROOFING bets when deadline has passed
+    // Auto-finalize PROOFING bets when deadline has passed
     useEffect(() => {
-        const checkAutoFinalize = async () => {
-            // Only proceed if bet is in PROOFING status and we're the owner or it's flagged for auto-finalize
-            if (bet.status !== "PROOFING" || !bet.disputeDeadline || !user) return;
+        const checkAutomation = async () => {
+            if (!user) return;
 
-            const deadline = bet.disputeDeadline.toDate ? bet.disputeDeadline.toDate() : new Date(bet.disputeDeadline);
-            const isPastDeadline = new Date() >= deadline;
+            // 1. Check Auto-Finalize (Proofing -> Resolved)
+            if (bet.status === "PROOFING" && bet.disputeDeadline) {
+                const deadline = bet.disputeDeadline.toDate ? bet.disputeDeadline.toDate() : new Date(bet.disputeDeadline);
+                const isPastDeadline = new Date() >= deadline;
+                if (isPastDeadline && (isOwner || bet.autoFinalize)) {
+                    try {
+                        console.log("Auto-finalizing bet:", bet.id);
+                        await finalizeBet(bet.leagueId, bet.id, user);
+                        console.log("Bet auto-finalized successfully");
+                    } catch (err) {
+                        console.error("Auto-finalization failed:", err);
+                    }
+                }
+            }
 
-            // Auto-finalize if deadline passed and (owner viewing OR autoFinalize flag set)
-            if (isPastDeadline && (isOwner || bet.autoFinalize)) {
-                try {
-                    console.log("Auto-finalizing bet:", bet.id);
-                    await finalizeBet(bet.leagueId, bet.id, user);
-                    console.log("Bet auto-finalized successfully");
-                } catch (err) {
-                    console.error("Auto-finalization failed:", err);
+            // 2. Check Auto-Confirm (Locked/Open -> Proofing)
+            if ((bet.status === "LOCKED" || bet.status === "OPEN") && bet.autoConfirm) {
+                const eventDate = bet.eventDate?.toDate ? bet.eventDate.toDate() : (bet.eventDate ? new Date(bet.eventDate) : null);
+                if (!eventDate) return;
+
+                const confirmTime = new Date(eventDate.getTime() + (bet.autoConfirmDelay || 0) * 60000);
+                if (new Date() >= confirmTime) {
+                    try {
+                        console.log("Auto-confirming bet via AI:", bet.id);
+                        // Trigger AI Resolution
+                        const result = await aiAutoResolveBet(bet);
+                        if (result) {
+                            // Extract outcome
+                            let outcome: any;
+                            if (result.type === "MATCH") {
+                                outcome = { home: result.home, away: result.away };
+                            } else if (result.type === "CHOICE") {
+                                outcome = String(result.optionIndex);
+                            } else if (result.type === "RANGE") {
+                                outcome = result.value;
+                            }
+
+                            if (outcome !== undefined) {
+                                await startProofing(bet.leagueId, bet.id, user, outcome, result.verification);
+                                console.log("Bet auto-confirmed successfully");
+                            }
+                        }
+                    } catch (err) {
+                        console.error("Auto-confirmation failed:", err);
+                    }
                 }
             }
         };
 
-        checkAutoFinalize();
-    }, [bet.id, bet.status, bet.disputeDeadline, bet.autoFinalize, user, isOwner]);
+        checkAutomation();
+    }, [bet.id, bet.status, bet.disputeDeadline, bet.autoFinalize, bet.autoConfirm, bet.autoConfirmDelay, bet.eventDate, user, isOwner]);
 
 
     // --- HANDLERS ---
 
-    const handleAiverify = async () => {
-        setVerifying(true);
-        try {
-            const suggestion = await verifyBetResult(bet.question, bet.matchDetails);
-            setAiSuggestion(suggestion);
-        } catch (e) {
-            console.error(e);
-            alert("AI Verification Failed");
-        } finally {
-            setVerifying(false);
-        }
-    };
+    // --- HANDLERS ---
 
-    const handleStartProofing = async () => {
-        if (!user || !aiSuggestion) return;
-        setLoading(true);
-        try {
-            await startProofing(bet.leagueId, bet.id, user, aiSuggestion);
-            alert("Proofing started! 12h timer set.");
-            setAiSuggestion(null);
-        } catch (e) {
-            console.error(e);
-            alert("Failed to start proofing");
-        } finally {
-            setLoading(false);
-        }
-    };
 
     const handlePlaceWager = async () => {
         if (!user) return;

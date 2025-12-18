@@ -33,7 +33,10 @@ export function LeagueSettingsModal({ league, isOpen, onClose, onUpdate }: Leagu
     const [myRole, setMyRole] = useState<LeagueRole>("MEMBER");
 
     // Dispute settings
+    // Dispute settings
     const [disputeWindowHours, setDisputeWindowHours] = useState(league.disputeWindowHours || 12);
+    // AI Settings
+    const [aiAutoConfirmEnabled, setAiAutoConfirmEnabled] = useState(league.aiAutoConfirmEnabled !== false); // Default true
 
     const [activeTab, setActiveTab] = useState<"general" | "members" | "danger">("general");
 
@@ -44,7 +47,8 @@ export function LeagueSettingsModal({ league, isOpen, onClose, onUpdate }: Leagu
         try {
             const updates: Partial<League> = {
                 name,
-                disputeWindowHours
+                disputeWindowHours,
+                aiAutoConfirmEnabled
             };
             if (league.mode === "STANDARD") {
                 updates.matchSettings = {
@@ -242,8 +246,8 @@ export function LeagueSettingsModal({ league, isOpen, onClose, onUpdate }: Leagu
                                                 type="button"
                                                 onClick={() => setDisputeWindowHours(hours)}
                                                 className={`px-4 py-2 rounded-lg border-2 font-bold text-sm transition-all ${disputeWindowHours === hours
-                                                        ? "bg-orange-500 text-white border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
-                                                        : "bg-white border-gray-300 hover:border-orange-500"
+                                                    ? "bg-orange-500 text-white border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
+                                                    : "bg-white border-gray-300 hover:border-orange-500"
                                                     }`}
                                             >
                                                 {hours}h
@@ -252,6 +256,34 @@ export function LeagueSettingsModal({ league, isOpen, onClose, onUpdate }: Leagu
                                     </div>
                                     <p className="text-[10px] font-bold text-orange-600">
                                         Current: {disputeWindowHours} hours
+                                    </p>
+                                </div>
+
+                                {/* AI Auto-Confirm Setting */}
+                                <div className="space-y-3 p-4 bg-teal-50 border-2 border-teal-200 rounded-xl">
+                                    <div className="flex items-center justify-between">
+                                        <div className="space-y-1">
+                                            <h4 className="text-sm font-black uppercase text-teal-800 flex items-center gap-2">
+                                                🤖 AI Auto-Confirm
+                                            </h4>
+                                            <p className="text-xs font-bold text-gray-600 max-w-[280px]">
+                                                Automatically resolve bets using AI (Gemini) 2 hours after the event.
+                                            </p>
+                                        </div>
+                                        <div
+                                            onClick={() => setAiAutoConfirmEnabled(!aiAutoConfirmEnabled)}
+                                            className={`relative h-8 w-14 cursor-pointer rounded-full border-2 border-black transition-colors ${aiAutoConfirmEnabled ? "bg-teal-500" : "bg-gray-200"
+                                                }`}
+                                        >
+                                            <motion.div
+                                                className="absolute top-[2px] h-6 w-6 rounded-full border-2 border-black bg-white shadow-sm"
+                                                animate={{ x: aiAutoConfirmEnabled ? 26 : 2 }}
+                                                transition={{ type: "spring", stiffness: 500, damping: 30 }}
+                                            />
+                                        </div>
+                                    </div>
+                                    <p className="text-[10px] font-bold text-teal-600">
+                                        {aiAutoConfirmEnabled ? "Enabled: Bets verify themselves." : "Disabled: Owner must resolve manually."}
                                     </p>
                                 </div>
                                 <Button

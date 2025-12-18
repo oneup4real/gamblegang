@@ -143,7 +143,29 @@ Predict a numeric value
 - **Use Cases**:
   - Bet idea generation
   - Result verification
+  - Bet idea generation
+  - Result verification
   - Auto-resolve functionality
+
+### Architecture & Infrastructure
+
+The application leverages a **Serverless Architecture** on Google Cloud Platform:
+
+1.  **Next.js App (Firebase App Hosting)**:
+    - Serves the frontend and SSR pages.
+    - Handles dynamic API routes (`/api/...`).
+    - Automatically built into a Cloud Run service (or Cloud Function v2).
+
+2.  **Auto-Resolve Scheduler (Firebase Cloud Functions)**:
+    - **Trigger**: `onSchedule("every 15 minutes")` (EventArc).
+    - **Logic**: Independent TypeScript function (`functions/src/index.ts`).
+    - **Role**: Scans for "Open" bets that have passed their event time + delay.
+    - **AI Integration**: Calls Gemini with Google Search Grounding to verify results.
+    - **Database**: Updates Firestore directly via `firebase-admin`.
+
+3.  **Database (Firestore)**:
+    - Shared NoSQL database between the App and the Scheduler.
+    - Real-time listeners update the UI immediately when the Scheduler resolves a bet.
 
 ### Development Tools
 - **Package Manager**: npm
@@ -676,7 +698,25 @@ firebase login
 firebase init
 
 # Deploy
-firebase deploy
+npx firebase deploy
+```
+
+This single command deploys:
+1.  **Cloud Functions**: The auto-resolve scheduler.
+2.  **Hosting**: The Next.js application (SSR + Static).
+
+### Cloud Functions Setup
+
+The project uses a native Firebase Cloud Function for background tasks.
+
+**Configuration:**
+- Source: `functions/` directory.
+- Env Vars: `functions/.env` (Requires `GEMINI_API_KEY`).
+- Runtime: Node.js 20.
+
+If you need to deploy *only* the functions:
+```bash
+npx firebase deploy --only functions
 ```
 
 ## 📖 Usage Guide

@@ -65,6 +65,8 @@ export interface Bet {
     };
     disputeConsensus?: boolean; // True if all submissions agree
     autoFinalize?: boolean; // Flag for automatic finalization after deadline/consensus
+    autoConfirm?: boolean; // Auto-confirm result via AI
+    autoConfirmDelay?: number; // Delay in minutes after eventDate
 }
 
 export interface Wager {
@@ -88,7 +90,9 @@ export async function createBet(
     eventDate: Date, // Added eventDate
     options?: string[],
     rangeConfig?: { min: number, max: number, unit: string },
-    matchDetails?: { home: string, away: string }
+    matchDetails?: { home: string, away: string },
+    autoConfirm?: boolean,
+    autoConfirmDelay?: number
 ) {
     const betsRef = collection(db, "leagues", leagueId, "bets");
     const newBetRef = doc(betsRef);
@@ -105,6 +109,8 @@ export async function createBet(
         eventDate: eventDate, // Save eventDate
         totalPool: 0,
         // searchKey: question.toLowerCase() // Added searchKey as per instruction, but it's not in Bet interface
+        autoConfirm: autoConfirm || false,
+        autoConfirmDelay: autoConfirmDelay || 0
     };
 
     if (type === "CHOICE" && options) {
@@ -461,19 +467,40 @@ export async function resolveBet(
 import { getDocs, writeBatch, getDoc } from "firebase/firestore";
 
 // AI Verification Hooks
-export async function startProofing(leagueId: string, betId: string, user: User, result: string) {
+export async function startProofing(
+    leagueId: string,
+    betId: string,
+    user: User,
+    outcome: string | number | { home: number, away: number },
+    verification?: {
+        verified: boolean;
+        source: string;
+        verifiedAt: string;
+        method: "AI_GROUNDING" | "MANUAL" | "API";
+        confidence?: "high" | "medium" | "low";
+    }
+) {
     const betRef = doc(db, "leagues", leagueId, "bets", betId);
 
     // Set proofing/dispute deadline to 12 hours from now
     const disputeDeadline = new Date();
     disputeDeadline.setHours(disputeDeadline.getHours() + 12);
 
-    await updateDoc(betRef, {
+    const updateData: any = {
         status: "PROOFING",
-        aiVerification: result,
+        winningOutcome: outcome, // Use winningOutcome standard field
         disputeDeadline: disputeDeadline,
-        disputeActive: false // Initialize
-    });
+        disputeActive: false, // Initialize
+        pendingResolvedBy: user.uid
+    };
+
+    if (verification) {
+        updateData.verification = verification;
+        // Legacy support if needed? Or just use verification field.
+        // updateData.aiVerification = verification.source; 
+    }
+
+    await updateDoc(betRef, updateData);
 }
 
 export async function confirmVerification(leagueId: string, betId: string, user: User) {
