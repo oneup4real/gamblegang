@@ -243,5 +243,20 @@
             "slide3Text": "In ARCADE, you play for points that accumulate - whoever has the most points wins. In ZERO SUM, it's real-world betting with dynamic odds based on the pot.",
             "slide3Details": "Zero Sum has two modes: SUDDEN DEATH (fixed starting points, 0 pts = game over) and UNCAPPED (unlimited rebuy, no elimination). Arcade is about accumulating points through correct predictions with fixed payouts."
         }
+    },
+    "Activity": {
+        "title": "Activity Log",
+        "noActivity": "No activity yet",
+        "noActivityDesc": "Activity will appear here as actions are performed.",
+        "loadMore": "Load More",
+        "filter": "Filter",
+        "allActivity": "All Activity",
+        "bets": "Bets",
+        "aiActions": "AI Actions",
+        "wagers": "Wagers",
+        "payouts": "Payouts",
+        "members": "Members",
+        "adminOnly": "Admin Access Required",
+        "adminOnlyDesc": "Activity logs are only visible to league admins and owners."
     }
 }

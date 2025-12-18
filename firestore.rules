@@ -60,6 +60,19 @@ service cloud.firestore {
           );
         }
       }
+      
+      // Subcollection: Activity Log (Audit Trail)
+      // Read: Only League Owner or Admins (check member role)
+      // Write: Authenticated users (server-side actions log here)
+      match /activityLog/{logId} {
+        // Allow read if user is owner or has ADMIN role in league
+        allow read: if request.auth != null && (
+          get(/databases/$(database)/documents/leagues/$(leagueId)).data.ownerId == request.auth.uid ||
+          get(/databases/$(database)/documents/leagues/$(leagueId)/members/$(request.auth.uid)).data.role in ['OWNER', 'ADMIN']
+        );
+        // Allow write for authenticated users (logging happens from services)
+        allow write: if request.auth != null;
+      }
     }
 
     // Explicitly allow Collection Group queries for members

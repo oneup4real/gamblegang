@@ -239,5 +239,20 @@
             "slide3Text": "Im ARCADE-Modus spielst du um Punkte, die sich anhäufen - wer die meisten Punkte hat, gewinnt. Im NULLSUMMENSPIEL funktioniert es wie echtes Wetten mit dynamischen Quoten basierend auf dem Pot.",
             "slide3Details": "Nullsummenspiel hat zwei Modi: SUDDEN DEATH (feste Startpunkte, 0 Punkte = Game Over) und UNBEGRENZT (unbegrenztes Nachkaufen, keine Eliminierung). Arcade dreht sich um das Sammeln von Punkten durch korrekte Vorhersagen mit festen Auszahlungen."
         }
+    },
+    "Activity": {
+        "title": "Aktivitätsprotokoll",
+        "noActivity": "Noch keine Aktivität",
+        "noActivityDesc": "Aktivitäten werden hier angezeigt, sobald Aktionen durchgeführt werden.",
+        "loadMore": "Mehr laden",
+        "filter": "Filter",
+        "allActivity": "Alle Aktivitäten",
+        "bets": "Wetten",
+        "aiActions": "KI-Aktionen",
+        "wagers": "Einsätze",
+        "payouts": "Auszahlungen",
+        "members": "Mitglieder",
+        "adminOnly": "Admin-Zugriff erforderlich",
+        "adminOnlyDesc": "Aktivitätsprotokolle sind nur für Liga-Admins und Owner sichtbar."
     }
 }

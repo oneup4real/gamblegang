@@ -4,6 +4,7 @@ import { collection, doc, runTransaction, serverTimestamp, setDoc, increment, up
 import { User } from "firebase/auth";
 import { League, LeagueMember } from "./league-service";
 import { createNotification, createNotificationsForUsers } from "./notification-service";
+import { logBetCreated, logWagerPlaced, logBetStatusChange, logPayoutDistributed } from "./activity-log-service";
 
 export type BetType = "CHOICE" | "RANGE" | "MATCH"; // Added MATCH
 export type BetStatus = "DRAFT" | "OPEN" | "LOCKED" | "RESOLVED" | "CANCELLED" | "PROOFING" | "DISPUTED" | "INVALID";
@@ -137,6 +138,10 @@ export async function createBet(
     }
 
     await setDoc(newBetRef, betData);
+
+    // Log activity (fire and forget)
+    logBetCreated(leagueId, user, newBetRef.id, question).catch(console.error);
+
     return newBetRef.id;
 }
 
@@ -227,6 +232,11 @@ export async function placeWager(
         });
         transaction.update(betRef, betUpdates);
     });
+
+    // Log activity outside transaction (fire and forget)
+    // Note: We need bet question for logging, fetch it or pass it in
+    // For now, use a generic message
+    logWagerPlaced(leagueId, user, betId, "Bet", amount, String(selection)).catch(console.error);
 }
 
 export function calculateOdds(totalPool: number, optionPool: number): string {
@@ -460,7 +470,26 @@ export async function resolveBet(
         )
     ]).catch(console.error);
 
-    return { success: true, winnerCount: wagers.filter(w => w.status === "WON").length };
+    // Log activity for bet resolution
+    const winnerCount = wagers.filter(w => w.status === "WON").length;
+    const totalPayout = wagers.reduce((sum, w) => sum + (w.payout || 0), 0);
+
+    logBetStatusChange(
+        leagueId,
+        bet.pendingResolvedBy || user.uid,
+        user.displayName || 'Unknown',
+        betId,
+        bet.question,
+        bet.status,
+        'RESOLVED',
+        user.photoURL || undefined
+    ).catch(console.error);
+
+    if (totalPayout > 0) {
+        logPayoutDistributed(leagueId, betId, bet.question, totalPayout, winnerCount).catch(console.error);
+    }
+
+    return { success: true, winnerCount };
 }
 
 // Helper needed for resolveBet - imports were missing

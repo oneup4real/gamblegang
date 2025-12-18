@@ -20,6 +20,7 @@ import { motion } from "framer-motion";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { useTranslations } from "next-intl";
 import { hasPermission } from "@/lib/rbac";
+import { ActivityLog } from "@/components/activity-log";
 
 export default function LeaguePage() {
     const tBets = useTranslations('Bets');
@@ -44,7 +45,7 @@ export default function LeaguePage() {
     const [actionLoading, setActionLoading] = useState(false);
     const [expandedBets, setExpandedBets] = useState<Set<string>>(new Set()); // Track which bets are expanded
     const [expandAll, setExpandAll] = useState(false); // Toggle all expand/collapse
-    const [viewMode, setViewMode] = useState<"bets" | "analytics">("bets");
+    const [viewMode, setViewMode] = useState<"bets" | "analytics" | "activity">("bets");
     const [analyticsMetric, setAnalyticsMetric] = useState<"profit" | "roi" | "rank">("profit");
     const [analyticsData, setAnalyticsData] = useState<any[]>([]);
     const [analyticsLoading, setAnalyticsLoading] = useState(false);
@@ -667,11 +668,31 @@ export default function LeaguePage() {
                     >
                         {t('tabAnalytics')}
                     </button>
+                    {/* Activity Tab - Only for Admins/Owners */}
+                    {(user?.uid === league?.ownerId || members.find(m => m.uid === user?.uid)?.role === 'ADMIN') && (
+                        <button
+                            onClick={() => setViewMode("activity")}
+                            className={`relative px-6 py-2 rounded-t-lg font-black uppercase tracking-wider text-sm transition-all duration-200 ${viewMode === "activity"
+                                ? "bg-white text-black border-2 border-b-0 border-black -mb-[2px] pb-3"
+                                : "bg-gray-200 text-gray-500 hover:bg-gray-300 border-2 border-transparent"
+                                }`}
+                        >
+                            <div className="flex items-center gap-2">
+                                <Activity className="h-4 w-4" />
+                                Activity
+                            </div>
+                        </button>
+                    )}
                 </div>
 
                 {/* Content Area */}
                 <div className="bg-white border-2 border-black rounded-b-xl rounded-tr-xl p-6 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
-                    {viewMode === "analytics" ? (
+                    {viewMode === "activity" ? (
+                        <ActivityLog
+                            leagueId={leagueId}
+                            isAdmin={user?.uid === league?.ownerId || members.find(m => m.uid === user?.uid)?.role === 'ADMIN'}
+                        />
+                    ) : viewMode === "analytics" ? (
                         <div>
                             <div className="flex items-center justify-between mb-4">
                                 <h3 className="text-2xl font-black tracking-tight text-black font-comic uppercase">

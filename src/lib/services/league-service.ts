@@ -2,6 +2,7 @@ import { db } from "@/lib/firebase/config";
 import { collection, doc, runTransaction, serverTimestamp, setDoc, deleteDoc, getDocs, query, where } from "firebase/firestore";
 import { User } from "firebase/auth";
 import { LeagueRole, hasPermission } from "@/lib/rbac";
+import { logMemberJoined, logPointsBought } from "./activity-log-service";
 
 export type LeagueMode = "ZERO_SUM" | "STANDARD";
 export type LeagueStatus = "NOT_STARTED" | "STARTED" | "FINISHED" | "ARCHIVED";
@@ -285,6 +286,9 @@ export async function joinLeague(leagueId: string, user: User) {
             memberCount: (leagueData.memberCount || 0) + 1
         });
     });
+
+    // Log activity (fire and forget)
+    logMemberJoined(leagueId, user).catch(console.error);
 }
 
 /**

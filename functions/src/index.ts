@@ -189,6 +189,25 @@ export const autoResolveBets = onSchedule(
                             pendingResolvedBy: "auto-scheduler",
                             lastUpdatedBy: "firebase-scheduler"
                         });
+
+                        // Log activity to the league's activity log
+                        const activityRef = db.collection("leagues").doc(leagueId).collection("activityLog");
+                        await activityRef.add({
+                            timestamp: Timestamp.now(),
+                            type: "AI_AUTO_RESOLVE",
+                            actorId: "ai-scheduler",
+                            actorName: "AI Auto-Resolver",
+                            targetId: doc.id,
+                            targetName: bet.question,
+                            details: {
+                                aiResult: outcome,
+                                source: result.verification?.source || "AI",
+                                confidence: result.verification?.confidence || "unknown",
+                                method: result.verification?.method || "AI_GROUNDING"
+                            },
+                            message: `AI auto-resolved bet "${bet.question}" - Result: ${JSON.stringify(outcome)} (Source: ${result.verification?.source || 'AI'})`
+                        });
+
                         logger.info(`✅ Bet ${doc.id} resolved successfully`);
                     }
                 } else {
