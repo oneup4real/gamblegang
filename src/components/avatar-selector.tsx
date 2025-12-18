@@ -84,6 +84,7 @@ export function AvatarSelector({ uid, currentAvatar, onAvatarChange }: AvatarSel
                 </div>
                 <div className="flex flex-col gap-2">
                     <Button
+                        type="button"
                         onClick={() => fileInputRef.current?.click()}
                         disabled={uploading}
                         className="bg-white hover:bg-gray-100 text-black border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] active:translate-y-[1px] active:shadow-none"

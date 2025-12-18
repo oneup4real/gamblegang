@@ -95,7 +95,32 @@ export default function LeaguePage() {
                 }
                 // -------------------------------------------
 
-                setMembers(membersList.sort((a, b) => b.points - a.points)); // Sort by points desc
+                // Sort by points desc
+                membersList.sort((a, b) => b.points - a.points);
+                setMembers(membersList);
+
+                // --- KEY FIX: Sync current user's avatar if missing/outdated ---
+                // If the user has a photoURL in Auth but not in the league member record, update it.
+                if (user?.uid && user?.photoURL) {
+                    const myMember = membersList.find(m => m.uid === user.uid);
+                    // Check if member exists AND (photo is missing OR photo is different)
+                    if (myMember && (!myMember.photoURL || myMember.photoURL !== user.photoURL)) {
+                        console.log("[LeaguePage] Syncing member avatar for:", user.uid);
+
+                        // 1. Update local state immediately so user sees it
+                        myMember.photoURL = user.photoURL;
+                        setMembers([...membersList]); // Trigger re-render
+
+                        // 2. Update Firestore background
+                        const { updateDoc } = await import("firebase/firestore");
+                        const memberRef = doc(db, "leagues", leagueId as string, "members", user.uid);
+                        updateDoc(memberRef, {
+                            photoURL: user.photoURL,
+                            displayName: user.displayName || myMember.displayName // Sync name too while we're at it
+                        }).catch(e => console.error("Error syncing profile to league:", e));
+                    }
+                }
+                // -------------------------------------------------------------
 
                 // Fetch bets
             } catch (error) {
