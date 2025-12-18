@@ -2,7 +2,7 @@
 
 import { GoogleGenerativeAI } from "@google/generative-ai";
 
-const apiKey = process.env.NEXT_PUBLIC_GEMINI_API_KEY || process.env.GEMINI_API_KEY;
+const apiKey = process.env.GOOGLE_API_KEY;
 
 // Mock response in case no API key is verified/present during dev to avoid breaking content
 const MOCK_IDEAS = [

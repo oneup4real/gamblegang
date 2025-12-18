@@ -13,15 +13,19 @@
         "title": "Benutzereinstellungen",
         "backToDashboard": "Zurück zum Dashboard",
         "profilePicture": "Profilbild",
+        "avatar": "Avatar",
         "uploadImage": "Bild hochladen",
         "maxSize": "Max. Dateigröße 2MB.",
         "chooseFromLibrary": "Oder aus der Bibliothek wählen:",
         "displayName": "Anzeigename (Nickname)",
+        "nickname": "Nickname",
         "displayNameDesc": "Dieser Name ist für andere Spieler sichtbar.",
         "enterNickname": "Gib deinen Nicknamen ein",
         "language": "Spracheinstellung",
         "saveChanges": "Änderungen speichern",
-        "saving": "Speichert..."
+        "save": "Speichern",
+        "saving": "Speichert...",
+        "logout": "Abmelden"
     },
     "Login": {
         "title": "Willkommen zurück",
@@ -190,7 +194,8 @@
         "analyzing": "KI analysiert Spielplan...",
         "scanning": "Scanne Historie & kommende Spiele...",
         "found": "Daten gefunden! {count} Ergebnisse geparst.",
-        "noBets": "Keine Wetten gefunden. Versuche ein anderes Thema.",
+        "noBets": "Keine Spiele gefunden",
+        "noMatchesHint": "Versuche ein anderes Thema oder einen anderen Zeitraum. Achte auf die korrekte Schreibweise.",
         "error": "KI Generierung fehlgeschlagen.",
         "processing": "Verarbeite..."
     },

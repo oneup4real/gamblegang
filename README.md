@@ -664,9 +664,8 @@ NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET=your_project.appspot.com
 NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=your_sender_id
 NEXT_PUBLIC_FIREBASE_APP_ID=your_app_id
 
-# Gemini AI
-NEXT_PUBLIC_GEMINI_API_KEY=your_gemini_api_key
-GEMINI_API_KEY=your_gemini_api_key
+# Gemini AI (Server-side only - never use NEXT_PUBLIC_ prefix for API keys)
+GOOGLE_API_KEY=your_google_api_key
 ```
 
 ### Installation
@@ -711,7 +710,7 @@ The project uses a native Firebase Cloud Function for background tasks.
 
 **Configuration:**
 - Source: `functions/` directory.
-- Env Vars: `functions/.env` (Requires `GEMINI_API_KEY`).
+- Secrets: Uses Firebase Secret Manager (`GOOGLE_API_KEY`).
 - Runtime: Node.js 20.
 
 If you need to deploy *only* the functions:
@@ -818,7 +817,7 @@ npm run build
 - Check security rules
 
 **AI Not Working:**
-- Verify GEMINI_API_KEY is set
+- Verify GOOGLE_API_KEY is set in `.env.local` (for Next.js) or Firebase Secret Manager (for Cloud Functions)
 - Check API quota
 - Review error messages
 

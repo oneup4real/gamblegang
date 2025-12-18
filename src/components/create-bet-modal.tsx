@@ -60,6 +60,7 @@ export function CreateBetModal({ leagueId, leagueMode, aiAutoConfirmEnabled, isO
     const [bulkType, setBulkType] = useState<"CHOICE" | "MATCH">("MATCH");
     const [bulkBets, setBulkBets] = useState<any[]>([]);
     const [selectedBulkIndices, setSelectedBulkIndices] = useState<number[]>([]);
+    const [bulkNoResults, setBulkNoResults] = useState(false);
 
     // Populate form if editing
     // Populate form if editing
@@ -148,6 +149,7 @@ export function CreateBetModal({ leagueId, leagueMode, aiAutoConfirmEnabled, isO
     const handleBulkGenerate = async () => {
         if (!bulkTopic) return;
         setIsAiLoading(true);
+        setBulkNoResults(false);
         setLoadingMessage(tAi('scanning'));
         setProgress(10);
 
@@ -165,12 +167,15 @@ export function CreateBetModal({ leagueId, leagueMode, aiAutoConfirmEnabled, isO
             clearInterval(interval);
             setProgress(100);
 
-            if (bets) {
+            if (bets && bets.length > 0) {
                 setLoadingMessage(tAi('found', { count: bets.length }));
                 setBulkBets(bets);
                 setSelectedBulkIndices(bets.map((_: any, i: number) => i)); // Select all by default
+                setBulkNoResults(false);
             } else {
                 setLoadingMessage(tAi('noBets'));
+                setBulkBets([]);
+                setBulkNoResults(true);
             }
         } catch (error) {
             console.error(error);
@@ -609,6 +614,18 @@ export function CreateBetModal({ leagueId, leagueMode, aiAutoConfirmEnabled, isO
                                             {isAiLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : t('generateSchedule')}
                                         </Button>
                                     </div>
+
+                                    {/* No Results State */}
+                                    {bulkNoResults && bulkBets.length === 0 && (
+                                        <div className="p-6 text-center border-2 border-dashed border-orange-300 rounded-xl bg-orange-50">
+                                            <div className="text-4xl mb-3">🔍</div>
+                                            <h3 className="text-lg font-black text-orange-800 uppercase mb-2">{tAi('noBets')}</h3>
+                                            <p className="text-sm text-orange-600 font-medium">
+                                                {tAi('noMatchesHint')}
+                                            </p>
+                                        </div>
+                                    )}
+
                                     {/* ... Results ... */}
                                     {bulkBets.length > 0 && (
                                         <div className="space-y-2">

@@ -78,7 +78,10 @@ export function CreateLeagueModal({ isOpen, onClose }: CreateLeagueModalProps) {
                     setSelectedBetIndices(bets.map((_, i) => i)); // Select all by default
                     setStep("REVIEW");
                 } else {
-                    alert(tAi('noBets'));
+                    // Show empty state in review step
+                    setGeneratedBets([]);
+                    setSelectedBetIndices([]);
+                    setStep("REVIEW");
                 }
             } catch (err) {
                 console.error(err);
@@ -520,41 +523,51 @@ export function CreateLeagueModal({ isOpen, onClose }: CreateLeagueModalProps) {
                                 </div>
 
                                 <div className="max-h-[400px] overflow-y-auto space-y-2 pr-2">
-                                    {generatedBets.map((bet, i) => (
-                                        <div
-                                            key={i}
-                                            onClick={() => {
-                                                if (selectedBetIndices.includes(i)) {
-                                                    setSelectedBetIndices(selectedBetIndices.filter(idx => idx !== i));
-                                                } else {
-                                                    setSelectedBetIndices([...selectedBetIndices, i]);
-                                                }
-                                            }}
-                                            className={`flex items-start gap-3 p-3 rounded-lg border-2 cursor-pointer transition-all ${selectedBetIndices.includes(i) ? "bg-purple-100 border-purple-500 shadow-[2px_2px_0px_0px_rgba(147,51,234,1)]" : "bg-white border-gray-200 hover:bg-gray-50"}`}
-                                        >
-                                            <div className={`mt-1 w-5 h-5 rounded border-2 flex items-center justify-center shrink-0 ${selectedBetIndices.includes(i) ? "bg-purple-600 border-purple-600" : "border-gray-300 bg-white"}`}>
-                                                {selectedBetIndices.includes(i) && <div className="w-2 h-2 bg-white rounded-sm" />}
-                                            </div>
-                                            <div className="flex-1 min-w-0">
-                                                <div className="flex items-center gap-2 mb-1">
-                                                    <p className="font-bold text-sm text-black truncate">{bet.question}</p>
-                                                    {bet.verified && (
-                                                        <span className="px-2 py-0.5 bg-green-100 border border-green-300 rounded text-[10px] font-black text-green-700 uppercase shrink-0">
-                                                            ✓ Verified
-                                                        </span>
+                                    {generatedBets.length === 0 ? (
+                                        <div className="p-6 text-center border-2 border-dashed border-orange-300 rounded-xl bg-orange-50">
+                                            <div className="text-4xl mb-3">🔍</div>
+                                            <h3 className="text-lg font-black text-orange-800 uppercase mb-2">{tAi('noBets')}</h3>
+                                            <p className="text-sm text-orange-600 font-medium">
+                                                {tAi('noMatchesHint')}
+                                            </p>
+                                        </div>
+                                    ) : (
+                                        generatedBets.map((bet, i) => (
+                                            <div
+                                                key={i}
+                                                onClick={() => {
+                                                    if (selectedBetIndices.includes(i)) {
+                                                        setSelectedBetIndices(selectedBetIndices.filter(idx => idx !== i));
+                                                    } else {
+                                                        setSelectedBetIndices([...selectedBetIndices, i]);
+                                                    }
+                                                }}
+                                                className={`flex items-start gap-3 p-3 rounded-lg border-2 cursor-pointer transition-all ${selectedBetIndices.includes(i) ? "bg-purple-100 border-purple-500 shadow-[2px_2px_0px_0px_rgba(147,51,234,1)]" : "bg-white border-gray-200 hover:bg-gray-50"}`}
+                                            >
+                                                <div className={`mt-1 w-5 h-5 rounded border-2 flex items-center justify-center shrink-0 ${selectedBetIndices.includes(i) ? "bg-purple-600 border-purple-600" : "border-gray-300 bg-white"}`}>
+                                                    {selectedBetIndices.includes(i) && <div className="w-2 h-2 bg-white rounded-sm" />}
+                                                </div>
+                                                <div className="flex-1 min-w-0">
+                                                    <div className="flex items-center gap-2 mb-1">
+                                                        <p className="font-bold text-sm text-black truncate">{bet.question}</p>
+                                                        {bet.verified && (
+                                                            <span className="px-2 py-0.5 bg-green-100 border border-green-300 rounded text-[10px] font-black text-green-700 uppercase shrink-0">
+                                                                ✓ Verified
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                    <p className="text-xs text-gray-500 font-bold">
+                                                        📅 {new Date(bet.date).toLocaleString()} • {bet.matchHome} vs {bet.matchAway}
+                                                    </p>
+                                                    {bet.source && (
+                                                        <p className="text-[10px] text-gray-400 font-bold mt-1">
+                                                            📰 Source: {bet.source}
+                                                        </p>
                                                     )}
                                                 </div>
-                                                <p className="text-xs text-gray-500 font-bold">
-                                                    📅 {new Date(bet.date).toLocaleString()} • {bet.matchHome} vs {bet.matchAway}
-                                                </p>
-                                                {bet.source && (
-                                                    <p className="text-[10px] text-gray-400 font-bold mt-1">
-                                                        📰 Source: {bet.source}
-                                                    </p>
-                                                )}
                                             </div>
-                                        </div>
-                                    ))}
+                                        ))
+                                    )}
                                 </div>
 
                                 <div className="flex justify-between pt-4 border-t-2 border-dashed border-gray-300">

@@ -12,15 +12,19 @@
         "title": "User Settings",
         "backToDashboard": "Back to Dashboard",
         "profilePicture": "Profile Picture",
+        "avatar": "Avatar",
         "uploadImage": "Upload Image",
         "maxSize": "Max file size 2MB.",
         "chooseFromLibrary": "Or choose from library:",
         "displayName": "Display Name (Nickname)",
+        "nickname": "Nickname",
         "displayNameDesc": "This name will be visible to other players.",
         "enterNickname": "Enter your nickname",
         "language": "Language Preference",
         "saveChanges": "Save Changes",
-        "saving": "Saving..."
+        "save": "Save",
+        "saving": "Saving...",
+        "logout": "Logout"
     },
     "Login": {
         "title": "Welcome Back",
@@ -194,7 +198,8 @@
         "analyzing": "AI Analyzing Schedule...",
         "scanning": "Scanning history & upcoming schedules...",
         "found": "Data Found! Parsed {count} outcomes.",
-        "noBets": "No bets found. Try a different topic.",
+        "noBets": "No matches found",
+        "noMatchesHint": "Try a different topic or timeframe. Make sure the sport/league name is spelled correctly.",
         "error": "AI Generation failed.",
         "processing": "Processing..."
     },

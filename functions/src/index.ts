@@ -1,5 +1,6 @@
 
 import { onSchedule } from "firebase-functions/v2/scheduler";
+import { defineSecret } from "firebase-functions/params";
 import * as logger from "firebase-functions/logger";
 import { initializeApp } from "firebase-admin/app";
 import { getFirestore, Timestamp } from "firebase-admin/firestore";
@@ -7,6 +8,9 @@ import { GoogleGenerativeAI } from "@google/generative-ai";
 
 initializeApp();
 const db = getFirestore();
+
+// --- SECRETS ---
+const googleApiKey = defineSecret("GOOGLE_API_KEY");
 
 // --- TYPES ---
 interface Bet {
@@ -25,10 +29,7 @@ interface Bet {
     status: string;
 }
 
-// --- AI LOGIC (Ported) ---
-const apiKey = process.env.GEMINI_API_KEY;
-
-async function resolveMatchWithAI(bet: Bet): Promise<any | null> {
+async function resolveMatchWithAI(bet: Bet, apiKey: string): Promise<any | null> {
     if (!apiKey) {
         logger.warn("No API Key configured for AI");
         return null;
@@ -88,7 +89,7 @@ async function resolveMatchWithAI(bet: Bet): Promise<any | null> {
     }
 }
 
-async function resolveGenericWithAI(bet: Bet): Promise<any | null> {
+async function resolveGenericWithAI(bet: Bet, apiKey: string): Promise<any | null> {
     if (!apiKey) return null;
 
     try {
@@ -130,69 +131,72 @@ async function resolveGenericWithAI(bet: Bet): Promise<any | null> {
 
 // --- SCHEDULED FUNCTION ---
 
-export const autoResolveBets = onSchedule("every 15 minutes", async (event) => {
-    logger.info("Starting Auto-Resolution Job");
+export const autoResolveBets = onSchedule(
+    { schedule: "every 15 minutes", secrets: [googleApiKey] },
+    async () => {
+        const apiKey = googleApiKey.value();
+        logger.info("Starting Auto-Resolution Job");
 
-    const now = Date.now();
+        const now = Date.now();
 
-    // Query Pending Bets
-    const betsSnapshot = await db.collectionGroup("bets")
-        .where("autoConfirm", "==", true)
-        .where("status", "in", ["OPEN", "LOCKED"])
-        .get();
+        // Query Pending Bets
+        const betsSnapshot = await db.collectionGroup("bets")
+            .where("autoConfirm", "==", true)
+            .where("status", "in", ["OPEN", "LOCKED"])
+            .get();
 
-    logger.info(`Found ${betsSnapshot.size} potential bets`);
+        logger.info(`Found ${betsSnapshot.size} potential bets`);
 
-    const updates: Promise<any>[] = [];
+        const updates: Promise<any>[] = [];
 
-    for (const doc of betsSnapshot.docs) {
-        const bet = doc.data() as Bet;
-        const leagueId = doc.ref.parent.parent?.id;
+        for (const doc of betsSnapshot.docs) {
+            const bet = doc.data() as Bet;
+            const leagueId = doc.ref.parent.parent?.id;
 
-        if (!leagueId) continue;
+            if (!leagueId) continue;
 
-        // Check Delay
-        const eventDate = bet.eventDate?.toDate ? bet.eventDate.toDate() : new Date(bet.eventDate);
-        if (!eventDate) continue;
+            // Check Delay
+            const eventDate = bet.eventDate?.toDate ? bet.eventDate.toDate() : new Date(bet.eventDate);
+            if (!eventDate) continue;
 
-        const delayMs = (bet.autoConfirmDelay || 120) * 60 * 1000; // Default 120 min
-        if (now < eventDate.getTime() + delayMs) continue; // Too early
+            const delayMs = (bet.autoConfirmDelay || 120) * 60 * 1000; // Default 120 min
+            if (now < eventDate.getTime() + delayMs) continue; // Too early
 
-        // Resolve
-        updates.push((async () => {
-            logger.info(`Resolving Bet ${doc.id} (${bet.question})`);
-            let result = null;
+            // Resolve
+            updates.push((async () => {
+                logger.info(`Resolving Bet ${doc.id} (${bet.question})`);
+                let result = null;
 
-            if (bet.type === "MATCH") result = await resolveMatchWithAI(bet);
-            else result = await resolveGenericWithAI(bet);
+                if (bet.type === "MATCH") result = await resolveMatchWithAI(bet, apiKey);
+                else result = await resolveGenericWithAI(bet, apiKey);
 
-            if (result) {
-                let outcome: any;
-                if (result.type === "MATCH") outcome = { home: result.home, away: result.away };
-                else if (result.type === "CHOICE") outcome = String(result.optionIndex);
-                else if (result.type === "RANGE") outcome = result.value;
+                if (result) {
+                    let outcome: any;
+                    if (result.type === "MATCH") outcome = { home: result.home, away: result.away };
+                    else if (result.type === "CHOICE") outcome = String(result.optionIndex);
+                    else if (result.type === "RANGE") outcome = result.value;
 
-                if (outcome !== undefined) {
-                    const disputeDeadline = new Date();
-                    disputeDeadline.setHours(disputeDeadline.getHours() + 12);
+                    if (outcome !== undefined) {
+                        const disputeDeadline = new Date();
+                        disputeDeadline.setHours(disputeDeadline.getHours() + 12);
 
-                    await doc.ref.update({
-                        status: "PROOFING",
-                        winningOutcome: outcome,
-                        verification: result.verification,
-                        disputeDeadline: Timestamp.fromDate(disputeDeadline),
-                        disputeActive: false,
-                        pendingResolvedBy: "auto-scheduler",
-                        lastUpdatedBy: "firebase-scheduler"
-                    });
-                    logger.info(`✅ Bet ${doc.id} resolved successfully`);
+                        await doc.ref.update({
+                            status: "PROOFING",
+                            winningOutcome: outcome,
+                            verification: result.verification,
+                            disputeDeadline: Timestamp.fromDate(disputeDeadline),
+                            disputeActive: false,
+                            pendingResolvedBy: "auto-scheduler",
+                            lastUpdatedBy: "firebase-scheduler"
+                        });
+                        logger.info(`✅ Bet ${doc.id} resolved successfully`);
+                    }
+                } else {
+                    logger.info(`Skipping Bet ${doc.id} - AI returned unknown`);
                 }
-            } else {
-                logger.info(`Skipping Bet ${doc.id} - AI returned unknown`);
-            }
-        })());
-    }
+            })());
+        }
 
-    await Promise.all(updates);
-    logger.info("Job Complete");
-});
+        await Promise.all(updates);
+        logger.info("Job Complete");
+    });
