@@ -44,7 +44,7 @@ export function NotificationModal({ isOpen, onClose, notifications }: Notificati
         if (!user) return;
         setClearing(true);
         try {
-            await clearAllNotifications(user.uid);
+            await clearAllNotifications(user.uid, notifications);
         } catch (error) {
             console.error("Failed to clear notifications:", error);
         } finally {

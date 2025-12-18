@@ -588,25 +588,25 @@ export default function LeaguePage() {
                 <div className="max-w-5xl mx-auto px-6">
                     <div className="bg-white rounded-xl border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
                         {/* Title and controls row */}
-                        <div className="px-6 py-4 flex items-center justify-between">
-                            <div className="flex items-center gap-4">
-                                <Link href="/dashboard" className="p-2 bg-white border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] rounded-lg hover:translate-y-[2px] hover:shadow-none transition-all text-black">
+                        <div className="p-4 md:px-6 md:py-4 flex flex-col md:flex-row items-center md:justify-between gap-4">
+                            <div className="flex items-center gap-4 w-full md:w-auto">
+                                <Link href="/dashboard" className="p-2 bg-white border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] rounded-lg hover:translate-y-[2px] hover:shadow-none transition-all text-black shrink-0">
                                     <ArrowLeft className="h-5 w-5" />
                                 </Link>
-                                <div>
-                                    <h1 className="text-xl font-black text-black drop-shadow-md flex items-center gap-2 font-comic uppercase tracking-wide">
-                                        {league.name}
-                                        <span className="text-xs font-bold bg-primary/10 px-2 py-0.5 rounded border-2 border-black text-primary">
+                                <div className="min-w-0 flex-1">
+                                    <h1 className="text-lg md:text-xl font-black text-black drop-shadow-md flex flex-wrap items-center gap-2 font-comic uppercase tracking-wide leading-tight">
+                                        <span className="truncate">{league.name}</span>
+                                        <span className="text-[10px] md:text-xs font-bold bg-primary/10 px-2 py-0.5 rounded border-2 border-black text-primary whitespace-nowrap shrink-0">
                                             {league.mode === "ZERO_SUM" ? "ZERO SUM" : "ARCADE"}
                                         </span>
                                     </h1>
-                                    <p className="text-xs text-gray-600 font-bold tracking-widest uppercase mt-1">
+                                    <p className="text-[10px] md:text-xs text-gray-600 font-bold tracking-widest uppercase mt-1">
                                         STATUS: <span className="text-primary font-black">{league.status}</span>
                                     </p>
                                 </div>
                             </div>
 
-                            <div className="flex items-center gap-2">
+                            <div className="flex items-center gap-2 w-full md:w-auto justify-end md:justify-start">
                                 {isOwner && (
                                     <>
                                         {league.status === "NOT_STARTED" && (

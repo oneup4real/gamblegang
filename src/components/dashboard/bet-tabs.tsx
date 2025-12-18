@@ -131,7 +131,7 @@ export function BetTabs({
                                         {/* Bet Card */}
                                         <BetCard
                                             bet={bet as Bet}
-                                            userPoints={0} // Dashboard context
+                                            userPoints={bet.userPoints} // Dashboard context
                                             userWager={bet.wager ? { ...bet.wager, id: "dashboard", userId: userId, userName: "Me", placedAt: new Date() } as any : undefined}
                                             mode={bet.leagueMode === "ZERO_SUM" ? "ZERO_SUM" : "STANDARD"}
                                             onWagerSuccess={onRefresh}
@@ -139,29 +139,23 @@ export function BetTabs({
                                         />
 
                                         {/* Actions Below Card */}
-                                        <div className="mt-[-1rem] bg-white border-2 border-t-0 border-black rounded-b-xl overflow-hidden shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] relative z-10 mx-1">
-                                            <div className="flex divide-x-2 divide-black">
-                                                <Link href={`/leagues/${bet.leagueId}?bet=${bet.id}`} className="flex-1">
-                                                    <button className="w-full py-2 hover:bg-gray-100 font-bold text-xs uppercase flex items-center justify-center gap-2 transition-colors">
-                                                        <span>View in League</span>
-                                                        <ExternalLink className="h-3 w-3" />
-                                                    </button>
-                                                </Link>
+                                        <div className="mt-2 flex items-center justify-center gap-4">
+                                            <Link href={`/leagues/${bet.leagueId}?bet=${bet.id}`} className="group flex items-center gap-1 text-[10px] uppercase font-bold text-gray-400 hover:text-black transition-colors">
+                                                <span>View in League</span>
+                                                <ExternalLink className="h-3 w-3 opacity-50 group-hover:opacity-100 transition-opacity" />
+                                            </Link>
 
-                                                {(activeTab === "history") && onDismiss && (
-                                                    <div className="flex-1">
-                                                        <button
-                                                            onClick={(e) => {
-                                                                e.stopPropagation();
-                                                                onDismiss(bet.id);
-                                                            }}
-                                                            className="w-full py-2 hover:bg-red-50 text-red-600 font-bold text-xs uppercase flex items-center justify-center gap-2 transition-colors"
-                                                        >
-                                                            Dismiss
-                                                        </button>
-                                                    </div>
-                                                )}
-                                            </div>
+                                            {(activeTab === "history") && onDismiss && (
+                                                <button
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        onDismiss(bet.id);
+                                                    }}
+                                                    className="flex items-center gap-1 text-[10px] uppercase font-bold text-gray-300 hover:text-red-500 transition-colors"
+                                                >
+                                                    Dismiss
+                                                </button>
+                                            )}
                                         </div>
 
                                         {/* League Badge floating or integrated? 

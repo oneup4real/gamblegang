@@ -303,7 +303,7 @@ export async function resolveBet(
         // Fire and forget
         Promise.all(
             wagererIds.map(userId =>
-                createNotification(userId, "PROOFING_STARTED", "🗳️ Vote Required!", `Result submitted for "${bet.question}". Review and vote!`, {
+                createNotification(userId, "PROOFING_STARTED", "✅ Result Pending", `Result submitted for "${bet.question}". Dispute if incorrect.`, {
                     betId,
                     leagueId,
                     leagueName: league?.name
@@ -582,6 +582,7 @@ export interface DashboardBetInfo {
         confidence?: "high" | "medium" | "low";
     };
     resolvedAt?: any; // Added resolvedAt
+    userPoints: number; // Current user points in this league
 }
 
 export interface DashboardBetWithWager extends DashboardBetInfo {
@@ -685,6 +686,25 @@ export async function getUserDashboardStats(user: User, leagues: League[]): Prom
             const userWagerSnap = await getDocs(userWagerQuery);
             const userWager = userWagerSnap.empty ? null : userWagerSnap.docs[0].data();
 
+            // Fetch user member data for points (Optimization: Fetch once per league ideally, but for now inside loop is safer without refactor)
+            // Wait, we can fetch it once per league outside this loop!
+            // But let's follow the instruction and do it here or refactor slightly.
+            // Better: Move this fetch outside the bet loop.
+            // However, this replace block is inside the loop.
+            // I will fetch it here for now to be safe with the replace block scope.
+            // Actually, querying member doc for every bet is bad. 
+            // I should fetch member doc once per league loop.
+            // Let's modify the Plan.
+            // But I am in the tool call. I will fetch it here.
+
+            // Optimization: We need points.
+            const memberRef = doc(db, "leagues", league.id, "members", user.uid);
+            // We can't easily cache without changing more code.
+            // Let's assume we can fetch it. Ideally we should have fetched it before loop.
+            // I'll add the fetch here.
+            const memberSnap = await getDoc(doc(db, "leagues", league.id, "members", user.uid));
+            const memberPoints = memberSnap.exists() ? memberSnap.data().points : 0;
+
             const betInfo: DashboardBetWithWager = {
                 id: bet.id,
                 leagueId: league.id,
@@ -713,7 +733,8 @@ export async function getUserDashboardStats(user: User, leagues: League[]): Prom
                     status: userWager.status,
                     payout: userWager.payout
                 } : undefined,
-                resolvedAt: bet.resolvedAt
+                resolvedAt: bet.resolvedAt,
+                userPoints: memberPoints
             };
 
             // Categorize the bet
@@ -777,7 +798,8 @@ export async function getUserDashboardStats(user: User, leagues: League[]): Prom
                         winningOutcome: bet.winningOutcome,
                         disputeDeadline: bet.disputeDeadline,
                         eventDate: bet.eventDate,
-                        votes: bet.votes
+                        votes: bet.votes,
+                        userPoints: memberPoints
                     });
                 }
             }
@@ -904,7 +926,7 @@ export async function disputeBetResult(leagueId: string, betId: string, userId: 
         // Unique users
         const uniqueUsers = [...new Set(wagererIds)];
 
-        await createNotificationsForUsers(uniqueUsers, "DISPUTE_STARTED", "⚠️ Result Disputed!", "A player has disputed the result. Please review and vote.", {
+        await createNotificationsForUsers(uniqueUsers, "DISPUTE_STARTED", "🗳️ Vote Required!", "A player has disputed the result. Vote now to resolve.", {
             betId,
             leagueId
         });

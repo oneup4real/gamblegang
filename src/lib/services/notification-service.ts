@@ -244,19 +244,31 @@ export async function deleteNotification(userId: string, notificationId: string,
 }
 
 // Clear all notifications
-export async function clearAllNotifications(userId: string): Promise<void> {
-    // collectionGroup to find all
-    const q = query(
-        collectionGroup(db, "notifications"),
-        where("userId", "==", userId)
-    );
-
-    const snapshot = await getDocs(q);
-
+export async function clearAllNotifications(userId: string, notifications?: Notification[]): Promise<void> {
     const batch = writeBatch(db);
-    snapshot.docs.forEach((doc) => {
-        batch.delete(doc.ref);
-    });
+
+    if (notifications && notifications.length > 0) {
+        // Delete known notifications by path (much more efficient and avoids index issues)
+        notifications.forEach(n => {
+            if (n.path) {
+                batch.delete(doc(db, n.path));
+            } else {
+                // Fallback for logic if path missing (shouldn't happen with updated subscribe)
+                const ref = doc(db, "users", userId, "notifications", n.id);
+                batch.delete(ref);
+            }
+        });
+    } else {
+        // Fallback: Query all (Requires Index)
+        const q = query(
+            collectionGroup(db, "notifications"),
+            where("userId", "==", userId)
+        );
+        const snapshot = await getDocs(q);
+        snapshot.docs.forEach((doc) => {
+            batch.delete(doc.ref);
+        });
+    }
 
     await batch.commit();
 }
