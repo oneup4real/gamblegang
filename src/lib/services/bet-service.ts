@@ -1,8 +1,20 @@
 
 import { db } from "@/lib/firebase/config";
-import { collection, doc, runTransaction, serverTimestamp, setDoc, increment, updateDoc } from "firebase/firestore";
+import {
+    collection,
+    doc,
+    runTransaction,
+    serverTimestamp,
+    setDoc,
+    increment,
+    updateDoc,
+    deleteField,
+    getDoc,
+    getDocs,
+    writeBatch
+} from "firebase/firestore";
 import { User } from "firebase/auth";
-import { League, LeagueMember } from "./league-service";
+import { League, LeagueMember, PowerUpType, PowerUpInventory } from "./league-service";
 import { createNotification, createNotificationsForUsers } from "./notification-service";
 import { logBetCreated, logWagerPlaced, logBetStatusChange, logPayoutDistributed } from "./activity-log-service";
 
@@ -80,6 +92,7 @@ export interface Wager {
     status: "PENDING" | "WON" | "LOST" | "PUSH";
     payout?: number; // Calculated share of pool
     placedAt: any;
+    powerUp?: PowerUpType; // Arcade mode multiplier
 }
 
 export async function createBet(
@@ -160,7 +173,8 @@ export async function placeWager(
     betId: string,
     user: User,
     amount: number,
-    selection: string | number | { home: number, away: number }
+    selection: string | number | { home: number, away: number },
+    powerUp?: PowerUpType // New optional parameter
 ) {
     const betRef = doc(db, "leagues", leagueId, "bets", betId);
     const memberRef = doc(db, "leagues", leagueId, "members", user.uid);
@@ -180,11 +194,41 @@ export async function placeWager(
         if (bet.status !== "OPEN") throw "Bet is not open";
         if (new Date() > new Date(bet.closesAt.seconds * 1000)) throw "Betting is closed";
 
+        // Check for existing wager to key off (1 bet per user rule)
+        const existingWagerSnap = await transaction.get(newWagerRef);
+        if (existingWagerSnap.exists()) throw "You have already placed a bet on this event";
+
         // Check balance (Simplified: Assuming standard league has unlimited or tracked differently, Zero Sum needs balance)
         // Ideally pass 'mode' to check, but for now we rely on UI to check.
         // Actually, let's enforce balance for sanity if we can detect mode, but mode is on League...
         // We'll trust the UI check for now or fetch league. Fetching league adds overhead.
         // Let's assume standard checks passed.
+
+        // Power-Up Logic - Auto-initialize if missing
+        let memberPowerUps = member.powerUps;
+        if (powerUp) {
+            // If member doesn't have powerUps yet, fetch league and initialize from arcadePowerUpSettings
+            if (!memberPowerUps) {
+                const leagueRef = doc(db, "leagues", leagueId);
+                const leagueSnap = await transaction.get(leagueRef);
+                if (leagueSnap.exists()) {
+                    const leagueData = leagueSnap.data() as League;
+                    if (leagueData.mode === "STANDARD" && leagueData.arcadePowerUpSettings) {
+                        // Initialize powerUps from league settings
+                        memberPowerUps = { ...leagueData.arcadePowerUpSettings };
+                        // Will be saved with the member update below
+                    } else if (leagueData.mode === "STANDARD") {
+                        // Default power-ups if league has no settings
+                        memberPowerUps = { x2: 3, x3: 1, x4: 0 };
+                    }
+                }
+            }
+
+            // Check if user has the power up
+            if (!memberPowerUps || !memberPowerUps[powerUp] || memberPowerUps[powerUp] <= 0) {
+                throw new Error("You don't have any " + powerUp + " power-ups left!");
+            }
+        }
 
         // Deduct points
         const newPoints = member.points - amount;
@@ -204,7 +248,8 @@ export async function placeWager(
             amount: amount,
             selection,
             status: "PENDING",
-            placedAt: serverTimestamp()
+            placedAt: serverTimestamp(),
+            powerUp // Add powerUp to wager
         };
 
         // Update Bet Pool & Count
@@ -226,10 +271,22 @@ export async function placeWager(
 
         // Perform all writes at the end
         transaction.set(newWagerRef, wagerData);
-        transaction.update(memberRef, {
-            points: newPoints,
-            totalInvested: increment(amount)
-        });
+
+        const memberUpdates: any = { points: newPoints, totalInvested: increment(amount) };
+
+        // Handle Power-Up: Initialize if missing, then decrement the used one
+        if (powerUp && memberPowerUps) {
+            if (!member.powerUps) {
+                // First, set the full powerUps object (minus the one being used)
+                memberPowerUps[powerUp] = memberPowerUps[powerUp] - 1;
+                memberUpdates.powerUps = memberPowerUps;
+            } else {
+                // Just decrement the specific power-up
+                memberUpdates["powerUps." + powerUp] = increment(-1);
+            }
+        }
+
+        transaction.update(memberRef, memberUpdates);
         transaction.update(betRef, betUpdates);
     });
 
@@ -237,6 +294,148 @@ export async function placeWager(
     // Note: We need bet question for logging, fetch it or pass it in
     // For now, use a generic message
     logWagerPlaced(leagueId, user, betId, "Bet", amount, String(selection)).catch(console.error);
+}
+
+export async function editWager(
+    leagueId: string,
+    betId: string,
+    user: User,
+    newAmount: number,
+    newSelection: string | number | { home: number, away: number },
+    newPowerUp?: PowerUpType
+) {
+    const betRef = doc(db, "leagues", leagueId, "bets", betId);
+    const memberRef = doc(db, "leagues", leagueId, "members", user.uid);
+    const wagerRef = doc(db, "leagues", leagueId, "bets", betId, "wagers", user.uid);
+
+    await runTransaction(db, async (transaction) => {
+        const betSnap = await transaction.get(betRef);
+        const memberSnap = await transaction.get(memberRef);
+        const wagerSnap = await transaction.get(wagerRef);
+
+        if (!betSnap.exists()) throw "Bet not found";
+        if (!memberSnap.exists()) throw "Member not found";
+        if (!wagerSnap.exists()) throw "Wager not found";
+
+        const bet = betSnap.data() as Bet;
+        const member = memberSnap.data() as LeagueMember;
+        const oldWager = wagerSnap.data() as Wager;
+
+        if (bet.status !== "OPEN") throw "Bet is not open";
+        if (new Date() > new Date(bet.closesAt.seconds * 1000)) throw "Betting is closed";
+
+        // 1. Calculate Amount Diff
+        const amountDiff = newAmount - oldWager.amount;
+        if (member.points - amountDiff < 0) throw "Insufficient points for this increase";
+
+        // 2. Power Up Logic - Auto-initialize if missing
+        const memberUpdates: any = {
+            points: member.points - amountDiff,
+            totalInvested: increment(amountDiff)
+        };
+
+        // Auto-initialize powerUps if member doesn't have them
+        let memberPowerUps = member.powerUps;
+        const needsInitialization = !memberPowerUps && (newPowerUp || oldWager.powerUp);
+        if (needsInitialization) {
+            const leagueRef = doc(db, "leagues", leagueId);
+            const leagueSnap = await transaction.get(leagueRef);
+            if (leagueSnap.exists()) {
+                const leagueData = leagueSnap.data() as League;
+                if (leagueData.mode === "STANDARD" && leagueData.arcadePowerUpSettings) {
+                    memberPowerUps = { ...leagueData.arcadePowerUpSettings };
+                } else if (leagueData.mode === "STANDARD") {
+                    memberPowerUps = { x2: 3, x3: 1, x4: 0 };
+                }
+            }
+        }
+
+        const oldPowerUp = oldWager.powerUp;
+        // If Power Ups changed
+        if (oldPowerUp !== newPowerUp) {
+            // Refund old
+            if (oldPowerUp && memberPowerUps) {
+                memberPowerUps[oldPowerUp] = (memberPowerUps[oldPowerUp] || 0) + 1;
+            }
+            // Charge new
+            if (newPowerUp) {
+                const currentStock = memberPowerUps?.[newPowerUp] || 0;
+                if (currentStock <= 0) throw new Error("You don't have any " + newPowerUp + " boosts left!");
+                memberPowerUps![newPowerUp] = currentStock - 1;
+            }
+
+            // If powerUps were just initialized or modified, set the full object
+            if (needsInitialization || !member.powerUps) {
+                memberUpdates.powerUps = memberPowerUps;
+            } else {
+                // Use incremental updates for existing powerUps
+                if (oldPowerUp) {
+                    memberUpdates["powerUps." + oldPowerUp] = increment(1);
+                }
+                if (newPowerUp) {
+                    memberUpdates["powerUps." + newPowerUp] = increment(-1);
+                }
+            }
+        }
+
+        // 3. Update Bet Pool & Options
+        const betUpdates: any = {
+            totalPool: increment(amountDiff)
+        };
+
+        if (bet.type === "CHOICE" && bet.options) {
+            const oldIdx = Number(oldWager.selection);
+            const newIdx = Number(newSelection);
+
+            const newOptions = [...bet.options];
+
+            if (oldIdx === newIdx) {
+                // Same option, just update diff
+                newOptions[oldIdx] = {
+                    ...newOptions[oldIdx],
+                    totalWagered: newOptions[oldIdx].totalWagered + amountDiff
+                };
+            } else {
+                // Changed option
+                // Remove old amount from old option
+                newOptions[oldIdx] = {
+                    ...newOptions[oldIdx],
+                    totalWagered: newOptions[oldIdx].totalWagered - oldWager.amount
+                };
+                // Add new amount to new option
+                newOptions[newIdx] = {
+                    ...newOptions[newIdx],
+                    totalWagered: newOptions[newIdx].totalWagered + newAmount
+                };
+            }
+            betUpdates.options = newOptions;
+        }
+
+        // 4. Update Wager Doc
+        const wagerUpdates: any = {
+            amount: newAmount,
+            selection: newSelection,
+            powerUp: newPowerUp || deleteField(), // Remove if undefined? deleteField needs import.
+            // Or just set to null? deleteField is cleaner. 
+            // If newPowerUp is undefined and old was something, we want to remove it.
+        };
+        // Clean undefined
+        if (newPowerUp === undefined) {
+            // If we can't import deleteField inside this snippet, we might need to just set null or handle it.
+            // Usually undefined fields are ignored by Firestore unless explicit.
+            // But we want to REMOVE the field 'powerUp' if it's nulled.
+            // I'll import deleteField.
+            wagerUpdates.powerUp = deleteField();
+        } else {
+            wagerUpdates.powerUp = newPowerUp;
+        }
+
+        transaction.update(memberRef, memberUpdates);
+        transaction.update(betRef, betUpdates);
+        transaction.update(wagerRef, wagerUpdates);
+    });
+
+    logWagerPlaced(leagueId, user, betId, "Bet Update", newAmount, String(newSelection)).catch(console.error);
 }
 
 export function calculateOdds(totalPool: number, optionPool: number): string {
@@ -313,7 +512,7 @@ export async function resolveBet(
         // Fire and forget
         Promise.all(
             wagererIds.map(userId =>
-                createNotification(userId, "PROOFING_STARTED", "✅ Result Pending", `Result submitted for "${bet.question}". Dispute if incorrect.`, {
+                createNotification(userId, "PROOFING_STARTED", "✅ Result Pending", "Result submitted for \"" + bet.question + "\". Dispute if incorrect.", {
                     betId,
                     leagueId,
                     leagueName: league?.name
@@ -336,6 +535,16 @@ export async function resolveBet(
     const wagersRef = collection(db, "leagues", leagueId, "bets", betId, "wagers");
     const wagersSnap = await getDocs(wagersRef);
     const wagers = wagersSnap.docs.map(d => ({ id: d.id, ...d.data() } as Wager));
+
+    // Fetch Members to update stats
+    // We assume number of wagers is reasonable (< 100). If larger, this should be chunked.
+    const memberIds = Array.from(new Set(wagers.map(w => w.userId)));
+    const memberPromises = memberIds.map(uid => getDoc(doc(db, "leagues", leagueId, "members", uid)));
+    const memberSnaps = await Promise.all(memberPromises);
+    const membersMap = new Map<string, LeagueMember>();
+    memberSnaps.forEach(s => {
+        if (s.exists()) membersMap.set(s.id, s.data() as LeagueMember);
+    });
 
     // Pre-calculate for Parimutuel (Zero Sum)
     let zeroSumOdds = 1;
@@ -378,26 +587,32 @@ export async function resolveBet(
 
         // ARCADE MODE LOGIC
         if (league && league.mode === "STANDARD") {
-            const settings = league.matchSettings || { exact: 3, diff: 1, winner: 2 };
+            const settings = league.matchSettings || { exact: 3, diff: 1, winner: 2, choice: 1, range: 1 };
+
+            // Power Up Multiplier
+            let powerUpMult = 1;
+            if (wager.powerUp === 'x2') powerUpMult = 2;
+            else if (wager.powerUp === 'x3') powerUpMult = 3;
+            else if (wager.powerUp === 'x4') powerUpMult = 4;
 
             if (typeof outcome === 'object' && typeof wager.selection === 'object') {
-                // MATCH BET
+                // MATCH BET logic
                 const oH = outcome.home;
                 const oA = outcome.away;
                 const pH = wager.selection.home;
                 const pA = wager.selection.away;
 
-                let multiplier = 0;
+                let points = 0;
 
                 // 1. Exact Result
                 if (oH === pH && oA === pA) {
-                    multiplier = Math.max(multiplier, settings.exact);
-                    isWinner = true; // Mark as winner for stats
+                    points = Math.max(points, settings.exact);
+                    isWinner = true;
                 }
 
                 // 2. Correct Difference
                 if ((oH - oA) === (pH - pA)) {
-                    multiplier = Math.max(multiplier, settings.diff);
+                    points = Math.max(points, settings.diff);
                     if (settings.diff > 0) isWinner = true;
                 }
 
@@ -406,22 +621,23 @@ export async function resolveBet(
                 const predTendency = pH > pA ? 'H' : (pH < pA ? 'A' : 'D');
 
                 if (outcomeTendency === predTendency) {
-                    multiplier = Math.max(multiplier, settings.winner);
+                    points = Math.max(points, settings.winner);
                     if (settings.winner > 0) isWinner = true;
                 }
 
-                payout = Math.floor(wager.amount * multiplier);
+                payout = points * powerUpMult;
 
             } else {
                 // Simple Choice/Range in Arcade
-                // Default to x2 for now if winner
                 if (isWinner) {
-                    payout = wager.amount * 2;
+                    let base = settings.choice || 1;
+                    if (bet.type === 'RANGE') base = settings.range || 1;
+                    payout = base * powerUpMult;
                 }
             }
 
         } else {
-            // ZERO SUM logic (Parimutuel)
+            // ZERO SUM logic
             if (isZeroSumRefund) {
                 payout = wager.amount; // Refund
             } else if (isWinner) {
@@ -429,21 +645,33 @@ export async function resolveBet(
             }
         }
 
-        // Apply Updates
-        if (payout > 0) {
-            // Determine status
-            const status = isZeroSumRefund ? "PUSH" : "WON";
+        // --- UPDATE LOGIC ---
+        // Determine Result Char for History (W = Win/Points, L = Loss, P = Push/Refund)
+        // In Arcade, any points > 0 is W.
+        // In Zero Sum, Refund is P. Winner is W. Loser is L.
+        let resultChar: 'W' | 'L' | 'P' = 'L';
+        if (isZeroSumRefund) resultChar = 'P';
+        else if (payout > 0) resultChar = 'W';
 
-            // Update Wager
-            batch.update(doc(wagersRef, wager.id), { status, payout });
-            // Update Member
-            const memberRef = doc(db, "leagues", leagueId, "members", wager.userId);
-            batch.update(memberRef, {
-                points: increment(payout)
-            });
-        } else {
-            batch.update(doc(wagersRef, wager.id), { status: "LOST", payout: 0 });
+        // Update Member History
+        const member = membersMap.get(wager.userId);
+        if (member) {
+            const oldHistory = member.recentResults || [];
+            const newHistory = [resultChar, ...oldHistory].slice(0, 10);
+
+            const memberUpdates: any = { recentResults: newHistory };
+            if (payout > 0) {
+                memberUpdates.points = increment(payout);
+            }
+
+            batch.update(doc(db, "leagues", leagueId, "members", wager.userId), memberUpdates);
         }
+
+        // Update Wager
+        batch.update(doc(wagersRef, wager.id), {
+            status: isZeroSumRefund ? "PUSH" : (payout > 0 ? "WON" : "LOST"),
+            payout
+        });
     }
 
     await batch.commit();
@@ -492,8 +720,7 @@ export async function resolveBet(
     return { success: true, winnerCount };
 }
 
-// Helper needed for resolveBet - imports were missing
-import { getDocs, writeBatch, getDoc } from "firebase/firestore";
+
 
 // AI Verification Hooks
 export async function startProofing(
@@ -584,6 +811,8 @@ export interface DashboardBetInfo {
     id: string;
     leagueId: string;
     leagueName: string;
+    leagueIcon?: string;
+    leagueColorScheme?: string;
     question: string;
     status: BetStatus;
     closesAt: any;
@@ -612,6 +841,7 @@ export interface DashboardBetInfo {
     };
     resolvedAt?: any; // Added resolvedAt
     userPoints: number; // Current user points in this league
+    userPowerUps?: PowerUpInventory; // Current user power ups in this league
 }
 
 export interface DashboardBetWithWager extends DashboardBetInfo {
@@ -620,6 +850,7 @@ export interface DashboardBetWithWager extends DashboardBetInfo {
         selection: any;
         status: "PENDING" | "WON" | "LOST" | "PUSH";
         payout?: number;
+        powerUp?: PowerUpType;
     };
     leagueMode?: "ZERO_SUM" | "STANDARD" | "ARCADE";
     leagueMatchSettings?: {
@@ -651,7 +882,7 @@ export interface DashboardStats {
 // Helper functions for dismissed bets (localStorage)
 export function getDismissedBets(userId: string): Set<string> {
     if (typeof window === 'undefined') return new Set();
-    const key = `dismissed_bets_${userId}`;
+    const key = `dismissed_bets_${userId} `;
     const dismissed = localStorage.getItem(key);
     return dismissed ? new Set(JSON.parse(dismissed)) : new Set();
 }
@@ -659,13 +890,13 @@ export function getDismissedBets(userId: string): Set<string> {
 export function dismissBet(userId: string, betId: string) {
     const dismissed = getDismissedBets(userId);
     dismissed.add(betId);
-    localStorage.setItem(`dismissed_bets_${userId}`, JSON.stringify([...dismissed]));
+    localStorage.setItem(`dismissed_bets_${userId} `, JSON.stringify([...dismissed]));
 }
 
 export function clearDismissedSection(userId: string, betIds: string[]) {
     const dismissed = getDismissedBets(userId);
     betIds.forEach(id => dismissed.add(id));
-    localStorage.setItem(`dismissed_bets_${userId}`, JSON.stringify([...dismissed]));
+    localStorage.setItem(`dismissed_bets_${userId} `, JSON.stringify([...dismissed]));
 }
 
 export async function getUserDashboardStats(user: User, leagues: League[]): Promise<DashboardStats> {
@@ -732,12 +963,15 @@ export async function getUserDashboardStats(user: User, leagues: League[]): Prom
             // Let's assume we can fetch it. Ideally we should have fetched it before loop.
             // I'll add the fetch here.
             const memberSnap = await getDoc(doc(db, "leagues", league.id, "members", user.uid));
-            const memberPoints = memberSnap.exists() ? memberSnap.data().points : 0;
+            const memberData = memberSnap.exists() ? memberSnap.data() as LeagueMember : null;
+            const memberPoints = memberData ? memberData.points : 0;
 
             const betInfo: DashboardBetWithWager = {
                 id: bet.id,
                 leagueId: league.id,
                 leagueName: league.name,
+                leagueIcon: league.icon,
+                leagueColorScheme: league.colorScheme,
                 question: bet.question,
                 status: bet.status,
                 closesAt: bet.closesAt,
@@ -760,10 +994,12 @@ export async function getUserDashboardStats(user: User, leagues: League[]): Prom
                     amount: userWager.amount,
                     selection: userWager.selection,
                     status: userWager.status,
-                    payout: userWager.payout
+                    payout: userWager.payout,
+                    powerUp: userWager.powerUp // Pass powerUp from wager
                 } : undefined,
                 resolvedAt: bet.resolvedAt,
-                userPoints: memberPoints
+                userPoints: memberPoints,
+                userPowerUps: memberData?.powerUps || (league.mode === "STANDARD" ? league.arcadePowerUpSettings : undefined)
             };
 
             // Categorize the bet
@@ -1225,7 +1461,7 @@ export async function markBetInvalidAndRefund(leagueId: string, betId: string) {
     // Send refund notifications (fire and forget)
     Promise.all(
         wagererIds.map(userId =>
-            createNotification(userId, "BET_REFUNDED", "♻️ Bet Refunded", `"${bet?.question || 'Bet'}" was marked invalid. Your wager has been refunded.`, {
+            createNotification(userId, "BET_REFUNDED", "♻️ Bet Refunded", `"${bet?.question || 'Bet'}" was marked invalid.Your wager has been refunded.`, {
                 betId,
                 leagueId,
                 leagueName

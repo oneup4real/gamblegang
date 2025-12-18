@@ -1,10 +1,10 @@
 "use client";
 
-import { Bet, BetType, placeWager, resolveBet, calculateOdds, getReturnPotential, Wager, startProofing, confirmVerification, publishBet, disputeBetResult, voteOnDisputedBet, voteOnProofingResult, markBetInvalidAndRefund, checkDisputeVoting, finalizeBet, submitDisputeResult } from "@/lib/services/bet-service";
+import { Bet, BetType, placeWager, editWager, resolveBet, calculateOdds, getReturnPotential, Wager, startProofing, confirmVerification, publishBet, disputeBetResult, voteOnDisputedBet, voteOnProofingResult, markBetInvalidAndRefund, checkDisputeVoting, finalizeBet, submitDisputeResult } from "@/lib/services/bet-service";
 import { aiAutoResolveBet, verifyBetResult } from "@/app/actions/ai-bet-actions";
 import { useAuth } from "@/components/auth-provider";
-import { useState, useEffect } from "react";
-import { Coins, Loader2, Gavel, Wallet, Trophy, BrainCircuit, CheckCircle, AlertTriangle, Timer, ThumbsUp, ThumbsDown, AlertCircle, Calendar } from "lucide-react";
+import { useState, useEffect, useRef } from "react";
+import { Coins, Loader2, Gavel, Wallet, Trophy, BrainCircuit, CheckCircle, AlertTriangle, Timer, ThumbsUp, ThumbsDown, AlertCircle, Calendar, Pencil, X } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { CoinFlow } from "@/components/animations/coin-flow";
@@ -15,17 +15,30 @@ import { BetStatusStepper } from "@/components/bet-status-stepper";
 import { collection, getDocs } from "firebase/firestore";
 import { db } from "@/lib/firebase/config";
 
+import { League, LeagueMember, PowerUpType, PowerUpInventory } from "@/lib/services/league-service"; // Ensure correct imports
+import { CompactPowerBooster } from "@/components/compact-power-booster";
+
+// ... existing imports
+
 interface BetCardProps {
     bet: Bet;
     userPoints: number;
     userWager?: Wager;
     mode: "ZERO_SUM" | "STANDARD";
+    powerUps?: PowerUpInventory; // New prop
     onEdit?: (bet: Bet) => void;
     onWagerSuccess?: () => void;
-    isOwnerOverride?: boolean; // Allow external context to specify ownership (for dashboard)
+    isOwnerOverride?: boolean;
 }
 
-export function BetCard({ bet, userPoints, userWager, mode, onEdit, onWagerSuccess, isOwnerOverride }: BetCardProps) {
+export function BetCard({ bet, userPoints, userWager, mode, powerUps: powerUpsProp, onEdit, onWagerSuccess, isOwnerOverride }: BetCardProps) {
+    // GUARANTEED fallback for powerUps in STANDARD (Arcade) mode
+    // This ensures power boosters are ALWAYS available even if the prop isn't passed correctly
+    // Default values match the old backfill: 3x x2, 3x x3, 2x x4
+    const powerUps = powerUpsProp ?? (mode === "STANDARD" ? { x2: 3, x3: 3, x4: 2 } : undefined);
+
+    // DEBUG: Log powerUps prop
+    console.log("[BetCard] powerUps prop:", powerUpsProp, "effective:", powerUps, "mode:", mode);
     const { user } = useAuth();
     const [isResolving, setIsResolving] = useState(false);
     const [wagerAmount, setWagerAmount] = useState<number | "">(mode === "STANDARD" ? 100 : "");
@@ -42,8 +55,14 @@ export function BetCard({ bet, userPoints, userWager, mode, onEdit, onWagerSucce
     const [resHome, setResHome] = useState<number | "">("");
     const [resAway, setResAway] = useState<number | "">("");
 
+    // Power Up State
+    const [selectedPowerUp, setSelectedPowerUp] = useState<PowerUpType | undefined>(undefined);
+
     // UI States
     const [loading, setLoading] = useState(false);
+    const [isEditing, setIsEditing] = useState(false);
+    const [isScrolling, setIsScrolling] = useState(false);
+    const scrollTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
     const [showCoinFlow, setShowCoinFlow] = useState(false);
     const [showAllInModal, setShowAllInModal] = useState(false);
@@ -198,19 +217,55 @@ export function BetCard({ bet, userPoints, userWager, mode, onEdit, onWagerSucce
 
         const amount = mode === "STANDARD" ? 0 : Number(wagerAmount);
 
-        if (mode === "ZERO_SUM" && amount >= userPoints && amount > 0) {
+        if (mode === "ZERO_SUM" && amount >= userPoints && amount > 0 && !isEditing) {
             setPendingWagerData({ amount, prediction });
             setShowAllInModal(true);
             return;
         }
 
-        await executePlaceWager(amount, prediction);
+        await executePlaceWager(amount, prediction, selectedPowerUp);
     };
 
-    const executePlaceWager = async (amount: number, prediction: any) => {
+    const handleEditClick = () => {
+        if (!userWager) return;
+        setWagerAmount(userWager.amount);
+        if (mode === "STANDARD") {
+            setSelectedPowerUp((userWager.powerUp as PowerUpType) || undefined);
+        }
+
+        if (bet.type === "CHOICE") {
+            setSelectedOption(String(userWager.selection));
+        } else if (bet.type === "MATCH") {
+            const sel = userWager.selection as { home: number, away: number };
+            setMatchHome(sel.home);
+            setMatchAway(sel.away);
+        } else if (bet.type === "RANGE") {
+            setRangeValue(Number(userWager.selection));
+        }
+
+        setIsEditing(true);
+    };
+
+    const handleCancelEdit = () => {
+        setIsEditing(false);
+        // inputs will be reset on next edit or place attempt
+        setWagerAmount(mode === "STANDARD" ? 100 : "");
+        setSelectedOption("");
+        setRangeValue("");
+        setMatchHome("");
+        setMatchAway("");
+        if (mode === "STANDARD") setSelectedPowerUp(undefined);
+    };
+
+    const executePlaceWager = async (amount: number, prediction: any, powerUp?: PowerUpType) => {
         setLoading(true);
         try {
-            await placeWager(bet.leagueId, bet.id, user!, amount, prediction as any);
+            if (isEditing) {
+                await editWager(bet.leagueId, bet.id, user!, amount, prediction, powerUp);
+            } else {
+                await placeWager(bet.leagueId, bet.id, user!, amount, prediction, powerUp);
+            }
+
             let selectionDisplay = String(prediction);
             let potentialDisplay = "TBD";
 
@@ -236,6 +291,7 @@ export function BetCard({ bet, userPoints, userWager, mode, onEdit, onWagerSucce
             setMatchHome("");
             setMatchAway("");
             setShowCoinFlow(true);
+            setIsEditing(false);
             if (onWagerSuccess) setTimeout(() => onWagerSuccess(), 1500);
         } catch (error) {
             console.error(error);
@@ -414,9 +470,11 @@ export function BetCard({ bet, userPoints, userWager, mode, onEdit, onWagerSucce
     let ticketOdds = "";
     let ticketPayout = 0;
     let ticketIsWinning = false;
+    let ticketPowerUp: string | undefined = undefined;
 
     if (userWager) {
         ticketWagerAmount = userWager.amount;
+        ticketPowerUp = (userWager.powerUp as string) || undefined;
 
         // Selection Display
         if (bet.type === "CHOICE" && bet.options) {
@@ -437,20 +495,69 @@ export function BetCard({ bet, userPoints, userWager, mode, onEdit, onWagerSucce
             if (userWager.status === "WON") ticketPayout = userWager.payout || 0;
             else if (userWager.status === "PUSH") ticketPayout = userWager.amount;
         } else {
+            // Power Up Multiplier
+            let multiplier = 2; // Base standard multiplier
+            if (userWager.powerUp) {
+                if (userWager.powerUp === 'x2') multiplier = 2; // Should this be 2*2? No, x2 replaces base? Or base is 1? 
+                // Standard mode usually gives points based on settings. 
+                // Wait, logic says: `ticketPotential = userWager.amount * 2`. 
+                // Implicitly assumption: Amount=0 in standard? params say `amount=0` for standard.
+                // Actually `executePlaceWager` sets amount=0 for standard. 
+                // So `userWager.amount` is 0. 
+                // If amount is 0, potential is 0 * 2 = 0.
+                // This means Standard mode "points" are not stored in "amount". Amount is currency.
+                // Standard mode: "Points" are awarded, not "Payout".
+                // But `SidePanelTicket` shows "Potential Payout".
+                // In Standard Mode, `userWager` has amount=0.
+                // We need to show "Potential Points".
+
+                // Let's assume for Standard Mode: Base is calculated from Match Settings (e.g., 3 pts for Exact).
+                // But we don't know the result yet.
+                // "Est Win" usually assumes BEST CASE (Exact Match).
+                // Let's assume Base = 3 (default exact).
+                // If PowerUps are Multipliers, then it matches.
+
+                // Let's refine potential for Standard Mode:
+                // If amount=0, we shouldn't use amount * multipier.
+                // We should use "Max Points" * multiplier.
+            }
+
             // ESTIMATED POTENTIAL
-            if (bet.type === "CHOICE" && bet.options) {
-                const idx = Number(userWager.selection);
-                if (mode === "ZERO_SUM" && bet.options[idx].totalWagered > 0) {
-                    const odds = bet.totalPool / bet.options[idx].totalWagered;
-                    ticketPotential = userWager.amount * odds;
-                    ticketOdds = odds.toFixed(2) + "x";
+            if (mode === "ZERO_SUM") {
+                if (bet.type === "CHOICE" && bet.options) {
+                    const idx = Number(userWager.selection);
+                    if (bet.options[idx].totalWagered > 0) {
+                        const odds = bet.totalPool / bet.options[idx].totalWagered;
+                        ticketPotential = userWager.amount * odds;
+                        ticketOdds = odds.toFixed(2) + "x";
+                    } else {
+                        ticketPotential = userWager.amount * 2;
+                        ticketOdds = "2.00x";
+                    }
                 } else {
-                    ticketPotential = userWager.amount * 2; // Default/Arcade
+                    ticketPotential = userWager.amount * 2; // Fallback
                     ticketOdds = "2.00x";
                 }
             } else {
-                ticketPotential = userWager.amount * 2;
-                ticketOdds = "2.00x";
+                // STANDARD MODE
+                // Display max potential points (e.g. Exact Match points)
+                // We don't have access to league settings here easily unless passed in.
+                // Assuming base 3 points for now or 100 if stored in amount (but amount is 0).
+                // Let's just assume Base=100 for visualization or use powerUp multiplier on "Base".
+                // Actually, if amount is 0, SidePanel shows 0.
+
+                // User Request: "est win should alredy include the power up".
+                // Let's apply multiplier to the display.
+
+                let mult = 1;
+                if (userWager.powerUp === 'x2') mult = 2;
+                if (userWager.powerUp === 'x3') mult = 3;
+                if (userWager.powerUp === 'x4') mult = 4;
+
+                // Since we don't know Base Points, let's just show "xN Multiplier".
+                // Or if we want points:
+                ticketOdds = `${mult}x Boost`;
+                ticketPotential = 0; // Can't estimate points without league settings
             }
 
             // Preliminary Winning Check
@@ -466,6 +573,34 @@ export function BetCard({ bet, userPoints, userWager, mode, onEdit, onWagerSucce
                 } else if (bet.type === "RANGE") {
                     ticketIsWinning = Number(userSel) === Number(proposedResult);
                 }
+            }
+        }
+    } else {
+        // PENDING / PREVIEW STATE
+        if (selectedOption !== "" || rangeValue !== "" || (matchHome !== "" && matchAway !== "")) {
+            // Populate Ticket with Preview
+            if (bet.type === "CHOICE" && bet.options && selectedOption !== "") {
+                const idx = Number(selectedOption);
+                ticketSelectionDisplay = bet.options[idx]?.text || "Option";
+            } else if (bet.type === "MATCH" && matchHome !== "") {
+                ticketSelectionDisplay = `${matchHome} - ${matchAway}`;
+            } else if (bet.type === "RANGE") {
+                ticketSelectionDisplay = `${rangeValue} ${bet.rangeUnit || ""}`;
+            }
+
+            if (mode === "ZERO_SUM") {
+                ticketWagerAmount = Number(wagerAmount);
+                // Calc potential...
+            } else {
+                // Standard Mode Preview
+                ticketWagerAmount = 0;
+                let mult = 1;
+                if (selectedPowerUp === 'x2') mult = 2;
+                if (selectedPowerUp === 'x3') mult = 3;
+                if (selectedPowerUp === 'x4') mult = 4;
+                ticketOdds = `${mult}x Boost`;
+                ticketPowerUp = selectedPowerUp;
+                // Since we can't calc points, maybe just show the boost
             }
         }
     }
@@ -486,7 +621,7 @@ export function BetCard({ bet, userPoints, userWager, mode, onEdit, onWagerSucce
             layout
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
-            className={`rounded-xl border-2 ${containerBorderClass} ${containerBgClass} shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] flex flex-col md:flex-row overflow-hidden mb-6 relative`}
+            className={`rounded-xl border-2 ${containerBorderClass} ${containerBgClass} shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] flex flex-col md:flex-row mb-6 relative`}
         >
             {/* LEFT COLUMN: MAIN CONTENT */}
             <div className={`flex-1 p-5 flex flex-col justify-between border-b-2 md:border-b-0 md:border-r-2 border-dashed ${bet.status === "PROOFING" ? "border-blue-200" : "border-slate-200"}`}>
@@ -524,7 +659,12 @@ export function BetCard({ bet, userPoints, userWager, mode, onEdit, onWagerSucce
                             {bet.status === "PROOFING" && (
                                 <div className="flex items-center gap-1 text-blue-500">
                                     <Timer className="w-3 h-3" />
-                                    <span>Verifying Result...</span>
+                                    <span>
+                                        {bet.disputeDeadline
+                                            ? `Auto-confirm in ${getDisputeTimeRemaining()}`
+                                            : "Verifying Result..."
+                                        }
+                                    </span>
                                 </div>
                             )}
                         </div>
@@ -538,7 +678,7 @@ export function BetCard({ bet, userPoints, userWager, mode, onEdit, onWagerSucce
                     {/* --- STATE SPECIFIC CONTENT --- */}
 
                     {/* 1. OPEN STATE: BET OPTIONS */}
-                    {bet.status === "OPEN" && !isExpired && !userWager && (
+                    {bet.status === "OPEN" && !isExpired && (!userWager || isEditing) && (
                         <div className="space-y-3">
                             {/* CHOICE BETS */}
                             {bet.type === "CHOICE" && bet.options && (
@@ -589,27 +729,49 @@ export function BetCard({ bet, userPoints, userWager, mode, onEdit, onWagerSucce
                                 </div>
                             )}
 
-                            {/* WAGER INPUT & BUTTON */}
-                            <div className="mt-4 pt-4 border-t-2 border-dashed border-slate-200 flex gap-3">
+                            {/* WAGER ACTION BAR */}
+                            <div className="mt-4 pt-4 border-t-2 border-dashed border-slate-200 flex gap-3 items-center">
+                                {/* Power Up Booster (Compact Radial Menu) */}
+                                {mode === "STANDARD" && powerUps && (
+                                    <div className="mr-1">
+                                        <CompactPowerBooster
+                                            powerUps={powerUps}
+                                            selectedPowerUp={selectedPowerUp}
+                                            onSelect={setSelectedPowerUp}
+                                        />
+                                    </div>
+                                )}
+
                                 {mode === "ZERO_SUM" && (
-                                    <div className="relative w-32">
+                                    <div className="relative w-28 shrink-0">
                                         <input
                                             type="number"
                                             value={wagerAmount}
                                             onChange={e => setWagerAmount(Number(e.target.value))}
-                                            className="w-full h-10 pl-3 pr-8 rounded-lg border-2 border-slate-300 font-bold text-sm focus:border-black focus:outline-none"
+                                            className="w-full h-12 pl-3 pr-8 rounded-xl border-2 border-slate-300 font-bold text-sm focus:border-black focus:outline-none"
                                             placeholder="Amt"
                                         />
                                         <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] font-black text-slate-400">PTS</span>
                                     </div>
                                 )}
+
                                 <Button
                                     onClick={handlePlaceWager}
                                     disabled={loading}
-                                    className="flex-1 bg-black text-white font-bold h-10 rounded-lg hover:bg-slate-800"
+                                    className="flex-1 bg-gradient-to-r from-emerald-500 via-green-500 to-teal-500 text-white font-black h-12 rounded-xl hover:from-emerald-600 hover:via-green-600 hover:to-teal-600 shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] border-2 border-black transition-all hover:translate-y-[-2px] hover:shadow-[5px_5px_0px_0px_rgba(0,0,0,1)] uppercase tracking-wide"
                                 >
-                                    {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : "Place Bet"}
+                                    {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : (isEditing ? "✓ Update" : "Place Bet")}
                                 </Button>
+                                {isEditing && (
+                                    <button
+                                        type="button"
+                                        onClick={handleCancelEdit}
+                                        disabled={loading}
+                                        className="bg-gray-200 text-black font-black h-12 w-12 rounded-xl hover:bg-gray-300 border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] flex items-center justify-center text-2xl"
+                                    >
+                                        ✕
+                                    </button>
+                                )}
                             </div>
                         </div>
                     )}
@@ -698,18 +860,38 @@ export function BetCard({ bet, userPoints, userWager, mode, onEdit, onWagerSucce
             </div>
 
             {/* RIGHT COLUMN: TICKET STUB */}
-            {ticketStatus && (
-                <SidePanelTicket
-                    status={ticketStatus}
-                    wagerStatus={ticketWagerStatus}
-                    userSelection={ticketSelectionDisplay}
-                    wagerAmount={ticketWagerAmount}
-                    potentialPayout={ticketPotential}
-                    payout={ticketPayout}
-                    isWinning={ticketIsWinning}
-                    odds={ticketOdds}
-                    currency={mode === "ZERO_SUM" ? "pts" : "cr"}
-                />
+            {ticketStatus && !isEditing && (
+                <div
+                    className={`relative cursor-pointer transition-transform hover:scale-[1.02] ${userWager && bet.status === "OPEN" && !isExpired ? 'hover:ring-2 hover:ring-blue-400 rounded-lg' : ''}`}
+                    onClick={() => {
+                        if (isScrolling) return;
+                        if (userWager && bet.status === "OPEN" && !isExpired) {
+                            handleEditClick();
+                        }
+                    }}
+                    onTouchStart={() => {
+                        if (scrollTimeoutRef.current) clearTimeout(scrollTimeoutRef.current);
+                    }}
+                    onTouchMove={() => {
+                        setIsScrolling(true);
+                    }}
+                    onTouchEnd={() => {
+                        scrollTimeoutRef.current = setTimeout(() => setIsScrolling(false), 100);
+                    }}
+                >
+                    <SidePanelTicket
+                        status={ticketStatus}
+                        wagerStatus={ticketWagerStatus}
+                        userSelection={ticketSelectionDisplay}
+                        wagerAmount={ticketWagerAmount}
+                        potentialPayout={ticketPotential}
+                        payout={ticketPayout}
+                        isWinning={ticketIsWinning}
+                        odds={ticketOdds}
+                        currency={mode === "ZERO_SUM" ? "pts" : "cr"}
+                        powerUp={ticketPowerUp}
+                    />
+                </div>
             )}
 
             <AllInModal

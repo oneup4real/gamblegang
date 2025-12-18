@@ -5,9 +5,10 @@ import { useRouter, useParams } from "next/navigation";
 import { useEffect, useState, useMemo } from "react";
 import { doc, getDoc, collection, getDocs, query, where, onSnapshot } from "firebase/firestore";
 import { db } from "@/lib/firebase/config";
-import { League, LeagueMember, updateLeagueStatus, rebuy } from "@/lib/services/league-service";
+import { League, LeagueMember, updateLeagueStatus, rebuy, LEAGUE_COLOR_SCHEMES } from "@/lib/services/league-service";
 import { getLeagueBets, Bet, Wager, deleteBet } from "@/lib/services/bet-service";
 import { BetCard } from "@/components/bet-card";
+import { GroupedBetsByTime } from "@/components/grouped-bets";
 import { BetStatusStepper } from "@/components/bet-status-stepper";
 import { format } from "date-fns";
 import { ArrowLeft, Crown, User as UserIcon, Settings, Play, Flag, Archive, Coins, AlertOctagon, CheckCircle2, XCircle, Trash2, Pencil, QrCode, Gamepad2, Gavel, TrendingUp, Target, Award, Activity, ExternalLink, ChevronDown, ChevronUp, Ticket as TicketIcon, Timer, Trophy } from "lucide-react";
@@ -571,6 +572,13 @@ export default function LeaguePage() {
                             userPoints={userPoints}
                             mode={mode}
                             userWager={wager}
+                            powerUps={(() => {
+                                // Debug: trace the actual values
+                                const memberPowerUps = myMemberProfile?.powerUps;
+                                const leaguePowerUps = league.arcadePowerUpSettings;
+                                console.log("[LeaguePage] Passing powerUps - member:", memberPowerUps, "league:", leaguePowerUps, "myMemberProfile:", myMemberProfile?.uid);
+                                return memberPowerUps || leaguePowerUps || { x2: 3, x3: 3, x4: 2 };
+                            })()}
                             onWagerSuccess={fetchLeagueData}
                             isOwnerOverride={isOwner || user?.uid === bet.creatorId}
                         />
@@ -645,25 +653,24 @@ export default function LeaguePage() {
                     </div>
                 </div>
             </header>
-
             {/* Tabs + Main Content */}
             <main className="max-w-5xl mx-auto px-6 pb-8 space-y-0">
-                {/* TABS: BETS vs ANALYTICS */}
-                <div className="flex items-end gap-2 mb-0">
+                {/* TABS: BETS vs ANALYTICS vs ACTIVITY */}
+                <div className="flex items-end gap-1 md:gap-2 -mb-[2px] relative z-10 overflow-x-auto scrollbar-hide">
                     <button
                         onClick={() => setViewMode("bets")}
-                        className={`relative px-6 py-2 rounded-t-lg font-black uppercase tracking-wider text-sm transition-all duration-200 ${viewMode === "bets"
-                            ? "bg-white text-black border-2 border-b-0 border-black -mb-[2px] pb-3"
-                            : "bg-gray-200 text-gray-500 hover:bg-gray-300 border-2 border-transparent"
+                        className={`relative px-3 md:px-6 py-2 rounded-t-lg font-black uppercase tracking-wider text-xs md:text-sm transition-all duration-200 whitespace-nowrap shrink-0 ${viewMode === "bets"
+                            ? "bg-white text-black border-2 border-b-0 border-black pb-3 z-10"
+                            : "bg-gray-200 text-gray-500 hover:bg-gray-300 border-2 border-transparent mb-[2px]"
                             }`}
                     >
                         {t('tabBets')}
                     </button>
                     <button
                         onClick={() => setViewMode("analytics")}
-                        className={`relative px-6 py-2 rounded-t-lg font-black uppercase tracking-wider text-sm transition-all duration-200 ${viewMode === "analytics"
-                            ? "bg-white text-black border-2 border-b-0 border-black -mb-[2px] pb-3"
-                            : "bg-gray-200 text-gray-500 hover:bg-gray-300 border-2 border-transparent"
+                        className={`relative px-3 md:px-6 py-2 rounded-t-lg font-black uppercase tracking-wider text-xs md:text-sm transition-all duration-200 whitespace-nowrap shrink-0 ${viewMode === "analytics"
+                            ? "bg-white text-black border-2 border-b-0 border-black pb-3 z-10"
+                            : "bg-gray-200 text-gray-500 hover:bg-gray-300 border-2 border-transparent mb-[2px]"
                             }`}
                     >
                         {t('tabAnalytics')}
@@ -672,14 +679,15 @@ export default function LeaguePage() {
                     {(user?.uid === league?.ownerId || members.find(m => m.uid === user?.uid)?.role === 'ADMIN') && (
                         <button
                             onClick={() => setViewMode("activity")}
-                            className={`relative px-6 py-2 rounded-t-lg font-black uppercase tracking-wider text-sm transition-all duration-200 ${viewMode === "activity"
-                                ? "bg-white text-black border-2 border-b-0 border-black -mb-[2px] pb-3"
-                                : "bg-gray-200 text-gray-500 hover:bg-gray-300 border-2 border-transparent"
+                            className={`relative px-3 md:px-6 py-2 rounded-t-lg font-black uppercase tracking-wider text-xs md:text-sm transition-all duration-200 whitespace-nowrap shrink-0 ${viewMode === "activity"
+                                ? "bg-white text-black border-2 border-b-0 border-black pb-3 z-10"
+                                : "bg-gray-200 text-gray-500 hover:bg-gray-300 border-2 border-transparent mb-[2px]"
                                 }`}
                         >
-                            <div className="flex items-center gap-2">
-                                <Activity className="h-4 w-4" />
-                                Activity
+                            <div className="flex items-center gap-1 md:gap-2">
+                                <Activity className="h-3 w-3 md:h-4 md:w-4" />
+                                <span className="hidden sm:inline">Activity</span>
+                                <span className="sm:hidden">Log</span>
                             </div>
                         </button>
                     )}
@@ -768,7 +776,7 @@ export default function LeaguePage() {
                             {/* Stats / Wallet Card (Zero Sum Only) */}
                             {league.mode === "ZERO_SUM" && myMemberProfile && (
                                 <section>
-                                    <div className="bg-gradient-to-r from-cyan-500 to-blue-600 rounded-2xl border-4 border-black p-6 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] mb-6">
+                                    <div className={`bg-gradient-to-r ${LEAGUE_COLOR_SCHEMES[league.colorScheme || 'blue'].from} ${LEAGUE_COLOR_SCHEMES[league.colorScheme || 'blue'].to} rounded-2xl border-4 border-black p-6 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] mb-6`}>
                                         <div className="flex flex-col md:flex-row items-center justify-between gap-6">
                                             {/* Balance */}
                                             <div>
@@ -816,16 +824,57 @@ export default function LeaguePage() {
                                 </section>
                             )}
 
+                            {/* Stats Card (Arcade Mode) */}
+                            {league.mode === "STANDARD" && myMemberProfile && (
+                                <section>
+                                    <div className={`bg-gradient-to-r ${LEAGUE_COLOR_SCHEMES[league.colorScheme || 'purple'].from} ${LEAGUE_COLOR_SCHEMES[league.colorScheme || 'purple'].to} rounded-2xl border-4 border-black p-6 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] mb-6`}>
+                                        <div className="flex flex-col md:flex-row items-center justify-between gap-6">
+                                            {/* Points */}
+                                            <div>
+                                                <p className="text-sm font-black uppercase text-white/80 tracking-widest">My Points</p>
+                                                <p className="text-5xl font-black text-white drop-shadow-[4px_4px_0_rgba(0,0,0,0.3)] font-comic">
+                                                    {myMemberProfile.points.toLocaleString()}
+                                                </p>
+                                                <p className="text-xs text-white/70 font-bold mt-1">
+                                                    Total Earned
+                                                </p>
+                                            </div>
+
+                                            {/* Power-Ups Inventory */}
+                                            {myMemberProfile.powerUps && (
+                                                <div className="flex gap-3 bg-black/20 p-4 rounded-xl border-2 border-white/10 backdrop-blur-sm">
+                                                    <div className="text-center px-4">
+                                                        <p className="text-xs font-bold text-white/70 uppercase mb-1">x2 Boost</p>
+                                                        <p className="text-2xl font-black text-yellow-300">{myMemberProfile.powerUps.x2 || 0}</p>
+                                                    </div>
+                                                    <div className="text-center px-4 border-x border-white/20">
+                                                        <p className="text-xs font-bold text-white/70 uppercase mb-1">x3 Boost</p>
+                                                        <p className="text-2xl font-black text-orange-300">{myMemberProfile.powerUps.x3 || 0}</p>
+                                                    </div>
+                                                    <div className="text-center px-4">
+                                                        <p className="text-xs font-bold text-white/70 uppercase mb-1">x4 Boost</p>
+                                                        <p className="text-2xl font-black text-red-300">{myMemberProfile.powerUps.x4 || 0}</p>
+                                                    </div>
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+                                </section>
+                            )}
+
                             {/* Leaderboard Section */}
                             <section>
                                 {/* Unified Leaderboard Card */}
                                 <div className="rounded-2xl border-4 border-black overflow-hidden shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] bg-white">
                                     {/* Header Part */}
-                                    <div className="bg-gradient-to-r from-pink-500 to-purple-600 p-6 border-b-4 border-black">
+                                    <div className={`bg-gradient-to-r ${LEAGUE_COLOR_SCHEMES[league.colorScheme || 'purple'].from} ${LEAGUE_COLOR_SCHEMES[league.colorScheme || 'purple'].to} p-6 border-b-4 border-black`}>
                                         <div className="flex items-center justify-between">
                                             <div>
-                                                <h2 className="text-4xl font-black tracking-tight text-white font-comic uppercase drop-shadow-[2px_2px_0_rgba(0,0,0,0.3)]">
-                                                    🏆 {t('leaderboard')}
+                                                <h2 className="text-4xl font-black tracking-tight text-white font-comic uppercase drop-shadow-[2px_2px_0_rgba(0,0,0,0.3)] flex items-center gap-2">
+                                                    <span className="relative">
+                                                        <Trophy className="w-10 h-10 text-yellow-300 drop-shadow-[2px_2px_0_rgba(0,0,0,0.5)]" strokeWidth={2.5} />
+                                                    </span>
+                                                    {t('leaderboard')}
                                                 </h2>
                                                 <p className="text-sm text-white/90 font-bold mt-1">
                                                     {members.length} {members.length === 1 ? 'player' : 'players'} competing
@@ -895,6 +944,28 @@ export default function LeaguePage() {
                                                             <p className="text-xs text-gray-400 font-bold mt-0.5">
                                                                 Buy In: {(member.totalBought || (league.mode === "ZERO_SUM" && league.buyInType === "FIXED" ? league.startCapital : 0)).toLocaleString()} chips
                                                             </p>
+                                                            {/* Last 10 Bets Stats */}
+                                                            {member.recentResults && member.recentResults.length > 0 && (
+                                                                <div className="flex items-center gap-3 mt-1 bg-gray-50 px-2 py-0.5 rounded border border-gray-200 w-fit">
+                                                                    <span className="text-[10px] font-black text-emerald-600 flex items-center gap-1">
+                                                                        W: {member.recentResults.filter(r => r === 'W').length}
+                                                                    </span>
+                                                                    <span className="text-[10px] font-black text-red-500 flex items-center gap-1">
+                                                                        L: {member.recentResults.filter(r => r === 'L').length}
+                                                                    </span>
+                                                                </div>
+                                                            )}
+                                                            {league.mode === "STANDARD" && member.powerUps && (
+                                                                <div className="flex items-center gap-1 mt-1">
+                                                                    {(['x2', 'x3', 'x4'] as const).map(type =>
+                                                                        (member.powerUps?.[type] || 0) > 0 ? (
+                                                                            <span key={type} className="text-[10px] font-black bg-indigo-100 text-indigo-700 px-1.5 py-0.5 rounded border border-indigo-200" title={`${type.toUpperCase()} Multipliers remaining`}>
+                                                                                {type.toUpperCase()}: {member.powerUps?.[type]}
+                                                                            </span>
+                                                                        ) : null
+                                                                    )}
+                                                                </div>
+                                                            )}
                                                         </div>
                                                     </div>
                                                 </div>
@@ -957,13 +1028,11 @@ export default function LeaguePage() {
                                                 const now = new Date();
                                                 const openBets = bets.filter(b => b.status === "OPEN" && (!b.closesAt || new Date(b.closesAt.seconds * 1000) > now));
                                                 if (openBets.length === 0) return null;
-                                                // Sort by closing date (soonest first)
-                                                openBets.sort((a, b) => (a.closesAt?.seconds || 0) - (b.closesAt?.seconds || 0));
 
                                                 return (
-                                                    <div className="space-y-6 mb-8">
+                                                    <div className="mb-8">
                                                         {(league.status === "STARTED" || (league.status === "NOT_STARTED" && isOwner)) && myMemberProfile && hasPermission(myMemberProfile.role, "CREATE_BET") && (
-                                                            <div className="flex justify-end mb-2">
+                                                            <div className="flex justify-end mb-4">
                                                                 <button
                                                                     onClick={(e) => {
                                                                         e.stopPropagation();
@@ -975,20 +1044,25 @@ export default function LeaguePage() {
                                                                 </button>
                                                             </div>
                                                         )}
-                                                        {openBets.map(bet => {
-                                                            const wager = myActiveWagers[bet.id];
-                                                            return (
-                                                                <BetCard
-                                                                    key={bet.id}
-                                                                    bet={bet}
-                                                                    userPoints={myMemberProfile?.points || 0}
-                                                                    mode={league.mode}
-                                                                    userWager={wager}
-                                                                    onWagerSuccess={fetchLeagueData}
-                                                                    isOwnerOverride={isOwner || user?.uid === bet.creatorId}
-                                                                />
-                                                            );
-                                                        })}
+                                                        <GroupedBetsByTime
+                                                            bets={openBets}
+                                                            getClosingDate={(bet) => bet.closesAt ? new Date(bet.closesAt.seconds * 1000) : null}
+                                                            renderBet={(bet) => {
+                                                                const wager = myActiveWagers[bet.id];
+                                                                return (
+                                                                    <BetCard
+                                                                        key={bet.id}
+                                                                        bet={bet}
+                                                                        userPoints={myMemberProfile?.points || 0}
+                                                                        mode={league.mode}
+                                                                        userWager={wager}
+                                                                        powerUps={myMemberProfile?.powerUps || league.arcadePowerUpSettings}
+                                                                        onWagerSuccess={fetchLeagueData}
+                                                                        isOwnerOverride={isOwner || user?.uid === bet.creatorId}
+                                                                    />
+                                                                );
+                                                            }}
+                                                        />
                                                     </div>
                                                 );
                                             })()}
@@ -1063,6 +1137,7 @@ export default function LeaguePage() {
                                                                     userPoints={myMemberProfile?.points || 0}
                                                                     mode={league.mode}
                                                                     userWager={wager}
+                                                                    powerUps={myMemberProfile?.powerUps || league.arcadePowerUpSettings}
                                                                     onWagerSuccess={fetchLeagueData}
                                                                     isOwnerOverride={isOwner || user?.uid === bet.creatorId}
                                                                 />

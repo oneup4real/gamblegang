@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { X, Trophy, Coins, Calendar, Loader2 } from "lucide-react";
-import { createLeague, LeagueMode, BuyInType } from "@/lib/services/league-service";
+import { X, Trophy, Coins, Calendar, Loader2, Gavel } from "lucide-react";
+import { createLeague, LeagueMode, BuyInType, LEAGUE_COLOR_SCHEMES, LeagueColorScheme, LEAGUE_ICONS } from "@/lib/services/league-service";
 import { useAuth } from "@/components/auth-provider";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
@@ -25,6 +25,7 @@ export function CreateLeagueModal({ isOpen, onClose }: CreateLeagueModalProps) {
     const [buyInType, setBuyInType] = useState<BuyInType>("FIXED");
     const [startDate, setStartDate] = useState("");
     const [endDate, setEndDate] = useState("");
+    const [disputeWindow, setDisputeWindow] = useState(12);
 
     // Arcade Settings
     const [exactMult, setExactMult] = useState(3);
@@ -33,12 +34,21 @@ export function CreateLeagueModal({ isOpen, onClose }: CreateLeagueModalProps) {
     const [choicePoints, setChoicePoints] = useState(1);
     const [rangePoints, setRangePoints] = useState(1);
 
+    // Power-Up Starter Pack (Standard Mode)
+    const [x2Start, setX2Start] = useState(3);
+    const [x3Start, setX3Start] = useState(1);
+    const [x4Start, setX4Start] = useState(0);
+
     // AI Auto-Fill
     const [useAi, setUseAi] = useState(false);
     const [aiTopic, setAiTopic] = useState("");
     const [aiTimeframe, setAiTimeframe] = useState("Upcoming"); // Default
     const [aiTargetType, setAiTargetType] = useState<"CHOICE" | "MATCH">("MATCH");
     const [aiOutcomeType, setAiOutcomeType] = useState<"WINNER" | "WINNER_DRAW">("WINNER_DRAW");
+
+    // Customization
+    const [selectedIcon, setSelectedIcon] = useState("🏆");
+    const [selectedColorScheme, setSelectedColorScheme] = useState<LeagueColorScheme>("purple");
 
     // Review Step state
     const [step, setStep] = useState<"FORM" | "REVIEW">("FORM");
@@ -112,7 +122,11 @@ export function CreateLeagueModal({ isOpen, onClose }: CreateLeagueModalProps) {
                 buyInType,
                 startDate ? new Date(startDate) : undefined,
                 endDate ? new Date(endDate) : undefined,
-                mode === "STANDARD" ? { exact: exactMult, winner: winnerMult, diff: diffMult, choice: choicePoints, range: rangePoints } : undefined
+                mode === "STANDARD" ? { exact: exactMult, winner: winnerMult, diff: diffMult, choice: choicePoints, range: rangePoints } : undefined,
+                selectedIcon,
+                selectedColorScheme,
+                mode === "STANDARD" ? { x2: x2Start, x3: x3Start, x4: x4Start } : undefined,
+                disputeWindow
             );
 
             setProgress(40);
@@ -203,6 +217,64 @@ export function CreateLeagueModal({ isOpen, onClose }: CreateLeagueModalProps) {
                                             placeholder={t('namePlaceholder')}
                                             className="flex h-12 w-full rounded-xl border-2 border-black bg-white px-3 py-2 pl-10 text-lg font-bold shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] focus:outline-none focus:ring-4 focus:ring-primary/20 transition-all placeholder:text-gray-400"
                                         />
+                                    </div>
+                                </div>
+
+                                {/* Icon & Color Scheme Selection */}
+                                <div className="space-y-4 p-4 bg-gray-50 rounded-xl border-2 border-dashed border-gray-300">
+                                    <label className="text-sm font-black uppercase flex items-center gap-2">
+                                        🎨 {t('customizeAppearance')}
+                                    </label>
+
+                                    {/* Preview Card */}
+                                    <div className={`bg-gradient-to-r ${LEAGUE_COLOR_SCHEMES[selectedColorScheme].from} ${LEAGUE_COLOR_SCHEMES[selectedColorScheme].to} rounded-xl px-4 py-3 border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]`}>
+                                        <div className="flex items-center gap-2">
+                                            <span className="text-2xl drop-shadow-md">{selectedIcon}</span>
+                                            <span className={`font-black text-lg uppercase ${LEAGUE_COLOR_SCHEMES[selectedColorScheme].text} drop-shadow-sm`}>
+                                                {name || t('yourLeague')}
+                                            </span>
+                                        </div>
+                                    </div>
+
+                                    {/* Icon Selection */}
+                                    <div className="space-y-2">
+                                        <label className="text-xs font-bold text-gray-600 uppercase">{t('selectIcon')}</label>
+                                        <div className="flex flex-wrap gap-2">
+                                            {LEAGUE_ICONS.map((icon) => (
+                                                <button
+                                                    key={icon}
+                                                    type="button"
+                                                    onClick={() => setSelectedIcon(icon)}
+                                                    className={`w-10 h-10 text-xl rounded-lg border-2 transition-all flex items-center justify-center ${selectedIcon === icon
+                                                        ? "border-black bg-white shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] -translate-y-[1px]"
+                                                        : "border-gray-200 bg-white hover:border-gray-400"
+                                                        }`}
+                                                >
+                                                    {icon}
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </div>
+
+                                    {/* Color Scheme Selection */}
+                                    <div className="space-y-2">
+                                        <label className="text-xs font-bold text-gray-600 uppercase">{t('selectColorTheme')}</label>
+                                        <div className="grid grid-cols-4 gap-2">
+                                            {(Object.entries(LEAGUE_COLOR_SCHEMES) as [LeagueColorScheme, typeof LEAGUE_COLOR_SCHEMES[LeagueColorScheme]][]).map(([key, scheme]) => (
+                                                <button
+                                                    key={key}
+                                                    type="button"
+                                                    onClick={() => setSelectedColorScheme(key)}
+                                                    className={`flex flex-col items-center gap-1 p-2 rounded-lg border-2 transition-all ${selectedColorScheme === key
+                                                        ? "border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] -translate-y-[1px]"
+                                                        : "border-gray-200 hover:border-gray-400"
+                                                        }`}
+                                                >
+                                                    <div className={`w-full h-6 rounded bg-gradient-to-r ${scheme.from} ${scheme.to}`} />
+                                                    <span className="text-[10px] font-bold text-gray-600">{scheme.name}</span>
+                                                </button>
+                                            ))}
+                                        </div>
                                     </div>
                                 </div>
 
@@ -368,11 +440,89 @@ export function CreateLeagueModal({ isOpen, onClose }: CreateLeagueModalProps) {
                                             </div>
                                         </div>
 
+                                        <div className="mt-4 pt-4 border-t-2 border-dashed border-purple-200">
+                                            <h3 className="font-black text-purple-900 uppercase text-sm mb-3">⚡ Power-Up Starter Pack</h3>
+                                            <div className="grid grid-cols-3 gap-2">
+                                                <div className="space-y-1">
+                                                    <label className="text-xs font-bold text-indigo-500 uppercase">x2 Boosts</label>
+                                                    <input
+                                                        type="number"
+                                                        min={0}
+                                                        max={50}
+                                                        value={x2Start}
+                                                        onChange={(e) => setX2Start(Number(e.target.value))}
+                                                        className="w-full h-10 px-2 rounded-lg border-2 border-indigo-200 focus:border-indigo-500 font-bold text-center text-indigo-700 bg-white"
+                                                    />
+                                                </div>
+                                                <div className="space-y-1">
+                                                    <label className="text-xs font-bold text-pink-500 uppercase">x3 Boosts</label>
+                                                    <input
+                                                        type="number"
+                                                        min={0}
+                                                        max={50}
+                                                        value={x3Start}
+                                                        onChange={(e) => setX3Start(Number(e.target.value))}
+                                                        className="w-full h-10 px-2 rounded-lg border-2 border-pink-200 focus:border-pink-500 font-bold text-center text-pink-700 bg-white"
+                                                    />
+                                                </div>
+                                                <div className="space-y-1">
+                                                    <label className="text-xs font-bold text-amber-500 uppercase">x4 Boosts</label>
+                                                    <input
+                                                        type="number"
+                                                        min={0}
+                                                        max={50}
+                                                        value={x4Start}
+                                                        onChange={(e) => setX4Start(Number(e.target.value))}
+                                                        className="w-full h-10 px-2 rounded-lg border-2 border-amber-200 focus:border-amber-500 font-bold text-center text-amber-700 bg-white"
+                                                    />
+                                                </div>
+                                            </div>
+                                            <p className="text-[10px] font-bold text-gray-500 mt-2">
+                                                Every player starts with these power-ups.
+                                            </p>
+                                        </div>
                                         <div className="text-[10px] font-bold text-purple-600 space-y-1 mt-2">
                                             <p>{t('multipliersDesc')}</p>
                                             <p className="opacity-75 italic border-t border-purple-200 pt-1">
                                                 {t('zeroSumNoPoints')}
                                             </p>
+                                        </div>
+
+                                        {/* Dispute Window Settings */}
+                                        <div className="space-y-2 mt-4 pt-4 border-t-2 border-gray-200">
+                                            <label className="text-sm font-black uppercase flex items-center gap-2">
+                                                <Gavel className="w-4 h-4" /> Dispute Window
+                                            </label>
+                                            <p className="text-xs text-gray-500 font-bold -mt-1 mb-2">
+                                                Hours allowed to dispute a result.
+                                            </p>
+                                            <div className="flex gap-2">
+                                                {[12, 24, 48].map(h => (
+                                                    <button
+                                                        key={h}
+                                                        type="button"
+                                                        onClick={() => setDisputeWindow(h)}
+                                                        className={`flex-1 py-2 rounded-lg font-black border-2 transition-all ${disputeWindow === h
+                                                                ? "bg-black text-white border-black"
+                                                                : "bg-white text-gray-500 border-gray-200 hover:border-black"
+                                                            }`}
+                                                    >
+                                                        {h}h
+                                                    </button>
+                                                ))}
+                                                <div className="relative flex-1">
+                                                    <input
+                                                        type="number"
+                                                        min={1}
+                                                        value={disputeWindow}
+                                                        onChange={e => setDisputeWindow(Math.max(1, Number(e.target.value)))}
+                                                        className={`w-full h-full px-2 rounded-lg font-bold border-2 text-center focus:outline-none ${![12, 24, 48].includes(disputeWindow) ? "border-black bg-gray-50" : "border-gray-200"
+                                                            }`}
+                                                        placeholder="Custom"
+                                                    />
+                                                    <span className="absolute right-2 top-2.5 text-xs font-bold text-gray-400">h</span>
+                                                </div>
+                                            </div>
                                         </div>
                                     </motion.div>
                                 )}

@@ -212,7 +212,9 @@ export function CreateBetModal({ leagueId, leagueMode, aiAutoConfirmEnabled, isO
                     date,
                     finalType === "CHOICE" ? bet.options : undefined,
                     undefined,
-                    finalType === "MATCH" ? { home: bet.matchHome, away: bet.matchAway } : undefined
+                    finalType === "MATCH" ? { home: bet.matchHome, away: bet.matchAway } : undefined,
+                    aiAutoConfirmEnabled !== false, // Default true
+                    120 // Fixed delay
                 );
                 successCount++;
                 setProgress(Math.round(((i + 1) / total) * 100));

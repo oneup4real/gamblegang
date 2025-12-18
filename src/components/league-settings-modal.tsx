@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { X, Loader2, AlertTriangle, Save, RefreshCw, Trash, Users, Crown, Shield, User } from "lucide-react";
 import { useAuth } from "@/components/auth-provider";
-import { League, updateLeague, resetLeague, LeagueMember, updateMemberRole } from "@/lib/services/league-service";
+import { League, updateLeague, resetLeague, LeagueMember, updateMemberRole, LEAGUE_COLOR_SCHEMES, LeagueColorScheme, LEAGUE_ICONS, backfillPowerUps } from "@/lib/services/league-service";
 import { Button } from "@/components/ui/button";
 import { LeagueRole, hasPermission } from "@/lib/rbac";
 import { collection, getDocs } from "firebase/firestore";
@@ -38,7 +38,17 @@ export function LeagueSettingsModal({ league, isOpen, onClose, onUpdate }: Leagu
     // AI Settings
     const [aiAutoConfirmEnabled, setAiAutoConfirmEnabled] = useState(league.aiAutoConfirmEnabled !== false); // Default true
 
+    // Appearance settings
+    const [selectedIcon, setSelectedIcon] = useState(league.icon || (league.mode === "ZERO_SUM" ? "💰" : "🎮"));
+    const [selectedColorScheme, setSelectedColorScheme] = useState<LeagueColorScheme>(league.colorScheme || "purple");
+
+    // Arcade Power-Up Settings
+    const [x2Start, setX2Start] = useState(league.arcadePowerUpSettings?.x2 ?? 3);
+    const [x3Start, setX3Start] = useState(league.arcadePowerUpSettings?.x3 ?? 1);
+    const [x4Start, setX4Start] = useState(league.arcadePowerUpSettings?.x4 ?? 0);
+
     const [activeTab, setActiveTab] = useState<"general" | "members" | "danger">("general");
+    const [confirmBackfill, setConfirmBackfill] = useState(false);
 
     const handleUpdateName = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -48,7 +58,9 @@ export function LeagueSettingsModal({ league, isOpen, onClose, onUpdate }: Leagu
             const updates: Partial<League> = {
                 name,
                 disputeWindowHours,
-                aiAutoConfirmEnabled
+                aiAutoConfirmEnabled,
+                icon: selectedIcon,
+                colorScheme: selectedColorScheme
             };
             if (league.mode === "STANDARD") {
                 updates.matchSettings = {
@@ -58,7 +70,13 @@ export function LeagueSettingsModal({ league, isOpen, onClose, onUpdate }: Leagu
                     choice: choicePoints,
                     range: rangePoints
                 };
+                updates.arcadePowerUpSettings = {
+                    x2: x2Start,
+                    x3: x3Start,
+                    x4: x4Start
+                };
             }
+
             // Ensure no undefined values in updates (though state should prevent this)
             const cleanUpdates = JSON.parse(JSON.stringify(updates));
             await updateLeague(league.id, cleanUpdates);
@@ -175,7 +193,7 @@ export function LeagueSettingsModal({ league, isOpen, onClose, onUpdate }: Leagu
                         </div>
 
                         {activeTab === "general" && (
-                            <form onSubmit={handleUpdateName} className="space-y-4">
+                            <form onSubmit={handleUpdateName} className="space-y-4 max-h-[60vh] overflow-y-auto pr-2">
                                 <div className="space-y-2">
                                     <label className="text-sm font-black uppercase">League Name</label>
                                     <input
@@ -183,6 +201,64 @@ export function LeagueSettingsModal({ league, isOpen, onClose, onUpdate }: Leagu
                                         onChange={(e) => setName(e.target.value)}
                                         className="flex h-12 w-full rounded-xl border-2 border-black bg-white px-3 text-lg font-bold shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] focus:outline-none focus:ring-4 focus:ring-primary/20"
                                     />
+                                </div>
+
+                                {/* Appearance Settings */}
+                                <div className="space-y-4 p-4 bg-gray-50 rounded-xl border-2 border-dashed border-gray-300">
+                                    <label className="text-sm font-black uppercase flex items-center gap-2">
+                                        🎨 Appearance
+                                    </label>
+
+                                    {/* Preview Card */}
+                                    <div className={`bg-gradient-to-r ${LEAGUE_COLOR_SCHEMES[selectedColorScheme].from} ${LEAGUE_COLOR_SCHEMES[selectedColorScheme].to} rounded-xl px-4 py-3 border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]`}>
+                                        <div className="flex items-center gap-2">
+                                            <span className="text-2xl drop-shadow-md">{selectedIcon}</span>
+                                            <span className={`font-black text-lg uppercase ${LEAGUE_COLOR_SCHEMES[selectedColorScheme].text} drop-shadow-sm`}>
+                                                {name || "Your League"}
+                                            </span>
+                                        </div>
+                                    </div>
+
+                                    {/* Icon Selection */}
+                                    <div className="space-y-2">
+                                        <label className="text-xs font-bold text-gray-600 uppercase">Select Icon</label>
+                                        <div className="flex flex-wrap gap-2">
+                                            {LEAGUE_ICONS.map((icon) => (
+                                                <button
+                                                    key={icon}
+                                                    type="button"
+                                                    onClick={() => setSelectedIcon(icon)}
+                                                    className={`w-9 h-9 text-lg rounded-lg border-2 transition-all flex items-center justify-center ${selectedIcon === icon
+                                                        ? "border-black bg-white shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] -translate-y-[1px]"
+                                                        : "border-gray-200 bg-white hover:border-gray-400"
+                                                        }`}
+                                                >
+                                                    {icon}
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </div>
+
+                                    {/* Color Scheme Selection */}
+                                    <div className="space-y-2">
+                                        <label className="text-xs font-bold text-gray-600 uppercase">Select Color Theme</label>
+                                        <div className="grid grid-cols-4 gap-2">
+                                            {(Object.entries(LEAGUE_COLOR_SCHEMES) as [LeagueColorScheme, typeof LEAGUE_COLOR_SCHEMES[LeagueColorScheme]][]).map(([key, scheme]) => (
+                                                <button
+                                                    key={key}
+                                                    type="button"
+                                                    onClick={() => setSelectedColorScheme(key)}
+                                                    className={`flex flex-col items-center gap-1 p-2 rounded-lg border-2 transition-all ${selectedColorScheme === key
+                                                        ? "border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] -translate-y-[1px]"
+                                                        : "border-gray-200 hover:border-gray-400"
+                                                        }`}
+                                                >
+                                                    <div className={`w-full h-5 rounded bg-gradient-to-r ${scheme.from} ${scheme.to}`} />
+                                                    <span className="text-[9px] font-bold text-gray-600">{scheme.name}</span>
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </div>
                                 </div>
 
                                 {league.mode === "STANDARD" && (
@@ -219,6 +295,30 @@ export function LeagueSettingsModal({ league, isOpen, onClose, onUpdate }: Leagu
                                             <p className="opacity-75 italic border-t border-purple-200 pt-1">
                                                 Note: No fixed points can be set for Zero Sum betting, because the odds are calculated dynamically like in real life.
                                             </p>
+                                        </div>
+                                    </div>
+                                )}
+                                {league.mode === "STANDARD" && (
+                                    <div className="space-y-3 p-4 bg-yellow-50 border-2 border-yellow-200 rounded-xl">
+                                        <h4 className="text-sm font-black uppercase text-yellow-800 flex items-center gap-2">
+                                            ⚡ Power-Up Starter Pack
+                                        </h4>
+                                        <p className="text-xs font-bold text-gray-500">
+                                            How many power-ups each player receives when joining:
+                                        </p>
+                                        <div className="grid grid-cols-3 gap-2">
+                                            <div className="space-y-1">
+                                                <label className="text-xs font-bold text-gray-500 uppercase">x2 Boost</label>
+                                                <input type="number" min={0} value={x2Start} onChange={(e) => setX2Start(Number(e.target.value))} className="w-full h-10 px-2 rounded-lg border-2 border-black font-bold text-center" />
+                                            </div>
+                                            <div className="space-y-1">
+                                                <label className="text-xs font-bold text-gray-500 uppercase">x3 Mega</label>
+                                                <input type="number" min={0} value={x3Start} onChange={(e) => setX3Start(Number(e.target.value))} className="w-full h-10 px-2 rounded-lg border-2 border-black font-bold text-center" />
+                                            </div>
+                                            <div className="space-y-1">
+                                                <label className="text-xs font-bold text-gray-500 uppercase">x4 Jackpot</label>
+                                                <input type="number" min={0} value={x4Start} onChange={(e) => setX4Start(Number(e.target.value))} className="w-full h-10 px-2 rounded-lg border-2 border-black font-bold text-center" />
+                                            </div>
                                         </div>
                                     </div>
                                 )}
@@ -368,6 +468,52 @@ export function LeagueSettingsModal({ league, isOpen, onClose, onUpdate }: Leagu
                                         Reset Points
                                     </Button>
                                 </div>
+
+                                {league.mode === "STANDARD" && (
+                                    <div className="space-y-4 p-4 border-2 border-black bg-yellow-50 rounded-xl shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
+                                        <div className="flex items-start gap-4">
+                                            <div className="p-2 bg-yellow-100 rounded-lg border-2 border-black">
+                                                <RefreshCw className="h-6 w-6 text-yellow-600" />
+                                            </div>
+                                            <div>
+                                                <h4 className="font-black text-yellow-700 text-lg uppercase">Backfill Power-Ups</h4>
+                                                <p className="text-xs font-bold text-yellow-600/80 mt-1">
+                                                    Grant starter pack (3x x2, 3x x3, 2x x4) to ALL members.
+                                                    Use this to enable Power-Ups for an existing league.
+                                                </p>
+                                            </div>
+                                        </div>
+                                        <Button
+                                            onClick={async () => {
+                                                if (!confirmBackfill) {
+                                                    setConfirmBackfill(true);
+                                                    return;
+                                                }
+                                                setLoading(true);
+                                                try {
+                                                    await backfillPowerUps(league.id);
+                                                    alert("Power-ups distributed to all members!");
+                                                    setConfirmBackfill(false);
+                                                    onUpdate();
+                                                } catch (e) {
+                                                    console.error(e);
+                                                    alert("Failed to distribute power-ups.");
+                                                } finally {
+                                                    setLoading(false);
+                                                }
+                                            }}
+                                            disabled={loading}
+                                            className={`w-full border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] ${confirmBackfill ? 'bg-green-500 text-white hover:bg-green-600' : 'bg-yellow-400 text-yellow-900 hover:bg-yellow-500'}`}
+                                        >
+                                            {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : confirmBackfill ? "Click Again to Confirm" : "Distribute Power-Ups"}
+                                        </Button>
+                                        {confirmBackfill && (
+                                            <button onClick={() => setConfirmBackfill(false)} className="text-xs text-gray-500 underline mt-1">
+                                                Cancel
+                                            </button>
+                                        )}
+                                    </div>
+                                )}
 
                                 <div className="space-y-4 p-4 border-2 border-black bg-red-100 rounded-xl border-dashed">
                                     <div className="flex items-start gap-4">

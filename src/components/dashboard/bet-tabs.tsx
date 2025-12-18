@@ -6,7 +6,9 @@ import { Gamepad2, Ticket, Clock, History, ExternalLink } from "lucide-react";
 import { Link } from "@/i18n/navigation";
 import { Button } from "@/components/ui/button";
 import { BetCard } from "@/components/bet-card";
+import { GroupedBetsByTime } from "@/components/grouped-bets";
 import { Bet, DashboardBetWithWager } from "@/lib/services/bet-service";
+import { LEAGUE_COLOR_SCHEMES, LeagueColorScheme } from "@/lib/services/league-service";
 import { format } from "date-fns";
 
 interface BetTabsProps {
@@ -62,7 +64,7 @@ export function BetTabs({
     return (
         <div className="bg-white border-2 border-black rounded-xl shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] overflow-hidden">
             {/* Tab Headers */}
-            <div className="flex border-b-2 border-black overflow-x-auto">
+            <div className="flex overflow-x-auto">
                 {tabs.map(({ key, bets }) => {
                     const config = tabConfig[key];
                     const IconComponent = config.icon;
@@ -124,27 +126,62 @@ export function BetTabs({
                                 </div>
                                 <p className="font-bold">No {tabConfig[activeTab].label.toLowerCase()} bets</p>
                             </div>
-                        ) : (
-                            <div className="space-y-6">
-                                {currentBets.map((bet) => (
-                                    <div key={bet.id} className="relative">
-                                        {/* Bet Card */}
+                        ) : activeTab === "available" ? (
+                            /* Grouped view for available bets */
+                            <GroupedBetsByTime
+                                bets={currentBets as any[]}
+                                getClosingDate={(bet: any) => bet.closesAt ? new Date(bet.closesAt.seconds * 1000) : null}
+                                renderBet={(bet: any) => (
+                                    <div key={bet.id} className="relative mb-4">
                                         <BetCard
                                             bet={bet as Bet}
-                                            userPoints={bet.userPoints} // Dashboard context
+                                            userPoints={bet.userPoints}
                                             userWager={bet.wager ? { ...bet.wager, id: "dashboard", userId: userId, userName: "Me", placedAt: new Date() } as any : undefined}
                                             mode={bet.leagueMode === "ZERO_SUM" ? "ZERO_SUM" : "STANDARD"}
+                                            powerUps={bet.userPowerUps}
                                             onWagerSuccess={onRefresh}
                                             isOwnerOverride={bet.creatorId === userId}
                                         />
-
-                                        {/* Actions Below Card */}
                                         <div className="mt-2 flex items-center justify-center gap-4">
                                             <Link href={`/leagues/${bet.leagueId}?bet=${bet.id}`} className="group flex items-center gap-1 text-[10px] uppercase font-bold text-gray-400 hover:text-black transition-colors">
                                                 <span>View in League</span>
                                                 <ExternalLink className="h-3 w-3 opacity-50 group-hover:opacity-100 transition-opacity" />
                                             </Link>
-
+                                        </div>
+                                        <div className="absolute top-[-10px] left-4 z-20">
+                                            {(() => {
+                                                const colorScheme = (bet.leagueColorScheme as LeagueColorScheme) || 'purple';
+                                                const colors = LEAGUE_COLOR_SCHEMES[colorScheme] || LEAGUE_COLOR_SCHEMES.purple;
+                                                const icon = bet.leagueIcon || (bet.leagueMode === "ZERO_SUM" ? "💰" : "🎮");
+                                                return (
+                                                    <span className={`bg-gradient-to-r ${colors.from} ${colors.to} ${colors.text} text-[10px] font-black uppercase px-2 py-1 rounded shadow-sm flex items-center gap-1`}>
+                                                        <span className="text-xs">{icon}</span>
+                                                        {bet.leagueName}
+                                                    </span>
+                                                );
+                                            })()}
+                                        </div>
+                                    </div>
+                                )}
+                            />
+                        ) : (
+                            <div className="space-y-6">
+                                {currentBets.map((bet) => (
+                                    <div key={bet.id} className="relative">
+                                        <BetCard
+                                            bet={bet as Bet}
+                                            userPoints={bet.userPoints}
+                                            userWager={bet.wager ? { ...bet.wager, id: "dashboard", userId: userId, userName: "Me", placedAt: new Date() } as any : undefined}
+                                            mode={bet.leagueMode === "ZERO_SUM" ? "ZERO_SUM" : "STANDARD"}
+                                            powerUps={bet.userPowerUps}
+                                            onWagerSuccess={onRefresh}
+                                            isOwnerOverride={bet.creatorId === userId}
+                                        />
+                                        <div className="mt-2 flex items-center justify-center gap-4">
+                                            <Link href={`/leagues/${bet.leagueId}?bet=${bet.id}`} className="group flex items-center gap-1 text-[10px] uppercase font-bold text-gray-400 hover:text-black transition-colors">
+                                                <span>View in League</span>
+                                                <ExternalLink className="h-3 w-3 opacity-50 group-hover:opacity-100 transition-opacity" />
+                                            </Link>
                                             {(activeTab === "history") && onDismiss && (
                                                 <button
                                                     onClick={(e) => {
@@ -157,22 +194,18 @@ export function BetTabs({
                                                 </button>
                                             )}
                                         </div>
-
-                                        {/* League Badge floating or integrated? 
-                                            The SidePanelTicket handles status. 
-                                            We might want to show League Name above the card or integrated.
-                                            Currently SidePanelTicket doesn't show league name. 
-                                            Let's add a small header above the card for League Name + Date if needed.
-                                            Or keep it simple as requested "Just the tickets".
-                                            The BetCard refactor (checked earlier) shows metadata like Date and Status.
-                                            It does NOT show League Name explicitly in a dedicated prominent spot, mostly "Closes: ...". 
-                                            
-                                            Let's add a small "League: {leagueName}" tag above the card to keep context.
-                                        */}
                                         <div className="absolute top-[-10px] left-4 z-20">
-                                            <span className="bg-black text-white text-[10px] font-black uppercase px-2 py-1 rounded shadow-sm">
-                                                {bet.leagueName}
-                                            </span>
+                                            {(() => {
+                                                const colorScheme = (bet.leagueColorScheme as LeagueColorScheme) || 'purple';
+                                                const colors = LEAGUE_COLOR_SCHEMES[colorScheme] || LEAGUE_COLOR_SCHEMES.purple;
+                                                const icon = bet.leagueIcon || (bet.leagueMode === "ZERO_SUM" ? "💰" : "🎮");
+                                                return (
+                                                    <span className={`bg-gradient-to-r ${colors.from} ${colors.to} ${colors.text} text-[10px] font-black uppercase px-2 py-1 rounded shadow-sm flex items-center gap-1`}>
+                                                        <span className="text-xs">{icon}</span>
+                                                        {bet.leagueName}
+                                                    </span>
+                                                );
+                                            })()}
                                         </div>
                                     </div>
                                 ))}

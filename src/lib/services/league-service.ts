@@ -1,5 +1,5 @@
 import { db } from "@/lib/firebase/config";
-import { collection, doc, runTransaction, serverTimestamp, setDoc, deleteDoc, getDocs, query, where } from "firebase/firestore";
+import { collection, doc, runTransaction, writeBatch, serverTimestamp, setDoc, deleteDoc, getDocs, getDoc, query, where } from "firebase/firestore";
 import { User } from "firebase/auth";
 import { LeagueRole, hasPermission } from "@/lib/rbac";
 import { logMemberJoined, logPointsBought } from "./activity-log-service";
@@ -8,6 +8,19 @@ export type LeagueMode = "ZERO_SUM" | "STANDARD";
 export type LeagueStatus = "NOT_STARTED" | "STARTED" | "FINISHED" | "ARCHIVED";
 export type BuyInType = "FIXED" | "FLEXIBLE";
 
+// Power Up Types for Arcade Mode
+export type PowerUpType = 'x2' | 'x3' | 'x4';
+export interface PowerUpInventory {
+    x2: number;
+    x3: number;
+    x4: number;
+}
+export interface LeaguePowerUpConfig {
+    x2: number;
+    x3: number;
+    x4: number;
+}
+
 export interface League {
     id: string;
     name: string;
@@ -15,6 +28,7 @@ export interface League {
     startCapital: number;
     buyInType?: BuyInType; // Only for ZERO_SUM mode
     matchSettings?: MatchSettings;
+    arcadePowerUpSettings?: LeaguePowerUpConfig; // Configuration for starting power-ups
     startDate?: any;
     endDate?: any;
     createdAt: any;
@@ -23,7 +37,39 @@ export interface League {
     status: LeagueStatus;
     disputeWindowHours?: number; // Configurable dispute period (default: 12)
     aiAutoConfirmEnabled?: boolean;
+    icon?: string; // Custom emoji or icon identifier
+    colorScheme?: LeagueColorScheme; // Predefined color scheme
 }
+
+// Predefined color schemes for leagues
+export type LeagueColorScheme =
+    | 'purple'   // Purple to Pink
+    | 'blue'     // Blue to Cyan  
+    | 'green'    // Green to Teal
+    | 'orange'   // Orange to Red
+    | 'gold'     // Gold to Yellow
+    | 'dark'     // Dark gray to black
+    | 'sunset'   // Pink to Orange
+    | 'ocean';   // Teal to Blue
+
+// Color scheme definitions
+export const LEAGUE_COLOR_SCHEMES: Record<LeagueColorScheme, { from: string; to: string; text: string; name: string }> = {
+    purple: { from: 'from-purple-500', to: 'to-pink-500', text: 'text-white', name: 'Purple Haze' },
+    blue: { from: 'from-blue-500', to: 'to-cyan-500', text: 'text-white', name: 'Ocean Deep' },
+    green: { from: 'from-green-500', to: 'to-teal-500', text: 'text-white', name: 'Forest' },
+    orange: { from: 'from-orange-500', to: 'to-red-500', text: 'text-white', name: 'Fire' },
+    gold: { from: 'from-yellow-400', to: 'to-amber-500', text: 'text-black', name: 'Gold Rush' },
+    dark: { from: 'from-gray-700', to: 'to-gray-900', text: 'text-white', name: 'Midnight' },
+    sunset: { from: 'from-pink-500', to: 'to-orange-500', text: 'text-white', name: 'Sunset' },
+    ocean: { from: 'from-teal-500', to: 'to-blue-600', text: 'text-white', name: 'Tropical' }
+};
+
+// Predefined icons for leagues
+export const LEAGUE_ICONS = [
+    '⚽', '🏀', '🏈', '⚾', '🎾', '🏐', '🏉', '🥊',
+    '🎮', '🎯', '🎲', '♠️', '🏆', '🎰', '🎪', '🎭',
+    '🚀', '💎', '👑', '🔥', '⚡', '💰', '🌟', '🦁'
+];
 
 export interface MatchSettings {
     exact: number;
@@ -43,6 +89,8 @@ export interface LeagueMember {
     photoURL: string;
     totalInvested: number; // Only actual bets placed
     totalBought: number; // Initial capital + Rebuys (not counted as invested)
+    powerUps?: PowerUpInventory; // Arcade mode inventory
+    recentResults?: ('W' | 'L' | 'P')[]; // Sliding window of last 10 bet results
 }
 
 export async function createLeague(
@@ -53,7 +101,11 @@ export async function createLeague(
     buyInType: BuyInType = "FIXED",
     startDate?: Date,
     endDate?: Date,
-    matchSettings?: MatchSettings
+    matchSettings?: MatchSettings,
+    icon?: string,
+    colorScheme?: LeagueColorScheme,
+    arcadePowerUpSettings?: LeaguePowerUpConfig,
+    disputeWindowHours: number = 12,
 ) {
     if (!user) throw new Error("User must be logged in");
 
@@ -74,7 +126,10 @@ export async function createLeague(
         createdAt: serverTimestamp(),
         memberCount: 1,
         status: "NOT_STARTED",
-        aiAutoConfirmEnabled: true // Default enabled
+        aiAutoConfirmEnabled: true, // Default enabled
+        icon: icon || (mode === "ZERO_SUM" ? "💰" : "🎮"),
+        colorScheme: colorScheme || "purple",
+        disputeWindowHours
     };
 
     if (mode === "ZERO_SUM") {
@@ -83,6 +138,13 @@ export async function createLeague(
 
     if (mode === "STANDARD") {
         leagueData.matchSettings = matchSettings || { exact: 3, diff: 1, winner: 2, choice: 1, range: 1 };
+        // Default power-up settings if not provided
+        if (arcadePowerUpSettings) {
+            leagueData.arcadePowerUpSettings = arcadePowerUpSettings;
+        } else {
+            // Default: 3x 'x2', 1x 'x3', 0x 'x4' (can be adjusted)
+            leagueData.arcadePowerUpSettings = { x2: 3, x3: 1, x4: 0 };
+        }
     }
 
     if (startDate) leagueData.startDate = startDate;
@@ -99,6 +161,10 @@ export async function createLeague(
         totalInvested: 0, // Only actual bets count
         totalBought: mode === "ZERO_SUM" && buyInType === "FIXED" ? startCapital : 0, // Initial capital
     };
+
+    if (mode === "STANDARD" && leagueData.arcadePowerUpSettings) {
+        ownerMember.powerUps = { ...leagueData.arcadePowerUpSettings };
+    }
 
     try {
         await runTransaction(db, async (transaction) => {
@@ -201,6 +267,41 @@ export async function updateLeague(leagueId: string, updates: Partial<League>) {
     await setDoc(leagueRef, updates, { merge: true });
 }
 
+export async function backfillPowerUps(leagueId: string) {
+    // First, get the league settings
+    const leagueRef = doc(db, "leagues", leagueId);
+    const leagueSnap = await getDoc(leagueRef);
+
+    if (!leagueSnap.exists()) {
+        throw new Error("League not found");
+    }
+
+    const league = leagueSnap.data() as League;
+
+    // Use league's configured settings, or default if not set
+    const powerUpSettings = league.arcadePowerUpSettings || { x2: 3, x3: 1, x4: 0 };
+
+    // Get all members
+    const membersRef = collection(db, "leagues", leagueId, "members");
+    const membersSnap = await getDocs(membersRef);
+
+    const batch = writeBatch(db);
+
+    membersSnap.docs.forEach(memberDoc => {
+        // Set powerUps for each member using the league's settings
+        batch.set(memberDoc.ref, { powerUps: powerUpSettings }, { merge: true });
+    });
+
+    // Always set league's arcadePowerUpSettings to ensure it exists
+    batch.set(leagueRef, {
+        arcadePowerUpSettings: powerUpSettings
+    }, { merge: true });
+
+    await batch.commit();
+
+    console.log(`[backfillPowerUps] Updated ${membersSnap.docs.length} members with powerUps:`, powerUpSettings);
+}
+
 export async function resetLeague(leagueId: string, startCapital: number) {
     // Reset all members to startCapital
     const { writeBatch, getDocs, collection } = await import("firebase/firestore");
@@ -279,6 +380,10 @@ export async function joinLeague(leagueId: string, user: User) {
             displayName: userProfile?.displayName || user.displayName || "Anonymous",
             photoURL: userProfile?.photoURL || user.photoURL || ""
         };
+
+        if (leagueData.mode === "STANDARD" && leagueData.arcadePowerUpSettings) {
+            memberData.powerUps = { ...leagueData.arcadePowerUpSettings };
+        }
 
         transaction.set(memberRef, memberData);
         // Increment member count

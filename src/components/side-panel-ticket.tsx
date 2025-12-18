@@ -22,8 +22,9 @@ export function SidePanelTicket({
     payout = 0,
     currency = "pts",
     isWinning,
-    odds
-}: SidePanelTicketProps) {
+    odds,
+    powerUp // New prop
+}: SidePanelTicketProps & { powerUp?: string }) {
 
     const renderTicketContent = () => {
         // --- 1. OPEN STATE ---
@@ -31,7 +32,9 @@ export function SidePanelTicket({
             return (
                 <>
                     <div className="flex-1 flex flex-col justify-center min-w-0 mr-2 md:mr-0 md:mb-3">
-                        <div className="text-[10px] font-black uppercase text-slate-400 tracking-wider mb-1">Your Pick</div>
+                        <div className="text-[10px] font-black uppercase text-slate-400 tracking-wider mb-1">
+                            <span>Your Pick</span>
+                        </div>
 
                         <div className="relative group">
                             <div className="absolute inset-0 bg-blue-600 rounded-lg blur opacity-10 group-hover:opacity-20 transition-opacity"></div>
@@ -105,8 +108,8 @@ export function SidePanelTicket({
                         </div>
 
                         <div className={`relative border-2 rounded-lg p-2.5 flex items-center justify-center min-h-[48px] ${isWinningState
-                                ? "bg-white border-green-500 shadow-[0_2px_10px_-2px_rgba(34,197,94,0.3)]"
-                                : "bg-white border-blue-300"
+                            ? "bg-white border-green-500 shadow-[0_2px_10px_-2px_rgba(34,197,94,0.3)]"
+                            : "bg-white border-blue-300"
                             }`}>
                             <span className={`font-black text-xs md:text-sm leading-tight text-center break-words w-full ${isWinningState ? "text-green-800" : "text-blue-900"}`}>
                                 {userSelection || "-"}

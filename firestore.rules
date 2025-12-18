@@ -80,6 +80,11 @@ service cloud.firestore {
         allow read: if request.auth != null;
     }
 
+    // Explicitly allow Collection Group queries for wagers
+    match /{path=**}/wagers/{wagerId} {
+        allow read: if request.auth != null;
+    }
+
     // Notifications Collection Group
     match /{path=**}/notifications/{notificationId} {
         // Read: Users can query their own notifications (requires userId field on doc)
