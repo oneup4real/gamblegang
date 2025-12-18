@@ -12,7 +12,7 @@ import { BetStatusStepper } from "@/components/bet-status-stepper";
 import { format } from "date-fns";
 import { ArrowLeft, Crown, User as UserIcon, Settings, Play, Flag, Archive, Coins, AlertOctagon, CheckCircle2, XCircle, Trash2, Pencil, QrCode, Gamepad2, Gavel, TrendingUp, Target, Award, Activity, ExternalLink, ChevronDown, ChevronUp, Ticket as TicketIcon, Timer, Trophy } from "lucide-react";
 import QRCode from "react-qr-code";
-import { BetTicket } from "@/components/bet-ticket";
+
 import Link from "next/link";
 import { CreateBetModal } from "@/components/create-bet-modal";
 import { LeagueSettingsModal } from "@/components/league-settings-modal";
@@ -571,6 +571,7 @@ export default function LeaguePage() {
                             mode={mode}
                             userWager={wager}
                             onWagerSuccess={fetchLeagueData}
+                            isOwnerOverride={isOwner || user?.uid === bet.creatorId}
                         />
                     </div>
                 )}
@@ -939,19 +940,9 @@ export default function LeaguePage() {
                                                 openBets.sort((a, b) => (a.closesAt?.seconds || 0) - (b.closesAt?.seconds || 0));
 
                                                 return (
-                                                    <div className="space-y-3 mb-8">
-                                                        <div className="flex items-center justify-between gap-2 mb-4 cursor-pointer select-none" onClick={() => toggleSection('open')}>
-                                                            <div className="flex items-center gap-2">
-                                                                <div className={`transition-transform duration-200 ${collapsedSections['open'] ? '-rotate-90' : ''}`}>
-                                                                    <ChevronDown className="h-6 w-6 text-black" />
-                                                                </div>
-                                                                <div className="bg-green-500 rounded-full p-1 border-2 border-black">
-                                                                    <CheckCircle2 className="h-4 w-4 text-white" />
-                                                                </div>
-                                                                <h3 className="text-2xl font-black text-green-600 font-comic uppercase tracking-tight">Open for Betting</h3>
-                                                            </div>
-                                                            {/* New Bet Button inside Header */}
-                                                            {!collapsedSections['open'] && (league.status === "STARTED" || (league.status === "NOT_STARTED" && isOwner)) && myMemberProfile && hasPermission(myMemberProfile.role, "CREATE_BET") && (
+                                                    <div className="space-y-6 mb-8">
+                                                        {(league.status === "STARTED" || (league.status === "NOT_STARTED" && isOwner)) && myMemberProfile && hasPermission(myMemberProfile.role, "CREATE_BET") && (
+                                                            <div className="flex justify-end mb-2">
                                                                 <button
                                                                     onClick={(e) => {
                                                                         e.stopPropagation();
@@ -961,37 +952,39 @@ export default function LeaguePage() {
                                                                 >
                                                                     <span>+</span> {tBets('newBet')}
                                                                 </button>
-                                                            )}
-                                                        </div>
-                                                        {!collapsedSections['open'] && openBets.map(bet => renderBetItem(bet, myMemberProfile?.points || 0, league.mode))}
+                                                            </div>
+                                                        )}
+                                                        {openBets.map(bet => {
+                                                            const wager = myActiveWagers[bet.id];
+                                                            return (
+                                                                <BetCard
+                                                                    key={bet.id}
+                                                                    bet={bet}
+                                                                    userPoints={myMemberProfile?.points || 0}
+                                                                    mode={league.mode}
+                                                                    userWager={wager}
+                                                                    onWagerSuccess={fetchLeagueData}
+                                                                    isOwnerOverride={isOwner || user?.uid === bet.creatorId}
+                                                                />
+                                                            );
+                                                        })}
                                                     </div>
                                                 );
                                             })()}
 
-                                            {/* 3. UNDER REVIEW / LOCKED / PROOFING (Waiting for Event or Resolution) */}
+                                            {/* 3. LOCKED (Game in Progress / Waiting for Result) */}
                                             {(() => {
                                                 const now = new Date();
-                                                // Include LOCKED, PROOFING, DISPUTED, or OPEN bets that have expired
-                                                const underReviewBets = bets.filter(b =>
+                                                // Locked bets OR Open bets that have expired
+                                                const lockedBets = bets.filter(b =>
                                                     b.status === "LOCKED" ||
-                                                    b.status === "PROOFING" ||
-                                                    b.status === "DISPUTED" ||
                                                     (b.status === "OPEN" && b.closesAt && new Date(b.closesAt.seconds * 1000) < now)
                                                 );
 
-                                                if (underReviewBets.length === 0) return null;
+                                                if (lockedBets.length === 0) return null;
 
-                                                // Sort: Action required first (Proofing/Disputed), then by time
-                                                underReviewBets.sort((a, b) => {
-                                                    // Prioritize action items
-                                                    const aAction = a.status === "PROOFING" || a.status === "DISPUTED";
-                                                    const bAction = b.status === "PROOFING" || b.status === "DISPUTED";
-                                                    if (aAction && !bAction) return -1;
-                                                    if (!aAction && bAction) return 1;
-
-                                                    // Then date
-                                                    return (a.closesAt?.seconds || 0) - (b.closesAt?.seconds || 0);
-                                                });
+                                                // Sort by date
+                                                lockedBets.sort((a, b) => (a.closesAt?.seconds || 0) - (b.closesAt?.seconds || 0));
 
                                                 return (
                                                     <div className="space-y-3 mb-8">
@@ -1002,14 +995,34 @@ export default function LeaguePage() {
                                                             <div className="bg-amber-400 rounded-full p-1 border-2 border-black">
                                                                 <Timer className="h-4 w-4 text-black" />
                                                             </div>
-                                                            <h3 className="text-xl font-black text-amber-600 font-comic uppercase tracking-tight">Under Review / Locked</h3>
+                                                            <h3 className="text-xl font-black text-amber-600 font-comic uppercase tracking-tight">Locked</h3>
                                                         </div>
-                                                        {!collapsedSections['locked'] && underReviewBets.map(bet => renderBetItem(bet, myMemberProfile?.points || 0, league.mode))}
+                                                        {!collapsedSections['locked'] && lockedBets.map(bet => renderBetItem(bet, myMemberProfile?.points || 0, league.mode))}
                                                     </div>
                                                 );
                                             })()}
 
-                                            {/* 4. REMOVED PROOFING SECTION (Merged Above) */}
+                                            {/* 4. PROOFING (Result Proposed / Under Review) */}
+                                            {(() => {
+                                                const proofingBets = bets.filter(b => b.status === "PROOFING" || b.status === "DISPUTED");
+
+                                                if (proofingBets.length === 0) return null;
+
+                                                return (
+                                                    <div className="space-y-3 mb-8">
+                                                        <div className="flex items-center gap-2 mb-4 cursor-pointer select-none" onClick={() => toggleSection('proofing')}>
+                                                            <div className={`transition-transform duration-200 ${collapsedSections['proofing'] ? '-rotate-90' : ''}`}>
+                                                                <ChevronDown className="h-6 w-6 text-black" />
+                                                            </div>
+                                                            <div className="bg-blue-500 rounded-full p-1 border-2 border-black">
+                                                                <Gavel className="h-4 w-4 text-white" />
+                                                            </div>
+                                                            <h3 className="text-xl font-black text-blue-600 font-comic uppercase tracking-tight">Proofing Phase</h3>
+                                                        </div>
+                                                        {!collapsedSections['proofing'] && proofingBets.map(bet => renderBetItem(bet, myMemberProfile?.points || 0, league.mode))}
+                                                    </div>
+                                                );
+                                            })()}
 
                                             {/* 5. HISTORY (Resolved & Invalid) */}
                                             {(() => {
@@ -1018,15 +1031,22 @@ export default function LeaguePage() {
                                                 history.sort((a, b) => (b.resolvedAt?.seconds || 0) - (a.resolvedAt?.seconds || 0));
 
                                                 return (
-                                                    <div className="space-y-3 pt-6 border-t-4 border-black border-dashed">
-                                                        <div className="flex items-center gap-2 mb-6 cursor-pointer select-none" onClick={() => toggleSection('history')}>
-                                                            <div className={`transition-transform duration-200 ${collapsedSections['history'] ? '-rotate-90' : ''}`}>
-                                                                <ChevronDown className="h-6 w-6 text-gray-400" />
-                                                            </div>
-                                                            <Trophy className="h-6 w-6 text-gray-400" />
-                                                            <h3 className="text-2xl font-black text-gray-400 font-comic uppercase">The Archive</h3>
-                                                        </div>
-                                                        {!collapsedSections['history'] && history.map(bet => renderBetItem(bet, myMemberProfile?.points || 0, league.mode))}
+                                                    <div className="space-y-6 pt-6 border-t-4 border-black border-dashed">
+                                                        <h3 className="text-xl font-black text-gray-400 font-comic uppercase mb-4">The Archive</h3>
+                                                        {history.map(bet => {
+                                                            const wager = myActiveWagers[bet.id];
+                                                            return (
+                                                                <BetCard
+                                                                    key={bet.id}
+                                                                    bet={bet}
+                                                                    userPoints={myMemberProfile?.points || 0}
+                                                                    mode={league.mode}
+                                                                    userWager={wager}
+                                                                    onWagerSuccess={fetchLeagueData}
+                                                                    isOwnerOverride={isOwner || user?.uid === bet.creatorId}
+                                                                />
+                                                            );
+                                                        })}
                                                     </div>
                                                 );
                                             })()}

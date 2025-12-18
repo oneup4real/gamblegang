@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Gamepad2, Ticket, Clock, History, ExternalLink, ChevronDown, ChevronUp } from "lucide-react";
+import { Gamepad2, Ticket, Clock, History, ExternalLink } from "lucide-react";
 import { Link } from "@/i18n/navigation";
 import { Button } from "@/components/ui/button";
 import { BetCard } from "@/components/bet-card";
@@ -42,7 +42,6 @@ export function BetTabs({
     initialTab
 }: BetTabsProps) {
     const [activeTab, setActiveTab] = useState<TabType>(initialTab || "active");
-    const [expandedBets, setExpandedBets] = useState<Set<string>>(new Set());
 
     // Sync with external initialTab changes
     useEffect(() => {
@@ -59,16 +58,6 @@ export function BetTabs({
     ];
 
     const currentBets = tabs.find(t => t.key === activeTab)?.bets || [];
-
-    const toggleBetExpand = (betId: string) => {
-        const newExpanded = new Set(expandedBets);
-        if (newExpanded.has(betId)) {
-            newExpanded.delete(betId);
-        } else {
-            newExpanded.add(betId);
-        }
-        setExpandedBets(newExpanded);
-    };
 
     return (
         <div className="bg-white border-2 border-black rounded-xl shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] overflow-hidden">
@@ -116,7 +105,7 @@ export function BetTabs({
             )}
 
             {/* Tab Content */}
-            <div className="max-h-[500px] overflow-y-auto">
+            <div className="max-h-[800px] overflow-y-auto bg-gray-50 p-4">
                 <AnimatePresence mode="wait">
                     <motion.div
                         key={activeTab}
@@ -136,110 +125,63 @@ export function BetTabs({
                                 <p className="font-bold">No {tabConfig[activeTab].label.toLowerCase()} bets</p>
                             </div>
                         ) : (
-                            <div className="divide-y divide-gray-100">
-                                {currentBets.map((bet) => {
-                                    const isBetExpanded = expandedBets.has(bet.id);
+                            <div className="space-y-6">
+                                {currentBets.map((bet) => (
+                                    <div key={bet.id} className="relative">
+                                        {/* Bet Card */}
+                                        <BetCard
+                                            bet={bet as Bet}
+                                            userPoints={0} // Dashboard context
+                                            userWager={bet.wager ? { ...bet.wager, id: "dashboard", userId: userId, userName: "Me", placedAt: new Date() } as any : undefined}
+                                            mode={bet.leagueMode === "ZERO_SUM" ? "ZERO_SUM" : "STANDARD"}
+                                            onWagerSuccess={onRefresh}
+                                            isOwnerOverride={bet.creatorId === userId}
+                                        />
 
-                                    return (
-                                        <div key={bet.id} className="hover:bg-gray-50 transition-colors">
-                                            <button
-                                                onClick={() => toggleBetExpand(bet.id)}
-                                                className="w-full p-4 text-left"
-                                            >
-                                                <div className="flex items-center justify-between gap-4">
-                                                    <div className="flex-1 min-w-0">
-                                                        <div className="flex items-center gap-2 mb-1">
-                                                            <span className={`text-xs px-2 py-0.5 rounded font-bold border ${bet.status === "OPEN" ? "bg-green-100 text-green-700 border-green-300" :
-                                                                bet.status === "RESOLVED" ? "bg-blue-100 text-blue-700 border-blue-300" :
-                                                                    bet.status === "PROOFING" ? "bg-yellow-100 text-yellow-700 border-yellow-300" :
-                                                                        "bg-gray-100 text-gray-600 border-gray-300"
-                                                                }`}>
-                                                                {bet.status}
-                                                            </span>
-                                                            <span className="text-xs text-gray-400 font-medium">
-                                                                {bet.leagueName}
-                                                            </span>
-                                                        </div>
-                                                        <p className="font-black text-base truncate">{bet.question}</p>
-                                                        {bet.closesAt && (
-                                                            <p className="text-xs text-gray-500 mt-1">
-                                                                {bet.status === "OPEN" ? "Closes" : "Closed"}: {format(bet.closesAt.toDate(), "MMM dd, HH:mm")}
-                                                            </p>
-                                                        )}
+                                        {/* Actions Below Card */}
+                                        <div className="mt-[-1rem] bg-white border-2 border-t-0 border-black rounded-b-xl overflow-hidden shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] relative z-10 mx-1">
+                                            <div className="flex divide-x-2 divide-black">
+                                                <Link href={`/leagues/${bet.leagueId}?bet=${bet.id}`} className="flex-1">
+                                                    <button className="w-full py-2 hover:bg-gray-100 font-bold text-xs uppercase flex items-center justify-center gap-2 transition-colors">
+                                                        <span>View in League</span>
+                                                        <ExternalLink className="h-3 w-3" />
+                                                    </button>
+                                                </Link>
+
+                                                {(activeTab === "history") && onDismiss && (
+                                                    <div className="flex-1">
+                                                        <button
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                onDismiss(bet.id);
+                                                            }}
+                                                            className="w-full py-2 hover:bg-red-50 text-red-600 font-bold text-xs uppercase flex items-center justify-center gap-2 transition-colors"
+                                                        >
+                                                            Dismiss
+                                                        </button>
                                                     </div>
-
-                                                    {bet.wager && (
-                                                        <div className="text-right shrink-0">
-                                                            <p className="text-xs text-gray-500">Wagered</p>
-                                                            <p className="font-black text-lg">{bet.wager.amount} pts</p>
-                                                            {(bet.status === "RESOLVED" || bet.status === "INVALID") && bet.wager.status !== "PENDING" && (
-                                                                <div className="mt-1">
-                                                                    <p className="text-xs text-gray-500">Net Result</p>
-                                                                    <p className={`font-black text-lg ${bet.wager.status === "WON" ? "text-green-600" :
-                                                                        bet.wager.status === "LOST" ? "text-red-600" :
-                                                                            "text-yellow-600"
-                                                                        }`}>
-                                                                        {bet.wager.status === "WON" ? `+${(bet.wager.payout || 0) - bet.wager.amount}` :
-                                                                            bet.wager.status === "LOST" ? `-${bet.wager.amount}` :
-                                                                                "0"} pts
-                                                                    </p>
-                                                                </div>
-                                                            )}
-                                                        </div>
-                                                    )}
-
-                                                    <div className="text-gray-400">
-                                                        {isBetExpanded ? <ChevronUp /> : <ChevronDown />}
-                                                    </div>
-                                                </div>
-                                            </button>
-
-                                            {/* Expanded Content with Full Bet Action Card */}
-                                            <AnimatePresence>
-                                                {isBetExpanded && (
-                                                    <motion.div
-                                                        initial={{ height: 0, opacity: 0 }}
-                                                        animate={{ height: "auto", opacity: 1 }}
-                                                        exit={{ height: 0, opacity: 0 }}
-                                                        className="border-t border-gray-200 bg-gray-50 overflow-hidden"
-                                                    >
-                                                        <div className="p-4">
-                                                            <BetCard
-                                                                bet={bet as Bet}
-                                                                userPoints={0} // Dashboard does not have context of league points, minimal impact for non-betting actions
-                                                                userWager={bet.wager ? { ...bet.wager, id: "dashboard", userId: userId, userName: "Me", placedAt: new Date() } as any : undefined}
-                                                                mode={bet.leagueMode === "ZERO_SUM" ? "ZERO_SUM" : "STANDARD"}
-                                                                onWagerSuccess={onRefresh} // Refresh dashboard on any successful action (vote, dispute, resolve)
-                                                                isOwnerOverride={bet.creatorId === userId} // Enable owner actions if user is bet creator
-                                                            />
-
-                                                            {/* Extra Actions */}
-                                                            <div className="flex gap-2 mt-4 pt-4 border-t border-gray-200">
-                                                                <Link href={`/leagues/${bet.leagueId}?bet=${bet.id}`} className="flex-1">
-                                                                    <Button variant="outline" className="w-full">
-                                                                        View in League <ExternalLink className="ml-2 h-4 w-4" />
-                                                                    </Button>
-                                                                </Link>
-                                                                {(activeTab === "history") && onDismiss && (
-                                                                    <Button
-                                                                        variant="outline"
-                                                                        onClick={(e) => {
-                                                                            e.stopPropagation();
-                                                                            onDismiss(bet.id);
-                                                                        }}
-                                                                        className="border-red-300 text-red-500 hover:bg-red-50"
-                                                                    >
-                                                                        Clear
-                                                                    </Button>
-                                                                )}
-                                                            </div>
-                                                        </div>
-                                                    </motion.div>
                                                 )}
-                                            </AnimatePresence>
+                                            </div>
                                         </div>
-                                    );
-                                })}
+
+                                        {/* League Badge floating or integrated? 
+                                            The SidePanelTicket handles status. 
+                                            We might want to show League Name above the card or integrated.
+                                            Currently SidePanelTicket doesn't show league name. 
+                                            Let's add a small header above the card for League Name + Date if needed.
+                                            Or keep it simple as requested "Just the tickets".
+                                            The BetCard refactor (checked earlier) shows metadata like Date and Status.
+                                            It does NOT show League Name explicitly in a dedicated prominent spot, mostly "Closes: ...". 
+                                            
+                                            Let's add a small "League: {leagueName}" tag above the card to keep context.
+                                        */}
+                                        <div className="absolute top-[-10px] left-4 z-20">
+                                            <span className="bg-black text-white text-[10px] font-black uppercase px-2 py-1 rounded shadow-sm">
+                                                {bet.leagueName}
+                                            </span>
+                                        </div>
+                                    </div>
+                                ))}
                             </div>
                         )}
                     </motion.div>

@@ -134,7 +134,7 @@ export function BetStatusStepper({ bet, isOwner, onAction, hideStatusCard, hideT
                         </div>
 
                         {/* Compact Status Card (for Header View) */}
-                        {hideStatusCard && (bet.status !== "OPEN" || isUnderReview) && (
+                        {!hideStatusCard && (bet.status !== "OPEN" || isUnderReview) && (
                             <motion.div
                                 initial={{ opacity: 0, y: -5 }} animate={{ opacity: 1, y: 0 }}
                                 className={`mt-2 rounded-lg border p-2 flex items-center gap-4 shadow-sm max-w-full overflow-hidden
