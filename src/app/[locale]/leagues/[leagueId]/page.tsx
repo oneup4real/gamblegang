@@ -331,36 +331,89 @@ export default function LeaguePage() {
         let activeWagered = 0;
         let potentialWin = 0;
 
-        Object.entries(myActiveWagers).forEach(([betId, wager]) => {
-            const bet = bets.find(b => b.id === betId);
-            // Only consider NON-RESOLVED bets for active stats
-            // IMPORTANT: RESOLVED bets should NOT count toward active wagers
-            if (bet && !["RESOLVED", "INVALID"].includes(bet.status)) {
+        // Extended arcade stats
+        let totalBets = 0;
+        let wins = 0;
+        let losses = 0;
+        let biggestWin = 0;
+        let currentStreak = 0;
+        let bestStreak = 0;
+        let activeBets = 0;
+        let totalWagered = 0;
+        let totalWon = 0;
+
+        // Sort wagers by bet closesAt for streak calculation
+        const allWagers = Object.entries(myActiveWagers).map(([betId, wager]) => ({
+            betId,
+            wager,
+            bet: bets.find(b => b.id === betId)
+        })).filter(w => w.bet).sort((a, b) => (a.bet?.closesAt?.seconds || 0) - (b.bet?.closesAt?.seconds || 0));
+
+        allWagers.forEach(({ betId, wager, bet }) => {
+            if (!bet) return;
+
+            totalWagered += wager.amount;
+
+            // Active bets (not yet resolved)
+            if (!["RESOLVED", "INVALID"].includes(bet.status)) {
                 activeWagered += wager.amount;
+                activeBets++;
 
                 // Calculate potential win for CHOICE bets where we know the pool distribution
                 if (bet.type === "CHOICE" && bet.options) {
                     const optIndex = Number(wager.selection);
                     const option = bet.options[optIndex];
                     if (option && option.totalWagered > 0) {
-                        //Simple Tote calculation: (My Stake / Total Stake on Option) * Total Pool
-                        // Subtract stake to get just the "Win" amount (profit)
                         const estimatedReturn = (wager.amount / option.totalWagered) * bet.totalPool;
                         potentialWin += (estimatedReturn - wager.amount);
                     }
                 } else {
-                    // For other bet types, without complex pool data, strictly user might want an estimate
-                    // We'll conservatively assume 1:1 return (doubling money) for now so it's not 0
-                    // Or we can leave it as 0 if we want to be strict. 
-                    // Let's assume a standard 2.0x odds for estimation if unknown
                     potentialWin += wager.amount;
+                }
+            } else if (bet.status === "RESOLVED") {
+                // Resolved bets - count for stats
+                totalBets++;
+
+                if (wager.status === "WON") {
+                    wins++;
+                    const profit = (wager.payout || 0) - wager.amount;
+                    totalWon += profit;
+                    if (profit > biggestWin) biggestWin = profit;
+
+                    // Streak tracking
+                    if (currentStreak >= 0) {
+                        currentStreak++;
+                        if (currentStreak > bestStreak) bestStreak = currentStreak;
+                    } else {
+                        currentStreak = 1;
+                    }
+                } else if (wager.status === "LOST") {
+                    losses++;
+                    // Streak tracking
+                    if (currentStreak <= 0) {
+                        currentStreak--;
+                    } else {
+                        currentStreak = -1;
+                    }
                 }
             }
         });
 
+        const winRate = totalBets > 0 ? Math.round((wins / totalBets) * 100) : 0;
+
         return {
             activeWagered: Math.floor(activeWagered),
-            potentialWin: Math.floor(potentialWin)
+            potentialWin: Math.floor(potentialWin),
+            // Extended stats
+            totalBets,
+            wins,
+            losses,
+            winRate,
+            biggestWin: Math.floor(biggestWin),
+            currentStreak,
+            bestStreak,
+            activeBets,
+            totalWon: Math.floor(totalWon)
         };
     }, [myActiveWagers, bets]);
 
@@ -463,21 +516,22 @@ export default function LeaguePage() {
                     returnColor = "text-yellow-600 font-black";
                 }
             } else if (mode === "ZERO_SUM" && bet.type === "CHOICE" && bet.options) {
-                // ZERO SUM: Parimutuel Odds
+                // ZERO SUM: Parimutuel Odds - Show potential total return (like bet card)
                 const optIdx = Number(wager.selection);
                 const opt = bet.options[optIdx];
                 if (opt && opt.totalWagered > 0) {
                     const odds = bet.totalPool / opt.totalWagered;
                     displayedOdds = odds.toFixed(2) + "x";
                     const totalReturn = Math.floor(wager.amount * odds);
-                    const profit = totalReturn - wager.amount;
-                    displayedReturn = `+${profit.toLocaleString()} ${tBets('pts')}`;
+                    // Show potential return (not profit) to match bet card's "Potential" display
+                    displayedReturn = `+${totalReturn.toLocaleString()}`;
                     returnColor = "text-green-600";
                 } else {
-                    // No bets on this option yet, show potential loss
-                    displayedOdds = "---x";
-                    displayedReturn = `-${wager.amount.toLocaleString()} ${tBets('pts')}`;
-                    returnColor = "text-red-500";
+                    // No bets on this option yet - show potential (assume 2x odds)
+                    displayedOdds = "2.00x";
+                    const potentialReturn = wager.amount * 2;
+                    displayedReturn = `+${potentialReturn.toLocaleString()}`;
+                    returnColor = "text-green-600";
                 }
 
             } else {
@@ -526,70 +580,66 @@ export default function LeaguePage() {
                         )}
                     </div>
 
-                    {/* Bottom Row: Question | Date/Timer | Odds/Return | Icons */}
-                    <div className="flex items-center justify-between gap-4">
-                        {/* Question Text */}
-                        <div className="flex-1 min-w-0">
-                            <p className="font-black text-black text-lg truncate">{bet.question}</p>
+                    {/* Question Title - Full Width Row */}
+                    <p className="font-black text-black text-sm sm:text-lg mb-2">{bet.question}</p>
 
-                            {/* Event Date & Betting Timer */}
-                            {(bet.eventDate || bet.closesAt) && (
-                                <div className="flex items-center gap-3 mt-1">
-                                    {/* Event Date */}
-                                    {bet.eventDate && (
-                                        <div className="flex items-center gap-1">
-                                            <span className="text-[10px] font-bold text-gray-400">📅</span>
-                                            <span className="text-[10px] font-bold text-gray-600">
-                                                {new Date(bet.eventDate.toDate()).toLocaleDateString('en-US', {
-                                                    month: 'short',
-                                                    day: 'numeric',
-                                                    hour: '2-digit',
-                                                    minute: '2-digit'
-                                                })}
-                                            </span>
-                                        </div>
-                                    )}
-
-                                    {/* Betting Timer */}
-                                    {bet.closesAt && bet.status === "OPEN" && (() => {
-                                        const now = new Date();
-                                        const closesAt = bet.closesAt.toDate();
-                                        const hoursLeft = Math.max(0, Math.floor((closesAt.getTime() - now.getTime()) / (1000 * 60 * 60)));
-                                        const minutesLeft = Math.max(0, Math.floor(((closesAt.getTime() - now.getTime()) % (1000 * 60 * 60)) / (1000 * 60)));
-
-                                        if (hoursLeft === 0 && minutesLeft === 0) return null;
-
-                                        return (
-                                            <div className="flex items-center gap-1">
-                                                <span className="text-[10px] font-bold text-gray-400">⏰</span>
-                                                <span className={`text-[10px] font-bold ${hoursLeft < 1 ? 'text-red-500' : 'text-green-600'}`}>
-                                                    {hoursLeft}h {minutesLeft}m left to bet
-                                                </span>
-                                            </div>
-                                        );
-                                    })()}
+                    {/* Bottom Row: Date/Timer | Odds/Return | Icons */}
+                    <div className="flex items-center justify-between gap-2">
+                        {/* Event Date & Betting Timer */}
+                        <div className="flex items-center gap-3 flex-1 min-w-0">
+                            {/* Event Date */}
+                            {bet.eventDate && (
+                                <div className="flex items-center gap-1">
+                                    <span className="text-[10px] font-bold text-gray-400">📅</span>
+                                    <span className="text-[10px] font-bold text-gray-600">
+                                        {new Date(bet.eventDate.toDate()).toLocaleDateString('en-US', {
+                                            month: 'short',
+                                            day: 'numeric',
+                                            hour: '2-digit',
+                                            minute: '2-digit'
+                                        })}
+                                    </span>
                                 </div>
                             )}
+
+                            {/* Betting Timer */}
+                            {bet.closesAt && bet.status === "OPEN" && (() => {
+                                const now = new Date();
+                                const closesAt = bet.closesAt.toDate();
+                                const hoursLeft = Math.max(0, Math.floor((closesAt.getTime() - now.getTime()) / (1000 * 60 * 60)));
+                                const minutesLeft = Math.max(0, Math.floor(((closesAt.getTime() - now.getTime()) % (1000 * 60 * 60)) / (1000 * 60)));
+
+                                if (hoursLeft === 0 && minutesLeft === 0) return null;
+
+                                return (
+                                    <div className="flex items-center gap-1">
+                                        <span className="text-[10px] font-bold text-gray-400">⏰</span>
+                                        <span className={`text-[10px] font-bold ${hoursLeft < 1 ? 'text-red-500' : 'text-green-600'}`}>
+                                            {hoursLeft}h {minutesLeft}m left to bet
+                                        </span>
+                                    </div>
+                                );
+                            })()}
                         </div>
 
                         {/* Odds & Return */}
-                        <div className="flex gap-6 text-sm shrink-0">
+                        <div className="flex gap-4 text-sm shrink-0">
                             {mode === "ZERO_SUM" && (
                                 <div className="text-center">
-                                    <p className="text-gray-500 text-xs font-bold">{tBets('odds')}</p>
-                                    <p className="font-black text-black text-lg">{displayedOdds}</p>
+                                    <p className="text-gray-500 text-[10px] font-bold">{tBets('odds')}</p>
+                                    <p className="font-black text-black text-sm">{displayedOdds}</p>
                                 </div>
                             )}
                             <div className="text-center">
-                                <p className="text-gray-500 text-xs font-bold">Net Result</p>
-                                <p className={`font-black text-lg ${returnColor}`}>{displayedReturn}</p>
+                                <p className="text-gray-500 text-[10px] font-bold">{bet.status === "RESOLVED" ? "Net Result" : "Potential"}</p>
+                                <p className={`font-black text-sm ${returnColor}`}>{displayedReturn}</p>
                             </div>
                         </div>
 
                         {/* Action Icons */}
-                        <div className="text-black text-xl font-bold flex items-center gap-2 shrink-0">
+                        <div className="text-black text-xl font-bold flex items-center gap-1 shrink-0">
                             {isOwner && (
-                                <div className="flex items-center gap-1">
+                                <div className="flex items-center">
                                     {(bet.wagerCount === 0 || !bet.wagerCount) && (
                                         <div
                                             role="button"
@@ -598,7 +648,7 @@ export default function LeaguePage() {
                                                 setBetToEdit(bet);
                                                 setIsBetModalOpen(true);
                                             }}
-                                            className="p-1.5 hover:bg-blue-100 rounded-lg text-gray-300 hover:text-blue-500 transition-colors"
+                                            className="p-1 hover:bg-blue-100 rounded-lg text-gray-300 hover:text-blue-500 transition-colors"
                                             title="Edit Bet (No Wagers Yet)"
                                         >
                                             <Pencil className="h-4 w-4" />
@@ -612,7 +662,7 @@ export default function LeaguePage() {
                                                 handleDeleteBet(bet.id);
                                             }
                                         }}
-                                        className="p-1.5 hover:bg-red-100 rounded-lg text-gray-300 hover:text-red-500 transition-colors"
+                                        className="p-1 hover:bg-red-100 rounded-lg text-gray-300 hover:text-red-500 transition-colors"
                                         title="Delete Bet (Refunds Players)"
                                     >
                                         <Trash2 className="h-4 w-4" />
@@ -652,7 +702,7 @@ export default function LeaguePage() {
             {/* Header with Admin Controls */}
             {/* Header Card - Separate from content */}
             <header className="pt-6 pb-4">
-                <div className="max-w-5xl mx-auto px-6">
+                <div className="max-w-5xl mx-auto px-3 sm:px-6">
                     <div className="bg-white rounded-xl border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
                         {/* Title and controls row */}
                         <div className="p-4 md:px-6 md:py-4 flex flex-col md:flex-row items-center md:justify-between gap-4">
@@ -712,7 +762,7 @@ export default function LeaguePage() {
                 </div>
             </header>
             {/* Tabs + Main Content */}
-            <main className="max-w-5xl mx-auto px-6 pb-8 space-y-0">
+            <main className="max-w-5xl mx-auto px-3 sm:px-6 pb-8 space-y-0">
                 {/* TABS: BETS vs ANALYTICS vs ACTIVITY */}
                 <div className="flex items-end gap-1 md:gap-2 -mb-[2px] relative z-10 overflow-x-auto scrollbar-hide">
                     <button
@@ -882,36 +932,87 @@ export default function LeaguePage() {
                                 </section>
                             )}
 
-                            {/* Stats Card (Arcade Mode) */}
+                            {/* Stats Card (Arcade Mode) - Compact & Clean Design */}
                             {league.mode === "STANDARD" && myMemberProfile && (
                                 <section>
-                                    <div className={`bg-gradient-to-r ${LEAGUE_COLOR_SCHEMES[league.colorScheme || 'purple'].from} ${LEAGUE_COLOR_SCHEMES[league.colorScheme || 'purple'].to} rounded-2xl border-4 border-black p-6 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] mb-6`}>
-                                        <div className="flex flex-col md:flex-row items-center justify-between gap-6">
-                                            {/* Points */}
-                                            <div>
-                                                <p className="text-sm font-black uppercase text-white/80 tracking-widest">My Points</p>
-                                                <p className="text-5xl font-black text-white drop-shadow-[4px_4px_0_rgba(0,0,0,0.3)] font-comic">
-                                                    {myMemberProfile.points.toLocaleString()}
-                                                </p>
-                                                <p className="text-xs text-white/70 font-bold mt-1">
-                                                    Total Earned
-                                                </p>
+                                    <div className={`bg-gradient-to-r ${LEAGUE_COLOR_SCHEMES[league.colorScheme || 'purple'].from} ${LEAGUE_COLOR_SCHEMES[league.colorScheme || 'purple'].to} rounded-2xl border-4 border-black p-5 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] mb-6`}>
+                                        {/* Main Row: Points + Stats + Power-Ups */}
+                                        <div className="flex flex-col md:flex-row items-center justify-between gap-4">
+
+                                            {/* Left: Big Points Display */}
+                                            <div className="flex items-center gap-4">
+                                                <div className="text-center md:text-left">
+                                                    <p className="text-6xl font-black text-white drop-shadow-[3px_3px_0_rgba(0,0,0,0.4)] font-comic leading-none">
+                                                        {myMemberProfile.points.toLocaleString()}
+                                                    </p>
+                                                    <p className="text-xs font-black text-white/80 uppercase tracking-wider mt-1">Points</p>
+                                                </div>
                                             </div>
 
-                                            {/* Power-Ups Inventory */}
+                                            {/* Center: Quick Stats Row */}
+                                            <div className="flex items-center gap-3 flex-wrap justify-center">
+                                                {/* Win Rate */}
+                                                <div className="flex items-center gap-1.5 bg-white rounded-full px-3 py-1.5 border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
+                                                    <span className="text-lg">🎯</span>
+                                                    <span className="font-black text-black">{stats.winRate}%</span>
+                                                </div>
+
+                                                {/* W/L Record */}
+                                                <div className="flex items-center gap-1 bg-white rounded-full px-3 py-1.5 border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
+                                                    <span className="font-black text-green-600">{stats.wins}W</span>
+                                                    <span className="text-gray-400">/</span>
+                                                    <span className="font-black text-red-500">{stats.losses}L</span>
+                                                </div>
+
+                                                {/* Streak */}
+                                                {stats.currentStreak !== 0 && (
+                                                    <div className={`flex items-center gap-1 rounded-full px-3 py-1.5 border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] ${stats.currentStreak > 0 ? 'bg-orange-400' : 'bg-blue-400'}`}>
+                                                        <span className="text-lg">{stats.currentStreak > 0 ? '🔥' : '❄️'}</span>
+                                                        <span className="font-black text-white">{Math.abs(stats.currentStreak)}</span>
+                                                    </div>
+                                                )}
+
+                                                {/* Active Bets */}
+                                                {stats.activeBets > 0 && (
+                                                    <div className="flex items-center gap-1 bg-purple-500 rounded-full px-3 py-1.5 border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
+                                                        <span className="text-lg">🎲</span>
+                                                        <span className="font-black text-white">{stats.activeBets}</span>
+                                                    </div>
+                                                )}
+                                            </div>
+
+                                            {/* Right: Power-Ups */}
                                             {myMemberProfile.powerUps && (
-                                                <div className="flex gap-3 bg-black/20 p-4 rounded-xl border-2 border-white/10 backdrop-blur-sm">
-                                                    <div className="text-center px-4">
-                                                        <p className="text-xs font-bold text-white/70 uppercase mb-1">x2 Boost</p>
-                                                        <p className="text-2xl font-black text-yellow-300">{myMemberProfile.powerUps.x2 || 0}</p>
+                                                <div className="flex items-center gap-2">
+                                                    {/* x2 - Muscle */}
+                                                    <div className="relative">
+                                                        <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-lime-400 to-green-500 border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,0.7)] flex flex-col items-center justify-center">
+                                                            <span className="text-lg leading-none">💪</span>
+                                                            <span className="text-[10px] font-black text-white leading-none drop-shadow-[1px_1px_0_rgba(0,0,0,0.5)]">×2</span>
+                                                        </div>
+                                                        <span className="absolute -top-1 -right-1 min-w-[16px] h-[16px] bg-white text-black text-[9px] font-black rounded-full flex items-center justify-center border-2 border-black">
+                                                            {myMemberProfile.powerUps.x2 || 0}
+                                                        </span>
                                                     </div>
-                                                    <div className="text-center px-4 border-x border-white/20">
-                                                        <p className="text-xs font-bold text-white/70 uppercase mb-1">x3 Boost</p>
-                                                        <p className="text-2xl font-black text-orange-300">{myMemberProfile.powerUps.x3 || 0}</p>
+                                                    {/* x3 - Flame */}
+                                                    <div className="relative">
+                                                        <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-orange-400 to-red-500 border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,0.7)] flex flex-col items-center justify-center">
+                                                            <span className="text-lg leading-none">🔥</span>
+                                                            <span className="text-[10px] font-black text-white leading-none drop-shadow-[1px_1px_0_rgba(0,0,0,0.5)]">×3</span>
+                                                        </div>
+                                                        <span className="absolute -top-1 -right-1 min-w-[16px] h-[16px] bg-white text-black text-[9px] font-black rounded-full flex items-center justify-center border-2 border-black">
+                                                            {myMemberProfile.powerUps.x3 || 0}
+                                                        </span>
                                                     </div>
-                                                    <div className="text-center px-4">
-                                                        <p className="text-xs font-bold text-white/70 uppercase mb-1">x4 Boost</p>
-                                                        <p className="text-2xl font-black text-red-300">{myMemberProfile.powerUps.x4 || 0}</p>
+                                                    {/* x4 - Explosion */}
+                                                    <div className="relative">
+                                                        <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-red-500 to-pink-600 border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,0.7)] flex flex-col items-center justify-center">
+                                                            <span className="text-lg leading-none">💥</span>
+                                                            <span className="text-[10px] font-black text-white leading-none drop-shadow-[1px_1px_0_rgba(0,0,0,0.5)]">×4</span>
+                                                        </div>
+                                                        <span className="absolute -top-1 -right-1 min-w-[16px] h-[16px] bg-white text-black text-[9px] font-black rounded-full flex items-center justify-center border-2 border-black">
+                                                            {myMemberProfile.powerUps.x4 || 0}
+                                                        </span>
                                                     </div>
                                                 </div>
                                             )}
@@ -946,6 +1047,7 @@ export default function LeaguePage() {
                                         {members.map((member, index) => (
                                             <div key={member.uid} className="flex items-center justify-between p-4 hover:bg-gray-50 transition-colors">
                                                 <div className="flex items-center gap-4">
+                                                    {/* Ranking */}
                                                     <div className={`flex h-8 w-8 items-center justify-center rounded-full font-bold text-sm border-2 border-black ${index === 0 ? "bg-yellow-400 text-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]" :
                                                         index === 1 ? "bg-zinc-300 text-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]" :
                                                             index === 2 ? "bg-orange-400 text-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]" :
@@ -963,69 +1065,49 @@ export default function LeaguePage() {
                                                             </div>
                                                         )}
                                                         <div>
-                                                            <div className="flex items-center gap-2">
-                                                                <span className="font-black text-black">{member.displayName}</span>
-                                                                {member.role === 'OWNER' && (
-                                                                    <span className="inline-flex items-center gap-1 rounded bg-yellow-500/10 px-1.5 py-0.5 text-[10px] font-bold text-yellow-500 border border-yellow-500/20">
+                                                            {/* Name */}
+                                                            <span className="font-black text-black">{member.displayName}</span>
+                                                            {/* Role Badge - Right below username */}
+                                                            {member.role === 'OWNER' && (
+                                                                <div className="mt-0.5">
+                                                                    <span className="inline-flex items-center gap-1 rounded bg-yellow-100 px-1.5 py-0.5 text-[10px] font-bold text-yellow-600 border border-yellow-300">
                                                                         <Crown className="h-3 w-3" /> OWNER
                                                                     </span>
-                                                                )}
-                                                                {member.role === 'ADMIN' && (
-                                                                    <span className="inline-flex items-center gap-1 rounded bg-blue-500/10 px-1.5 py-0.5 text-[10px] font-bold text-blue-400 border border-blue-500/20">
-                                                                        <div className="h-3 w-3 rounded-sm bg-blue-500" /> ADMIN
+                                                                </div>
+                                                            )}
+                                                            {member.role === 'ADMIN' && (
+                                                                <div className="mt-0.5">
+                                                                    <span className="inline-flex items-center gap-1 rounded bg-blue-100 px-1.5 py-0.5 text-[10px] font-bold text-blue-500 border border-blue-300">
+                                                                        ADM
                                                                     </span>
-                                                                )}
-                                                                {member.role === 'MEMBER' && (
-                                                                    <span className="inline-flex items-center gap-1 rounded bg-white/5 px-1.5 py-0.5 text-[10px] font-bold text-zinc-400 border border-white/10">
+                                                                </div>
+                                                            )}
+                                                            {member.role === 'MEMBER' && (
+                                                                <div className="mt-0.5">
+                                                                    <span className="inline-flex items-center rounded bg-gray-100 px-1.5 py-0.5 text-[10px] font-bold text-gray-500 border border-gray-300">
                                                                         MEMBER
                                                                     </span>
-                                                                )}
-                                                            </div>
-                                                            <p className="text-xs text-gray-500 font-bold mt-1">
-                                                                {(() => {
-                                                                    const buyIn = member.totalBought || (league.mode === "ZERO_SUM" && league.buyInType === "FIXED" ? league.startCapital : 0);
+                                                                </div>
+                                                            )}
 
-                                                                    // Valid ROI = ((Current Equity - Capital) / Capital) * 100
-                                                                    // Equity = Wallet Points + Active Wagers
-                                                                    if (league.mode === "ZERO_SUM") {
-                                                                        if (buyIn === 0) return "ROI: 0.0%"; // No capital, no ROI
-
+                                                            {/* ROI - Only show in Zero Sum mode */}
+                                                            {league.mode === "ZERO_SUM" && (
+                                                                <p className="text-xs text-gray-500 font-bold mt-1">
+                                                                    {(() => {
+                                                                        const buyIn = member.totalBought || (league.buyInType === "FIXED" ? league.startCapital : 0);
+                                                                        if (buyIn === 0) return "ROI: 0.0%";
                                                                         const activeWagerAmount = allMembersActiveWagers[member.uid] || 0;
                                                                         const currentEquity = member.points + activeWagerAmount;
-
                                                                         const roi = ((currentEquity - buyIn) / buyIn * 100).toFixed(1);
                                                                         return `ROI: ${roi}%`;
-                                                                    }
-                                                                    return `Points Accumulation`;
-                                                                })()}
-                                                            </p>
-                                                            {/* Hidet 'Buy In' for ARCADE (non-ZERO_SUM) mode as requested */}
+                                                                    })()}
+                                                                </p>
+                                                            )}
+                                                            {/* Buy In - Only Zero Sum */}
                                                             {league.mode === "ZERO_SUM" && (
                                                                 <p className="text-xs text-gray-400 font-bold mt-0.5">
                                                                     Buy In: {(member.totalBought || (league.buyInType === "FIXED" ? league.startCapital : 0)).toLocaleString()} chips
                                                                 </p>
-                                                            )}
-                                                            {/* Last 10 Bets Stats */}
-                                                            {member.recentResults && member.recentResults.length > 0 && (
-                                                                <div className="flex items-center gap-3 mt-1 bg-gray-50 px-2 py-0.5 rounded border border-gray-200 w-fit">
-                                                                    <span className="text-[10px] font-black text-emerald-600 flex items-center gap-1">
-                                                                        W: {member.recentResults.filter(r => r === 'W').length}
-                                                                    </span>
-                                                                    <span className="text-[10px] font-black text-red-500 flex items-center gap-1">
-                                                                        L: {member.recentResults.filter(r => r === 'L').length}
-                                                                    </span>
-                                                                </div>
-                                                            )}
-                                                            {league.mode === "STANDARD" && member.powerUps && (
-                                                                <div className="flex items-center gap-1 mt-1">
-                                                                    {(['x2', 'x3', 'x4'] as const).map(type =>
-                                                                        (member.powerUps?.[type] || 0) > 0 ? (
-                                                                            <span key={type} className="text-[10px] font-black bg-indigo-100 text-indigo-700 px-1.5 py-0.5 rounded border border-indigo-200" title={`${type.toUpperCase()} Multipliers remaining`}>
-                                                                                {type.toUpperCase()}: {member.powerUps?.[type]}
-                                                                            </span>
-                                                                        ) : null
-                                                                    )}
-                                                                </div>
                                                             )}
                                                         </div>
                                                     </div>
@@ -1035,6 +1117,18 @@ export default function LeaguePage() {
                                                         {/* Show wallet + active wagers for all members */}
                                                         {(member.points + (allMembersActiveWagers[member.uid] || 0)).toLocaleString()} pts
                                                     </div>
+                                                    {/* W/L Record under points */}
+                                                    {member.recentResults && member.recentResults.length > 0 && (
+                                                        <div className="flex items-center justify-end gap-2 mt-1">
+                                                            <span className="text-[11px] font-black text-green-600">
+                                                                {member.recentResults.filter(r => r === 'W').length}W
+                                                            </span>
+                                                            <span className="text-gray-300">/</span>
+                                                            <span className="text-[11px] font-black text-red-500">
+                                                                {member.recentResults.filter(r => r === 'L').length}L
+                                                            </span>
+                                                        </div>
+                                                    )}
                                                 </div>
                                             </div>
                                         ))}

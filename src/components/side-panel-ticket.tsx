@@ -11,6 +11,7 @@ interface SidePanelTicketProps {
     currency?: string;
     isWinning?: boolean;
     odds?: string;
+    powerUp?: string;
 }
 
 export function SidePanelTicket({
@@ -23,8 +24,9 @@ export function SidePanelTicket({
     currency = "pts",
     isWinning,
     odds,
-    powerUp // New prop
-}: SidePanelTicketProps & { powerUp?: string }) {
+    powerUp
+}: SidePanelTicketProps) {
+
 
     const renderTicketContent = () => {
         // --- 1. OPEN STATE ---
@@ -78,7 +80,9 @@ export function SidePanelTicket({
                     </div>
 
                     <div className="flex-shrink-0 text-right md:text-center w-auto md:w-full opacity-75">
-                        {wagerAmount > 0 && <div className="text-[10px] text-slate-500 font-bold uppercase mb-0.5">Wager: {wagerAmount}</div>}
+                        <div className="flex justify-end md:justify-center items-center gap-1.5 text-[10px] text-slate-500 font-bold uppercase mb-0.5">
+                            {wagerAmount > 0 && <span>Wager: {wagerAmount}</span>}
+                        </div>
                         <div className="text-xl font-black text-slate-700 leading-none">
                             {potentialPayout > 0 ? `~${Math.floor(potentialPayout)}` : '-'}
                         </div>
@@ -120,14 +124,18 @@ export function SidePanelTicket({
                     <div className="flex-shrink-0 text-right md:text-center w-auto md:w-full">
                         {isWinningState ? (
                             <>
-                                <div className="text-[10px] text-green-600 font-bold uppercase mb-0.5">Payout</div>
+                                <div className="flex justify-end md:justify-center items-center gap-1.5 text-[10px] text-green-600 font-bold uppercase mb-0.5">
+                                    <span>Payout</span>
+                                </div>
                                 <div className="text-xl font-black text-green-600">
                                     +{(potentialPayout || 0).toFixed(0)}
                                 </div>
                             </>
                         ) : (
                             <>
-                                {wagerAmount > 0 && <div className="text-[10px] text-blue-500 font-bold uppercase mb-0.5">Wager: {wagerAmount}</div>}
+                                <div className="flex justify-end md:justify-center items-center gap-1.5 text-[10px] text-blue-500 font-bold uppercase mb-0.5">
+                                    {wagerAmount > 0 && <span>Wager: {wagerAmount}</span>}
+                                </div>
                                 <div className="text-[9px] font-bold text-blue-500 bg-blue-100 px-2 py-0.5 rounded-full inline-block mt-1">Proofing</div>
                             </>
                         )}

@@ -64,7 +64,7 @@ export function BetTabs({
     return (
         <div className="bg-white border-2 border-black rounded-xl shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] overflow-hidden">
             {/* Tab Headers */}
-            <div className="flex overflow-x-auto">
+            <div className="flex">
                 {tabs.map(({ key, bets }) => {
                     const config = tabConfig[key];
                     const IconComponent = config.icon;
@@ -74,15 +74,23 @@ export function BetTabs({
                         <button
                             key={key}
                             onClick={() => setActiveTab(key)}
-                            className={`flex-1 min-w-[100px] flex items-center justify-center gap-2 px-4 py-3 font-black uppercase text-sm transition-all ${isActive
+                            className={`flex-1 flex flex-col items-center justify-center gap-0.5 px-1 py-2 sm:py-3 sm:flex-row sm:gap-2 font-black uppercase text-[10px] sm:text-sm transition-all ${isActive
                                 ? "bg-primary text-white"
                                 : "bg-gray-50 text-gray-600 hover:bg-gray-100"
                                 }`}
                         >
-                            <IconComponent className="h-4 w-4" />
+                            {/* Mobile: Badge on top */}
+                            <span className={`sm:hidden px-1.5 py-0.5 rounded-full text-[9px] min-w-[18px] ${isActive ? "bg-white/20 text-white" : "bg-gray-200 text-gray-600"
+                                }`}>
+                                {bets.length}
+                            </span>
+                            {/* Desktop: Icon */}
+                            <IconComponent className="h-4 w-4 hidden sm:block" />
+                            {/* Label */}
                             <span>{config.label}</span>
+                            {/* Desktop: Badge after label */}
                             {bets.length > 0 && (
-                                <span className={`px-2 py-0.5 rounded-full text-xs ${isActive ? "bg-white/20 text-white" : "bg-gray-200"
+                                <span className={`hidden sm:inline px-2 py-0.5 rounded-full text-xs ${isActive ? "bg-white/20 text-white" : "bg-gray-200"
                                     }`}>
                                     {bets.length}
                                 </span>

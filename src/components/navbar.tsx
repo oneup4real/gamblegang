@@ -44,10 +44,10 @@ export function NavBar() {
         <>
             <header className="bg-notebook shadow-md py-4 sticky top-0 z-50">
                 <div className="container mx-auto flex h-14 items-center justify-between px-4">
-                    <Link href="/dashboard" className="flex items-center gap-3 group">
+                    <Link href="/dashboard" className="flex items-center gap-2 sm:gap-3 group">
                         {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img src="/GG_Logo.png?v=2" alt="Logo" className="h-12 w-12 object-contain group-hover:scale-110 transition-transform" />
-                        <h1 className="text-3xl font-black font-comic text-primary uppercase tracking-wider drop-shadow-[2px_2px_0_rgba(0,0,0,1)] group-hover:text-primary/80 transition-colors">
+                        <img src="/GG_Logo.png?v=2" alt="Logo" className="h-10 w-10 sm:h-12 sm:w-12 object-contain group-hover:scale-110 transition-transform" />
+                        <h1 className="text-2xl sm:text-3xl font-black font-comic text-primary uppercase tracking-wider drop-shadow-[2px_2px_0_rgba(0,0,0,1)] group-hover:text-primary/80 transition-colors">
                             GambleGang
                         </h1>
                     </Link>

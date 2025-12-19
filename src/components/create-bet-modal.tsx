@@ -38,6 +38,7 @@ export function CreateBetModal({ leagueId, leagueMode, aiAutoConfirmEnabled, isO
 
     // Choice Logic
     const [options, setOptions] = useState<string[]>(["", ""]);
+    const [choiceStyle, setChoiceStyle] = useState<"VARIOUS" | "MATCH_WINNER" | "MATCH_1X2">("VARIOUS"); // Track choice style
 
     // Range Logic
     const [rangeMin, setRangeMin] = useState<number | undefined>(undefined);
@@ -203,6 +204,11 @@ export function CreateBetModal({ leagueId, leagueMode, aiAutoConfirmEnabled, isO
                 // Zero Sum enforcement
                 const finalType = leagueMode === "ZERO_SUM" ? "CHOICE" : bet.type;
 
+                // Pass matchDetails for both MATCH and CHOICE types when we have team info
+                const matchDetails = bet.matchHome && bet.matchAway
+                    ? { home: bet.matchHome, away: bet.matchAway }
+                    : undefined;
+
                 await createBet(
                     leagueId,
                     user!,
@@ -212,9 +218,11 @@ export function CreateBetModal({ leagueId, leagueMode, aiAutoConfirmEnabled, isO
                     date,
                     finalType === "CHOICE" ? bet.options : undefined,
                     undefined,
-                    finalType === "MATCH" ? { home: bet.matchHome, away: bet.matchAway } : undefined,
+                    matchDetails, // Pass matchDetails for both MATCH and CHOICE
                     aiAutoConfirmEnabled !== false, // Default true
-                    120 // Fixed delay
+                    120, // Fixed delay
+                    // Map bulkOutcomeType to choiceStyle for CHOICE bets
+                    finalType === "CHOICE" ? (bulkOutcomeType === "WINNER" ? "MATCH_WINNER" : "MATCH_1X2") : undefined
                 );
                 successCount++;
                 setProgress(Math.round(((i + 1) / total) * 100));
@@ -313,7 +321,8 @@ export function CreateBetModal({ leagueId, leagueMode, aiAutoConfirmEnabled, isO
                     type === "RANGE" ? { min: Number(rangeMin), max: Number(rangeMax), unit: rangeUnit } : undefined,
                     type === "MATCH" ? { home: matchHome, away: matchAway } : undefined,
                     aiAutoConfirmEnabled !== false, // Default true
-                    120 // Fixed delay
+                    120, // Fixed delay
+                    type === "CHOICE" ? choiceStyle : undefined // Pass choiceStyle for CHOICE bets
                 );
             }
             if (onSuccess) onSuccess();
@@ -474,9 +483,28 @@ export function CreateBetModal({ leagueId, leagueMode, aiAutoConfirmEnabled, isO
                                                         <Plus className="h-4 w-4 mr-1 border-2 border-primary rounded-full p-0.5" /> {t('addOption')}
                                                     </button>
 
-                                                    {/* Pre-fill Helpers */}
-                                                    <button type="button" onClick={() => setOptions(["Yes", "No"])} className="text-xs font-bold text-gray-400 hover:text-black border border-gray-300 rounded px-2 py-0.5">{t('optYesNo')}</button>
-                                                    <button type="button" onClick={() => setOptions(["Home Team", "Draw", "Away Team"])} className="text-xs font-bold text-gray-400 hover:text-black border border-gray-300 rounded px-2 py-0.5">{t('opt1x2')}</button>
+                                                    {/* Pre-fill Helpers - Also set choiceStyle */}
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => { setOptions(["Yes", "No"]); setChoiceStyle("VARIOUS"); }}
+                                                        className={`text-xs font-bold border rounded px-2 py-0.5 transition-all ${choiceStyle === "VARIOUS" ? "text-primary border-primary bg-primary/10" : "text-gray-400 hover:text-black border-gray-300"}`}
+                                                    >
+                                                        {t('optYesNo')}
+                                                    </button>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => { setOptions(["Home Team", "Away Team"]); setChoiceStyle("MATCH_WINNER"); }}
+                                                        className={`text-xs font-bold border rounded px-2 py-0.5 transition-all ${choiceStyle === "MATCH_WINNER" ? "text-primary border-primary bg-primary/10" : "text-gray-400 hover:text-black border-gray-300"}`}
+                                                    >
+                                                        {t('optWinnerDesc')}
+                                                    </button>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => { setOptions(["Home Team", "Draw", "Away Team"]); setChoiceStyle("MATCH_1X2"); }}
+                                                        className={`text-xs font-bold border rounded px-2 py-0.5 transition-all ${choiceStyle === "MATCH_1X2" ? "text-primary border-primary bg-primary/10" : "text-gray-400 hover:text-black border-gray-300"}`}
+                                                    >
+                                                        {t('opt1x2Desc')}
+                                                    </button>
                                                 </div>
                                             </div>
                                         )}

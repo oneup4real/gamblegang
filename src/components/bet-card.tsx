@@ -715,66 +715,162 @@ export function BetCard({ bet, userPoints, userWager, mode, powerUps: powerUpsPr
                     </div>
 
                     {/* QUESTION TITLE */}
-                    <h3 className={`text-lg font-black leading-tight mb-4 ${bet.status === "RESOLVED" && ticketWagerStatus === "LOST" ? "text-slate-900 line-through decoration-red-400/30" : "text-slate-900"}`}>
+                    <h3 className={`text-sm md:text-lg font-black leading-tight mb-4 ${bet.status === "RESOLVED" && ticketWagerStatus === "LOST" ? "text-slate-900 line-through decoration-red-400/30" : "text-slate-900"}`}>
                         {bet.question}
                     </h3>
 
                     {/* --- STATE SPECIFIC CONTENT --- */}
 
-                    {/* MATCHUP LOGO HEADER */}
-                    {/* MATCHUP LOGO HEADER */}
+                    {/* MATCHUP LOGO HEADER - Only for MATCH_WINNER or MATCH_1X2 style choice bets */}
                     {(() => {
+                        // If choiceStyle is explicitly VARIOUS, skip the visual header
+                        if (bet.choiceStyle === "VARIOUS") return null;
+
                         // 1. Use explicit match details if available
                         let home = bet.matchDetails?.homeTeam;
                         let away = bet.matchDetails?.awayTeam;
 
-                        // 2. Fallback: Try to parse from Question string (e.g. "Lakers vs Celtics")
-                        if (!home && !away && bet.question.toLowerCase().includes(" vs ")) {
-                            const parts = bet.question.split(/ vs /i);
-                            if (parts.length === 2) {
-                                home = parts[0].trim();
-                                away = parts[1].trim();
+                        // 2. Fallback: Try to parse from Question string OR Options (for legacy bets)
+                        if (!home && !away) {
+                            // A) Try Question string (e.g. "Lakers vs Celtics")
+                            if (bet.question.toLowerCase().includes(" vs ")) {
+                                const parts = bet.question.split(/ vs /i);
+                                if (parts.length === 2) {
+                                    home = parts[0].trim();
+                                    away = parts[1].trim();
+                                }
+                            }
+                            // B) Try Options (e.g. Choice bet with "Team A", "Draw", "Team B")
+                            // Only do this if choiceStyle is MATCH_WINNER or MATCH_1X2, or is not set (legacy with visual intent)
+                            else if (bet.options && bet.options.length >= 2 && (bet.choiceStyle === "MATCH_WINNER" || bet.choiceStyle === "MATCH_1X2" || !bet.choiceStyle)) {
+                                // Filter out common "Draw" options
+                                const potentialTeams = bet.options.filter(o => {
+                                    const t = o.text.toLowerCase();
+                                    return t !== "draw" && t !== "tie" && t !== "x" && t !== "unentschieden";
+                                });
+                                if (potentialTeams.length >= 2) {
+                                    home = potentialTeams[0].text;
+                                    away = potentialTeams[1].text;
+                                }
                             }
                         }
 
                         if (!home || !away) return null;
 
                         return (
-                            <div className="flex items-center justify-center gap-2 md:gap-5 mb-5 pb-4 border-b-2 border-dashed border-slate-100">
+                            <div className="flex items-center justify-center gap-2 md:gap-4 mb-5 pb-4 border-b-2 border-dashed border-slate-100">
                                 {/* HOME TEAM */}
-                                <div className="flex flex-col items-center gap-2 w-1/3 text-center">
-                                    <TeamLogo teamName={home} size={56} className="drop-shadow-sm transition-transform hover:scale-110" />
-                                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-tighter leading-tight h-5 line-clamp-2">{home}</span>
+                                <div className="flex flex-col items-center w-5/12 max-w-[160px]">
+                                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-tighter leading-tight h-4 mb-2 line-clamp-1 w-full text-center overflow-hidden text-ellipsis whitespace-nowrap">{home}</span>
 
-                                    {/* INPUT FIELD (Moved directly under logo) */}
-                                    {bet.type === "MATCH" && bet.status === "OPEN" && !isExpired && (!userWager || isEditing) && (
-                                        <input
-                                            type="number"
-                                            value={matchHome}
-                                            onChange={e => setMatchHome(Number(e.target.value))}
-                                            className="w-16 h-12 mt-1 text-center text-xl font-black bg-slate-50 border-2 border-slate-300 rounded-xl focus:border-black focus:ring-0 outline-none transition-all shadow-[2px_2px_0px_0px_rgba(0,0,0,0.1)] focus:shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
-                                            placeholder="-"
-                                        />
-                                    )}
+                                    <div className="flex items-center justify-center gap-2 w-full">
+                                        {/* Home Logo - Interactive for CHOICE */}
+                                        {(() => {
+                                            // Find matching option for Home
+                                            const homeOptIdx = bet.type === "CHOICE" ? bet.options?.findIndex(o => o.text.toLowerCase().includes(home!.toLowerCase())) : -1;
+                                            const isClickable = bet.type === "CHOICE" && bet.status === "OPEN" && !isExpired && (!userWager || isEditing) && homeOptIdx !== -1;
+                                            const isSelected = selectedOption === String(homeOptIdx);
+
+                                            const LogoComp = (
+                                                <TeamLogo teamName={home} size={52} className={`drop-shadow-sm transition-all ${isSelected ? "scale-110 drop-shadow-md" : ""}`} />
+                                            );
+
+                                            if (isClickable) {
+                                                return (
+                                                    <button
+                                                        onClick={() => setSelectedOption(String(homeOptIdx))}
+                                                        className={`p-1 rounded-full border-4 transition-all ${isSelected ? "border-blue-500 bg-blue-50" : "border-transparent hover:bg-slate-50 hover:scale-105"}`}
+                                                    >
+                                                        {LogoComp}
+                                                    </button>
+                                                );
+                                            }
+                                            return <div className="shrink-0">{LogoComp}</div>;
+                                        })()}
+
+                                        {/* INPUT FIELD (Match betting) */}
+                                        {bet.type === "MATCH" && bet.status === "OPEN" && !isExpired && (!userWager || isEditing) ? (
+                                            <input
+                                                type="number"
+                                                value={matchHome}
+                                                onChange={e => setMatchHome(Number(e.target.value))}
+                                                className="w-12 h-11 text-center text-xl font-black bg-slate-50 border-2 border-slate-300 rounded-lg focus:border-black focus:ring-0 outline-none transition-all shadow-sm shrink-0 p-0"
+                                                placeholder="-"
+                                            />
+                                        ) : (
+                                            /* Spacer */
+                                            (bet.type === "MATCH" && !userWager && bet.status === "OPEN") && <div className="w-12 h-11 shrink-0" />
+                                        )}
+                                    </div>
                                 </div>
 
-                                <div className="text-xl font-black text-slate-200 italic self-center mt-[-40px]">VS</div>
+                                <div className="flex flex-col items-center">
+                                    <div className="text-xl font-black text-slate-200 italic">VS</div>
+                                    {/* DRAW BUTTON (For Choice Bets) */}
+                                    {(() => {
+                                        if (bet.type !== "CHOICE" || !bet.options) return null;
+                                        const drawIdx = bet.options.findIndex(o => {
+                                            const t = o.text.toLowerCase();
+                                            return t === "draw" || t === "tie" || t === "x" || t === "unentschieden";
+                                        });
+                                        if (drawIdx !== -1 && bet.status === "OPEN" && !isExpired && (!userWager || isEditing)) {
+                                            const isSelected = selectedOption === String(drawIdx);
+                                            return (
+                                                <button
+                                                    onClick={() => setSelectedOption(String(drawIdx))}
+                                                    className={`mt-1 px-3 py-0.5 text-[10px] font-black uppercase rounded border-2 transition-all ${isSelected ? "bg-slate-600 text-white border-slate-800" : "bg-white text-slate-400 border-slate-200 hover:border-slate-400"}`}
+                                                >
+                                                    Draw
+                                                </button>
+                                            );
+                                        }
+                                        return null;
+                                    })()}
+                                </div>
+
 
                                 {/* AWAY TEAM */}
-                                <div className="flex flex-col items-center gap-2 w-1/3 text-center">
-                                    <TeamLogo teamName={away} size={56} className="drop-shadow-sm transition-transform hover:scale-110" />
-                                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-tighter leading-tight h-5 line-clamp-2">{away}</span>
+                                <div className="flex flex-col items-center w-5/12 max-w-[160px]">
+                                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-tighter leading-tight h-4 mb-2 line-clamp-1 w-full text-center overflow-hidden text-ellipsis whitespace-nowrap">{away}</span>
 
-                                    {/* INPUT FIELD (Moved directly under logo) */}
-                                    {bet.type === "MATCH" && bet.status === "OPEN" && !isExpired && (!userWager || isEditing) && (
-                                        <input
-                                            type="number"
-                                            value={matchAway}
-                                            onChange={e => setMatchAway(Number(e.target.value))}
-                                            className="w-16 h-12 mt-1 text-center text-xl font-black bg-slate-50 border-2 border-slate-300 rounded-xl focus:border-black focus:ring-0 outline-none transition-all shadow-[2px_2px_0px_0px_rgba(0,0,0,0.1)] focus:shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
-                                            placeholder="-"
-                                        />
-                                    )}
+                                    <div className="flex items-center justify-center gap-2 w-full">
+                                        {/* INPUT FIELD (Match betting) */}
+                                        {bet.type === "MATCH" && bet.status === "OPEN" && !isExpired && (!userWager || isEditing) ? (
+                                            <input
+                                                type="number"
+                                                value={matchAway}
+                                                onChange={e => setMatchAway(Number(e.target.value))}
+                                                className="w-12 h-11 text-center text-xl font-black bg-slate-50 border-2 border-slate-300 rounded-lg focus:border-black focus:ring-0 outline-none transition-all shadow-sm shrink-0 p-0"
+                                                placeholder="-"
+                                            />
+                                        ) : (
+                                            /* Spacer */
+                                            (bet.type === "MATCH" && !userWager && bet.status === "OPEN") && <div className="w-12 h-11 shrink-0" />
+                                        )}
+
+                                        {/* Away Logo - Interactive for CHOICE */}
+                                        {(() => {
+                                            const awayOptIdx = bet.type === "CHOICE" ? bet.options?.findIndex(o => o.text.toLowerCase().includes(away!.toLowerCase())) : -1;
+                                            const isClickable = bet.type === "CHOICE" && bet.status === "OPEN" && !isExpired && (!userWager || isEditing) && awayOptIdx !== -1;
+                                            const isSelected = selectedOption === String(awayOptIdx);
+
+                                            const LogoComp = (
+                                                <TeamLogo teamName={away} size={52} className={`drop-shadow-sm transition-all ${isSelected ? "scale-110 drop-shadow-md" : ""}`} />
+                                            );
+
+                                            if (isClickable) {
+                                                return (
+                                                    <button
+                                                        onClick={() => setSelectedOption(String(awayOptIdx))}
+                                                        className={`p-1 rounded-full border-4 transition-all ${isSelected ? "border-blue-500 bg-blue-50" : "border-transparent hover:bg-slate-50 hover:scale-105"}`}
+                                                    >
+                                                        {LogoComp}
+                                                    </button>
+                                                );
+                                            }
+                                            return <div className="shrink-0">{LogoComp}</div>;
+                                        })()}
+                                    </div>
                                 </div>
                             </div>
                         );
@@ -786,26 +882,70 @@ export function BetCard({ bet, userPoints, userWager, mode, powerUps: powerUpsPr
                             {/* CHOICE BETS */}
                             {bet.type === "CHOICE" && bet.options && (
                                 <div className="space-y-2">
-                                    {bet.options.map((opt, idx) => (
-                                        <label
-                                            key={idx}
-                                            onClick={() => setSelectedOption(String(idx))}
-                                            className={`flex items-center justify-between p-3 rounded-lg border-2 cursor-pointer transition-all shadow-sm ${selectedOption === String(idx) ? "border-blue-600 bg-blue-50" : "border-slate-200 hover:border-slate-300 hover:bg-slate-50"}`}
-                                        >
-                                            <div className="flex items-center gap-3">
-                                                <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${selectedOption === String(idx) ? "border-blue-600 bg-blue-600" : "border-slate-300 bg-white"}`}>
-                                                    {selectedOption === String(idx) && <div className="w-2 h-2 bg-white rounded-full"></div>}
+                                    {/* Only render list if this is NOT a visual match choice */}
+                                    {(() => {
+                                        // If choiceStyle is MATCH_WINNER or MATCH_1X2, hide the list (use visual header)
+                                        if (bet.choiceStyle === "MATCH_WINNER" || bet.choiceStyle === "MATCH_1X2") {
+                                            return null;
+                                        }
+
+                                        // If choiceStyle is VARIOUS, always show the list
+                                        if (bet.choiceStyle === "VARIOUS") {
+                                            // Show list below
+                                        } else {
+                                            // Legacy bets without choiceStyle - use detection logic
+                                            let home = bet.matchDetails?.homeTeam;
+                                            let away = bet.matchDetails?.awayTeam;
+
+                                            if (!home && !away) {
+                                                if (bet.question.toLowerCase().includes(" vs ")) {
+                                                    const parts = bet.question.split(/ vs /i);
+                                                    if (parts.length === 2) { home = parts[0].trim(); away = parts[1].trim(); }
+                                                } else if (bet.options && bet.options.length >= 2) {
+                                                    const potentialTeams = bet.options.filter(o => {
+                                                        const t = o.text.toLowerCase();
+                                                        return t !== "draw" && t !== "tie" && t !== "x" && t !== "unentschieden";
+                                                    });
+                                                    if (potentialTeams.length >= 2) {
+                                                        home = potentialTeams[0].text;
+                                                        away = potentialTeams[1].text;
+                                                    }
+                                                }
+                                            }
+
+                                            // If we detected visual mapping for legacy bets, hide list
+                                            const hasVisualMapping = home && away && bet.options && (
+                                                bet.options.some(o => o.text.toLowerCase().includes(home!.toLowerCase())) ||
+                                                bet.options.some(o => o.text.toLowerCase().includes(away!.toLowerCase()))
+                                            );
+
+                                            if (hasVisualMapping) return null;
+                                        }
+
+                                        // Show the list
+
+                                        // Fallback to list
+                                        return bet.options!.map((opt, idx) => (
+                                            <label
+                                                key={idx}
+                                                onClick={() => setSelectedOption(String(idx))}
+                                                className={`flex items-center justify-between p-3 rounded-lg border-2 cursor-pointer transition-all shadow-sm ${selectedOption === String(idx) ? "border-blue-600 bg-blue-50" : "border-slate-200 hover:border-slate-300 hover:bg-slate-50"}`}
+                                            >
+                                                <div className="flex items-center gap-3">
+                                                    <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${selectedOption === String(idx) ? "border-blue-600 bg-blue-600" : "border-slate-300 bg-white"}`}>
+                                                        {selectedOption === String(idx) && <div className="w-2 h-2 bg-white rounded-full"></div>}
+                                                    </div>
+                                                    <span className={`font-bold ${selectedOption === String(idx) ? "text-blue-900" : "text-slate-600"}`}>{opt.text}</span>
                                                 </div>
-                                                <span className={`font-bold ${selectedOption === String(idx) ? "text-blue-900" : "text-slate-600"}`}>{opt.text}</span>
-                                            </div>
-                                            {/* Odds calculation */}
-                                            {mode === "ZERO_SUM" && opt.totalWagered > 0 && bet.totalPool > 0 && (
-                                                <span className={`text-xs font-bold ${selectedOption === String(idx) ? "text-blue-600 bg-white border-blue-200" : "text-slate-400"} px-2 py-1 rounded border`}>
-                                                    {(bet.totalPool / opt.totalWagered).toFixed(2)}x
-                                                </span>
-                                            )}
-                                        </label>
-                                    ))}
+                                                {/* Odds calculation */}
+                                                {mode === "ZERO_SUM" && opt.totalWagered > 0 && bet.totalPool > 0 && (
+                                                    <span className={`text-xs font-bold ${selectedOption === String(idx) ? "text-blue-600 bg-white border-blue-200" : "text-slate-400"} px-2 py-1 rounded border`}>
+                                                        {(bet.totalPool / opt.totalWagered).toFixed(2)}x
+                                                    </span>
+                                                )}
+                                            </label>
+                                        ));
+                                    })()}
                                 </div>
                             )}
 
@@ -1050,39 +1190,41 @@ export function BetCard({ bet, userPoints, userWager, mode, powerUps: powerUpsPr
             </div>
 
             {/* RIGHT COLUMN: TICKET STUB */}
-            {ticketStatus && !isEditing && (
-                <div
-                    className={`relative cursor-pointer transition-transform hover:scale-[1.02] ${userWager && bet.status === "OPEN" && !isExpired ? 'hover:ring-2 hover:ring-blue-400 rounded-lg' : ''}`}
-                    onClick={() => {
-                        if (isScrolling) return;
-                        if (userWager && bet.status === "OPEN" && !isExpired) {
-                            handleEditClick();
-                        }
-                    }}
-                    onTouchStart={() => {
-                        if (scrollTimeoutRef.current) clearTimeout(scrollTimeoutRef.current);
-                    }}
-                    onTouchMove={() => {
-                        setIsScrolling(true);
-                    }}
-                    onTouchEnd={() => {
-                        scrollTimeoutRef.current = setTimeout(() => setIsScrolling(false), 100);
-                    }}
-                >
-                    <SidePanelTicket
-                        status={ticketStatus}
-                        wagerStatus={ticketWagerStatus}
-                        userSelection={ticketSelectionDisplay}
-                        wagerAmount={ticketWagerAmount}
-                        potentialPayout={ticketPotential}
-                        payout={ticketPayout}
-                        isWinning={ticketIsWinning}
-                        odds={ticketOdds}
-                        currency={mode === "ZERO_SUM" ? "chips" : "pts"}
-                        powerUp={ticketPowerUp}
-                    />
-                </div>
-            )}
+            {
+                ticketStatus && !isEditing && (
+                    <div
+                        className={`relative cursor-pointer transition-transform hover:scale-[1.02] ${userWager && bet.status === "OPEN" && !isExpired ? 'hover:ring-2 hover:ring-blue-400 rounded-lg' : ''}`}
+                        onClick={() => {
+                            if (isScrolling) return;
+                            if (userWager && bet.status === "OPEN" && !isExpired) {
+                                handleEditClick();
+                            }
+                        }}
+                        onTouchStart={() => {
+                            if (scrollTimeoutRef.current) clearTimeout(scrollTimeoutRef.current);
+                        }}
+                        onTouchMove={() => {
+                            setIsScrolling(true);
+                        }}
+                        onTouchEnd={() => {
+                            scrollTimeoutRef.current = setTimeout(() => setIsScrolling(false), 100);
+                        }}
+                    >
+                        <SidePanelTicket
+                            status={ticketStatus}
+                            wagerStatus={ticketWagerStatus}
+                            userSelection={ticketSelectionDisplay}
+                            wagerAmount={ticketWagerAmount}
+                            potentialPayout={ticketPotential}
+                            payout={ticketPayout}
+                            isWinning={ticketIsWinning}
+                            odds={ticketOdds}
+                            currency={mode === "ZERO_SUM" ? "chips" : "pts"}
+                            powerUp={ticketPowerUp}
+                        />
+                    </div>
+                )
+            }
 
             <AllInModal
                 isOpen={showAllInModal}
@@ -1100,6 +1242,6 @@ export function BetCard({ bet, userPoints, userWager, mode, powerUps: powerUpsPr
                 }}
             />
             {showCoinFlow && <CoinFlow onComplete={() => setShowCoinFlow(false)} />}
-        </motion.div>
+        </motion.div >
     );
 }

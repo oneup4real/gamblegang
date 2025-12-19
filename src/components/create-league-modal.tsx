@@ -139,6 +139,11 @@ export function CreateLeagueModal({ isOpen, onClose }: CreateLeagueModalProps) {
                     const date = bet.date ? new Date(bet.date) : new Date(Date.now() + 86400000);
                     const finalType = mode === "ZERO_SUM" ? "CHOICE" : bet.type;
 
+                    // Pass matchDetails for both MATCH and CHOICE types when we have team info
+                    const matchDetails = bet.matchHome && bet.matchAway
+                        ? { home: bet.matchHome, away: bet.matchAway }
+                        : undefined;
+
                     await createBet(
                         leagueId,
                         user,
@@ -148,9 +153,11 @@ export function CreateLeagueModal({ isOpen, onClose }: CreateLeagueModalProps) {
                         date,
                         finalType === "CHOICE" ? bet.options : undefined,
                         undefined,
-                        finalType === "MATCH" ? { home: bet.matchHome, away: bet.matchAway } : undefined,
+                        matchDetails, // Pass matchDetails for both MATCH and CHOICE
                         true, // autoConfirm
-                        120   // autoConfirmDelay
+                        120,  // autoConfirmDelay
+                        // Pass choiceStyle for CHOICE bets based on aiOutcomeType
+                        finalType === "CHOICE" ? (aiOutcomeType === "WINNER" ? "MATCH_WINNER" : "MATCH_1X2") : undefined
                     );
                     setProgress(40 + Math.round(((i + 1) / betsToCreate.length) * 50));
                 }

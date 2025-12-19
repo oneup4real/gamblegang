@@ -12,10 +12,11 @@ interface CompactPowerBoosterProps {
     onSelect: (powerUp: PowerUpType | undefined) => void;
 }
 
+// Power-ups with clear labels and cleaner styling
 const POWER_UP_CONFIG = {
-    x2: { emoji: '⚡', label: '2X', gradient: 'from-yellow-400 to-orange-500', bgColor: 'bg-yellow-400' },
-    x3: { emoji: '🔥', label: '3X', gradient: 'from-orange-500 to-red-500', bgColor: 'bg-orange-500' },
-    x4: { emoji: '💥', label: '4X', gradient: 'from-red-500 to-pink-600', bgColor: 'bg-red-500' },
+    x2: { emoji: '💪', label: '×2', gradient: 'from-lime-400 to-green-500', bgColor: 'bg-lime-400' },
+    x3: { emoji: '🔥', label: '×3', gradient: 'from-orange-400 to-red-500', bgColor: 'bg-orange-400' },
+    x4: { emoji: '💥', label: '×4', gradient: 'from-red-500 to-pink-600', bgColor: 'bg-red-500' },
 };
 
 export function CompactPowerBooster({ powerUps, selectedPowerUp, onSelect }: CompactPowerBoosterProps) {
@@ -61,35 +62,31 @@ export function CompactPowerBooster({ powerUps, selectedPowerUp, onSelect }: Com
                 type="button"
                 onClick={() => setIsOpen(!isOpen)}
                 className={`
-                    relative w-12 h-12 rounded-full border-2 border-black 
-                    shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] 
+                    relative w-12 h-12 rounded-xl border-2 border-black 
+                    shadow-[2px_2px_0px_0px_rgba(0,0,0,0.8)] 
                     transition-all duration-200 
-                    flex items-center justify-center
+                    flex flex-col items-center justify-center gap-0
                     ${selectedPowerUp
-                        ? `bg-gradient-to-br ${selectedConfig?.gradient} text-white scale-110`
-                        : 'bg-gradient-to-br from-purple-500 to-indigo-600 text-white hover:scale-105'
+                        ? `bg-gradient-to-br ${selectedConfig?.gradient} text-white scale-105`
+                        : 'bg-gradient-to-br from-violet-500 to-purple-600 text-white hover:scale-105'
                     }
-                    ${isOpen ? 'scale-110 rotate-12' : ''}
+                    ${isOpen ? 'scale-110' : ''}
                 `}
             >
                 {selectedPowerUp ? (
-                    <span className="text-xl">{selectedConfig?.emoji}</span>
+                    <>
+                        <span className="text-lg leading-none">{selectedConfig?.emoji}</span>
+                        <span className="text-[9px] font-black text-white/90 leading-none">{selectedConfig?.label}</span>
+                    </>
                 ) : (
-                    <Zap className="w-6 h-6" />
-                )}
-
-                {/* Badge showing count or selected */}
-                {selectedPowerUp && (
-                    <span className="absolute -top-1 -right-1 w-5 h-5 bg-white text-black text-[10px] font-black rounded-full flex items-center justify-center border border-black">
-                        {selectedConfig?.label}
-                    </span>
+                    <Zap className="w-5 h-5" />
                 )}
             </button>
 
             {/* Radial Power-Up Menu */}
             {isOpen && (
                 <div className="absolute z-50">
-                    {/* X2 - Top Left */}
+                    {/* X2 - Top Left (badge on left side) */}
                     <PowerUpButton
                         type="x2"
                         count={powerUps.x2}
@@ -98,9 +95,10 @@ export function CompactPowerBooster({ powerUps, selectedPowerUp, onSelect }: Com
                         onClick={() => handleSelectPowerUp('x2')}
                         position="-top-14 -left-8"
                         delay="0ms"
+                        badgePosition="left"
                     />
 
-                    {/* X3 - Top */}
+                    {/* X3 - Top (badge on right side - default) */}
                     <PowerUpButton
                         type="x3"
                         count={powerUps.x3}
@@ -109,9 +107,10 @@ export function CompactPowerBooster({ powerUps, selectedPowerUp, onSelect }: Com
                         onClick={() => handleSelectPowerUp('x3')}
                         position="-top-16 left-2"
                         delay="50ms"
+                        badgePosition="right"
                     />
 
-                    {/* X4 - Top Right */}
+                    {/* X4 - Top Right (badge on right side) */}
                     <PowerUpButton
                         type="x4"
                         count={powerUps.x4}
@@ -120,21 +119,8 @@ export function CompactPowerBooster({ powerUps, selectedPowerUp, onSelect }: Com
                         onClick={() => handleSelectPowerUp('x4')}
                         position="-top-14 left-12"
                         delay="100ms"
+                        badgePosition="right"
                     />
-
-                    {/* Clear selection button */}
-                    {selectedPowerUp && (
-                        <button
-                            type="button"
-                            onClick={() => {
-                                onSelect(undefined);
-                                setIsOpen(false);
-                            }}
-                            className="absolute -bottom-12 left-1 w-10 h-10 rounded-full bg-gray-200 border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] flex items-center justify-center text-gray-600 hover:bg-gray-300 transition-all animate-[popIn_150ms_ease-out_150ms_both]"
-                        >
-                            ✕
-                        </button>
-                    )}
                 </div>
             )}
 
@@ -154,10 +140,12 @@ interface PowerUpButtonProps {
     onClick: () => void;
     position: string;
     delay: string;
+    badgePosition?: 'left' | 'right';
 }
 
-function PowerUpButton({ type, count, config, isSelected, onClick, position, delay }: PowerUpButtonProps) {
+function PowerUpButton({ type, count, config, isSelected, onClick, position, delay, badgePosition = 'right' }: PowerUpButtonProps) {
     const isDisabled = count === 0;
+    const badgeClass = badgePosition === 'left' ? '-top-1 -left-1' : '-top-1 -right-1';
 
     return (
         <button
@@ -165,27 +153,27 @@ function PowerUpButton({ type, count, config, isSelected, onClick, position, del
             onClick={onClick}
             disabled={isDisabled}
             className={`
-                absolute ${position} w-12 h-12 rounded-full border-2 border-black 
-                shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] 
+                absolute ${position} w-14 h-14 rounded-xl border-2 border-black 
+                shadow-[2px_2px_0px_0px_rgba(0,0,0,0.8)] 
                 flex flex-col items-center justify-center gap-0
                 transition-all duration-150
                 animate-[popIn_150ms_ease-out_both]
                 ${isDisabled
                     ? 'bg-gray-200 text-gray-400 opacity-50 cursor-not-allowed'
                     : isSelected
-                        ? `bg-gradient-to-br ${config.gradient} text-white ring-2 ring-white ring-offset-2`
+                        ? `bg-gradient-to-br ${config.gradient} text-white ring-2 ring-white ring-offset-1 scale-110`
                         : `bg-gradient-to-br ${config.gradient} text-white hover:scale-110`
                 }
             `}
             style={{ animationDelay: delay }}
         >
-            <span className="text-lg leading-none">{config.emoji}</span>
-            <span className="text-[8px] font-black leading-none">{config.label}</span>
+            <span className="text-2xl leading-none">{config.emoji}</span>
+            <span className="text-xs font-black leading-none text-white drop-shadow-[1px_1px_0_rgba(0,0,0,0.5)]">{config.label}</span>
 
             {/* Count Badge */}
             <span className={`
-                absolute -top-1 -right-1 min-w-[16px] h-[16px] px-1 rounded-full 
-                text-[9px] font-black flex items-center justify-center border border-black
+                absolute ${badgeClass} min-w-[16px] h-[16px] px-0.5 rounded-full 
+                text-[9px] font-black flex items-center justify-center border-2 border-black
                 ${count > 0 ? 'bg-white text-black' : 'bg-gray-300 text-gray-500'}
             `}>
                 {count}

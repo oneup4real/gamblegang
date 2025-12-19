@@ -81,6 +81,7 @@ export interface Bet {
     autoFinalize?: boolean; // Flag for automatic finalization after deadline/consensus
     autoConfirm?: boolean; // Auto-confirm result via AI
     autoConfirmDelay?: number; // Delay in minutes after eventDate
+    choiceStyle?: "VARIOUS" | "MATCH_WINNER" | "MATCH_1X2"; // For CHOICE bets: VARIOUS = classic list, MATCH_WINNER = 2-way logos, MATCH_1X2 = 3-way logos + Draw
 }
 
 export interface Wager {
@@ -107,7 +108,8 @@ export async function createBet(
     rangeConfig?: { min: number, max: number, unit: string },
     matchDetails?: { home: string, away: string },
     autoConfirm?: boolean,
-    autoConfirmDelay?: number
+    autoConfirmDelay?: number,
+    choiceStyle?: "VARIOUS" | "MATCH_WINNER" | "MATCH_1X2" // New parameter for CHOICE bets
 ) {
     const betsRef = collection(db, "leagues", leagueId, "bets");
     const newBetRef = doc(betsRef);
@@ -135,6 +137,8 @@ export async function createBet(
             totalWagered: 0,
             odds: 1.0 // Initial odds
         }));
+        // Set choiceStyle for CHOICE bets (MATCH = visual logos, VARIOUS = classic list)
+        betData.choiceStyle = choiceStyle || "VARIOUS"; // Default to VARIOUS if not specified
     }
 
     if (type === "RANGE" && rangeConfig) {
