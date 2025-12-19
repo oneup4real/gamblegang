@@ -16,7 +16,9 @@ import { collection, getDocs } from "firebase/firestore";
 import { db } from "@/lib/firebase/config";
 
 import { League, LeagueMember, PowerUpType, PowerUpInventory } from "@/lib/services/league-service"; // Ensure correct imports
+
 import { CompactPowerBooster } from "@/components/compact-power-booster";
+import { TeamLogo } from "@/components/team-logo";
 
 // ... existing imports
 
@@ -404,6 +406,22 @@ export function BetCard({ bet, userPoints, userWager, mode, powerUps: powerUpsPr
         }
     };
 
+    const handleFinalizeNow = async () => {
+        if (!user) return;
+        if (!confirm("Skip proofing and finalize this bet immediately? Payouts will be distributed.")) return;
+        setLoading(true);
+        try {
+            await finalizeBet(bet.leagueId, bet.id, user, true);
+            alert("Bet confirmed! Payouts distributed.");
+            if (onWagerSuccess) onWagerSuccess();
+        } catch (error: any) {
+            console.error(error);
+            alert(error.message || "Failed to finalize bet");
+        } finally {
+            setLoading(false);
+        }
+    };
+
     const getTimeRemaining = () => {
         const now = new Date();
         const closeDate = new Date(bet.closesAt.seconds * 1000);
@@ -430,7 +448,43 @@ export function BetCard({ bet, userPoints, userWager, mode, powerUps: powerUpsPr
     const handleAIResolve = async () => {
         setAiResolving(true);
         try {
-            const result = await aiAutoResolveBet(bet);
+            console.log("🛠️ Raw bet before sanitize:", {
+                id: bet.id,
+                question: bet.question,
+                matchDetails: bet.matchDetails,
+                eventDate: bet.eventDate,
+                type: bet.type
+            });
+
+            // Sanitize bet data for Server Action to avoid serialization issues with Timestamps
+            const sanitizedBet = {
+                ...bet,
+                eventDate: (() => {
+                    const d = bet.eventDate;
+                    if (!d) return new Date().toISOString(); // Fallback to now if missing
+                    try {
+                        if (typeof d.toDate === 'function') return d.toDate().toISOString();
+                        if (typeof d.seconds === 'number') return new Date(d.seconds * 1000).toISOString();
+                        if (d instanceof Date) return d.toISOString();
+                        if (typeof d === 'string') return d;
+                        return new Date().toISOString(); // Last resort fallback
+                    } catch (e) {
+                        return new Date().toISOString();
+                    }
+                })(),
+                // Ensure matchDetails dates are also strings if present
+                matchDetails: bet.matchDetails ? {
+                    ...bet.matchDetails,
+                    date: bet.matchDetails.date && typeof bet.matchDetails.date === 'object' && 'toDate' in bet.matchDetails.date
+                        ? (bet.matchDetails.date as any).toDate().toISOString()
+                        : bet.matchDetails.date
+                } : undefined
+            };
+
+            console.log("🤖 Sending to AI for resolution (Sanitized):", sanitizedBet);
+            const result = await aiAutoResolveBet(sanitizedBet);
+            console.log("🤖 Client received AI result:", result);
+
             if (!result) {
                 alert("AI couldn't determine the result. Please enter manually.");
                 return;
@@ -448,7 +502,7 @@ export function BetCard({ bet, userPoints, userWager, mode, powerUps: powerUpsPr
                 setVerificationData(result.verification);
             }
             setAiHighlighted(true);
-            setTimeout(() => setAiHighlighted(false), 3000);
+            // setTimeout(() => setAiHighlighted(false), 3000); // Keep highlighted until user confirms or changes
             alert("✅ Result found and filled by AI!");
         } catch (error: any) {
             alert(error.message || "AI resolution failed");
@@ -539,25 +593,15 @@ export function BetCard({ bet, userPoints, userWager, mode, powerUps: powerUpsPr
                     ticketOdds = "2.00x";
                 }
             } else {
-                // STANDARD MODE
-                // Display max potential points (e.g. Exact Match points)
-                // We don't have access to league settings here easily unless passed in.
-                // Assuming base 3 points for now or 100 if stored in amount (but amount is 0).
-                // Let's just assume Base=100 for visualization or use powerUp multiplier on "Base".
-                // Actually, if amount is 0, SidePanel shows 0.
-
-                // User Request: "est win should alredy include the power up".
-                // Let's apply multiplier to the display.
-
+                // STANDARD/ARCADE MODE
+                // Assuming Base Win = 1 Point
                 let mult = 1;
                 if (userWager.powerUp === 'x2') mult = 2;
                 if (userWager.powerUp === 'x3') mult = 3;
                 if (userWager.powerUp === 'x4') mult = 4;
 
-                // Since we don't know Base Points, let's just show "xN Multiplier".
-                // Or if we want points:
                 ticketOdds = `${mult}x Boost`;
-                ticketPotential = 0; // Can't estimate points without league settings
+                ticketPotential = 1 * mult;
             }
 
             // Preliminary Winning Check
@@ -677,6 +721,65 @@ export function BetCard({ bet, userPoints, userWager, mode, powerUps: powerUpsPr
 
                     {/* --- STATE SPECIFIC CONTENT --- */}
 
+                    {/* MATCHUP LOGO HEADER */}
+                    {/* MATCHUP LOGO HEADER */}
+                    {(() => {
+                        // 1. Use explicit match details if available
+                        let home = bet.matchDetails?.homeTeam;
+                        let away = bet.matchDetails?.awayTeam;
+
+                        // 2. Fallback: Try to parse from Question string (e.g. "Lakers vs Celtics")
+                        if (!home && !away && bet.question.toLowerCase().includes(" vs ")) {
+                            const parts = bet.question.split(/ vs /i);
+                            if (parts.length === 2) {
+                                home = parts[0].trim();
+                                away = parts[1].trim();
+                            }
+                        }
+
+                        if (!home || !away) return null;
+
+                        return (
+                            <div className="flex items-center justify-center gap-2 md:gap-5 mb-5 pb-4 border-b-2 border-dashed border-slate-100">
+                                {/* HOME TEAM */}
+                                <div className="flex flex-col items-center gap-2 w-1/3 text-center">
+                                    <TeamLogo teamName={home} size={56} className="drop-shadow-sm transition-transform hover:scale-110" />
+                                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-tighter leading-tight h-5 line-clamp-2">{home}</span>
+
+                                    {/* INPUT FIELD (Moved directly under logo) */}
+                                    {bet.type === "MATCH" && bet.status === "OPEN" && !isExpired && (!userWager || isEditing) && (
+                                        <input
+                                            type="number"
+                                            value={matchHome}
+                                            onChange={e => setMatchHome(Number(e.target.value))}
+                                            className="w-16 h-12 mt-1 text-center text-xl font-black bg-slate-50 border-2 border-slate-300 rounded-xl focus:border-black focus:ring-0 outline-none transition-all shadow-[2px_2px_0px_0px_rgba(0,0,0,0.1)] focus:shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
+                                            placeholder="-"
+                                        />
+                                    )}
+                                </div>
+
+                                <div className="text-xl font-black text-slate-200 italic self-center mt-[-40px]">VS</div>
+
+                                {/* AWAY TEAM */}
+                                <div className="flex flex-col items-center gap-2 w-1/3 text-center">
+                                    <TeamLogo teamName={away} size={56} className="drop-shadow-sm transition-transform hover:scale-110" />
+                                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-tighter leading-tight h-5 line-clamp-2">{away}</span>
+
+                                    {/* INPUT FIELD (Moved directly under logo) */}
+                                    {bet.type === "MATCH" && bet.status === "OPEN" && !isExpired && (!userWager || isEditing) && (
+                                        <input
+                                            type="number"
+                                            value={matchAway}
+                                            onChange={e => setMatchAway(Number(e.target.value))}
+                                            className="w-16 h-12 mt-1 text-center text-xl font-black bg-slate-50 border-2 border-slate-300 rounded-xl focus:border-black focus:ring-0 outline-none transition-all shadow-[2px_2px_0px_0px_rgba(0,0,0,0.1)] focus:shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
+                                            placeholder="-"
+                                        />
+                                    )}
+                                </div>
+                            </div>
+                        );
+                    })()}
+
                     {/* 1. OPEN STATE: BET OPTIONS */}
                     {bet.status === "OPEN" && !isExpired && (!userWager || isEditing) && (
                         <div className="space-y-3">
@@ -706,14 +809,7 @@ export function BetCard({ bet, userPoints, userWager, mode, powerUps: powerUpsPr
                                 </div>
                             )}
 
-                            {/* MATCH / RANGE INPUTS (Reused existing UI simplified) */}
-                            {bet.type === "MATCH" && (
-                                <div className="flex items-center gap-4 p-4 border-2 border-slate-200 rounded-lg bg-slate-50">
-                                    <input type="number" placeholder="Home" value={matchHome} onChange={e => setMatchHome(Number(e.target.value))} className="w-16 p-2 text-center font-black border-2 border-slate-300 rounded" />
-                                    <span className="font-bold">-</span>
-                                    <input type="number" placeholder="Away" value={matchAway} onChange={e => setMatchAway(Number(e.target.value))} className="w-16 p-2 text-center font-black border-2 border-slate-300 rounded" />
-                                </div>
-                            )}
+                            {/* MATCH INPUTS Removed from here (now in header) */}
 
                             {/* RANGE INPUT */}
                             {bet.type === "RANGE" && (
@@ -804,30 +900,74 @@ export function BetCard({ bet, userPoints, userWager, mode, powerUps: powerUpsPr
                             {/* Manual Entry Inputs (Visible for Owner) */}
                             <div className="pt-2 border-t border-slate-200 mt-2">
                                 {/* Simple selector for Choice */}
-                                {bet.type === "CHOICE" && bet.options && (
-                                    <select
-                                        value={winningOption}
-                                        onChange={e => setWinningOption(e.target.value)}
-                                        className="w-full p-2 text-sm font-bold border-2 border-slate-200 rounded mb-2"
-                                    >
-                                        <option value="">Select Winner...</option>
-                                        {bet.options.map((o, i) => <option key={i} value={i}>{o.text}</option>)}
-                                    </select>
+                                {(bet.type === "CHOICE" && bet.options) && (
+                                    <div className="space-y-2">
+                                        <div className="text-xs font-bold text-slate-400">Winning Option ({winningOption}):</div>
+                                        <select
+                                            value={winningOption}
+                                            onChange={e => setWinningOption(e.target.value)}
+                                            className="w-full p-2 text-sm font-bold border-2 border-slate-200 rounded mb-2"
+                                        >
+                                            <option value="">Select Winner...</option>
+                                            {bet.options.map((o, i) => <option key={i} value={String(i)}>{o.text}</option>)}
+                                        </select>
+                                    </div>
                                 )}
-                                {/* Match/Range inputs would go here similarly */}
+
+                                {/* Match Inputs for Owner */}
+                                {bet.type === "MATCH" && (
+                                    <div className="flex items-center gap-2 mb-2 justify-center">
+                                        <input
+                                            placeholder="Home"
+                                            type="number"
+                                            value={resHome}
+                                            onChange={(e) => setResHome(Number(e.target.value))}
+                                            className="w-16 p-1 text-center border-2 rounded font-bold"
+                                        />
+                                        <span>-</span>
+                                        <input
+                                            placeholder="Away"
+                                            type="number"
+                                            value={resAway}
+                                            onChange={(e) => setResAway(Number(e.target.value))}
+                                            className="w-16 p-1 text-center border-2 rounded font-bold"
+                                        />
+                                    </div>
+                                )}
+
+                                {/* Range Inputs for Owner */}
+                                {bet.type === "RANGE" && (
+                                    <div className="mb-2">
+                                        <input
+                                            placeholder="Correct Value"
+                                            type="number"
+                                            value={winningRange}
+                                            onChange={(e) => setWinningRange(Number(e.target.value))}
+                                            className="w-full p-2 text-center border-2 rounded font-bold"
+                                        />
+                                    </div>
+                                )}
+
+                                {/* Confirm Button - Enabled if any result data is present */}
                                 {(winningOption !== "" || winningRange !== "" || (resHome !== "" && resAway !== "")) && (
-                                    <Button onClick={handleResolve} disabled={loading} className="w-full bg-slate-900 text-white font-bold h-8 text-xs">Confirm Result</Button>
+                                    <div className="animate-in fade-in slide-in-from-top-1 duration-300">
+                                        {aiHighlighted && <div className="text-xs text-center text-purple-600 font-bold mb-1">AI Recommendation Filled Below</div>}
+                                        <Button onClick={handleResolve} disabled={loading} className={`w-full font-bold h-9 text-xs shadow-md ${aiHighlighted ? 'bg-purple-600 hover:bg-purple-700' : 'bg-slate-900 hover:bg-slate-800'} text-white transition-all`}>
+                                            {aiHighlighted ? "Confirm AI Result" : "Confirm Result"}
+                                        </Button>
+                                    </div>
                                 )}
                             </div>
                         </div>
                     )}
 
                     {/* 3. PROOFING / RESOLVED: VERIFICATION SOURCE */}
+                    {/* 3. PROOFING / RESOLVED: VERIFICATION SOURCE */}
                     {(bet.status === "PROOFING" || bet.status === "RESOLVED") && (
                         <div className={`mt-2 rounded-lg p-3 flex items-start gap-3 border ${bet.status === "PROOFING" ? "bg-green-50 border-green-200" : "bg-white border-slate-200"}`}>
                             {/* Source Icon/Avatar */}
                             <div className={`w-8 h-8 rounded flex items-center justify-center text-white font-bold text-xs shrink-0 ${bet.status === "PROOFING" ? "bg-green-500" : "bg-slate-500"}`}>
-                                {verificationData?.source ? verificationData.source.substring(0, 3).toUpperCase() : "AI"}
+                                {(bet.verification?.source || verificationData?.source) ? (bet.verification?.source || verificationData?.source).substring(0, 3).toUpperCase() : "AI"}
                             </div>
                             <div className="flex-1">
                                 <div className="text-xs font-bold uppercase tracking-wide mb-0.5 opacity-70">Verified Result</div>
@@ -840,7 +980,15 @@ export function BetCard({ bet, userPoints, userWager, mode, powerUps: powerUpsPr
                                 </div>
                                 <div className="text-[10px] font-medium flex items-center gap-1 opacity-60">
                                     <CheckCircle className="w-3 h-3" />
-                                    Source: {verificationData?.source || "Manual Entry"}
+                                    Source:
+                                    {(bet.verification?.url || verificationData?.url) ? (
+                                        <a href={bet.verification?.url || verificationData?.url} target="_blank" rel="noopener noreferrer" className="ml-1 hover:underline text-blue-600">
+                                            {bet.verification?.source || verificationData?.source || "Link"}
+                                        </a>
+                                    ) : (
+                                        <span className="ml-1">{bet.verification?.source || verificationData?.source || "Manual Entry"}</span>
+                                    )}
+                                    {(bet.verification?.verifiedAt || verificationData?.verifiedAt) && ` • ${new Date(bet.verification?.verifiedAt || verificationData?.verifiedAt).toLocaleDateString()}`}
                                 </div>
                             </div>
 
@@ -852,6 +1000,48 @@ export function BetCard({ bet, userPoints, userWager, mode, powerUps: powerUpsPr
                                     disabled={disputeLoading}
                                 >
                                     Dispute?
+                                </button>
+                            )}
+
+                            {/* Owner: Finalize Now Button */}
+                            {isOwner && bet.status === "PROOFING" && (
+                                <button
+                                    onClick={handleFinalizeNow}
+                                    disabled={loading}
+                                    className="ml-auto text-[10px] bg-emerald-100 text-emerald-700 px-2 py-1 rounded border border-emerald-200 hover:bg-emerald-200 uppercase font-black tracking-wide flex items-center gap-1 transition-colors"
+                                    title="Skip Proofing & Distribute Payouts"
+                                >
+                                    <CheckCircle className="w-3 h-3" />
+                                    Confirm Now
+                                </button>
+                            )}
+
+                            {/* TEMP DEBUG RESET BUTTON */}
+                            {isOwner && (bet.status === "PROOFING" || bet.status === "RESOLVED") && (
+                                <button
+                                    onClick={async () => {
+                                        if (!confirm("Start Debug Reset? This will revert status to LOCKED.")) return;
+                                        try {
+                                            const { doc, updateDoc, deleteField, getFirestore } = await import("firebase/firestore");
+                                            const db = getFirestore();
+                                            await updateDoc(doc(db, "leagues", bet.leagueId, "bets", bet.id), {
+                                                status: "LOCKED",
+                                                winningOutcome: deleteField(),
+                                                verification: deleteField(),
+                                                disputeDeadline: deleteField(),
+                                                disputeActive: false,
+                                                resolvedAt: deleteField(),
+                                                resolvedBy: deleteField()
+                                            });
+                                            alert("Reset successful! Refresh page if updates don't appear.");
+                                        } catch (e) {
+                                            alert("Reset failed: " + e);
+                                        }
+                                    }}
+                                    className="scale-75 origin-right ml-auto text-[9px] bg-red-100 text-red-600 px-1.5 py-0.5 rounded border border-red-200 hover:bg-red-200 uppercase font-black tracking-widest opacity-50 hover:opacity-100 transition-all"
+                                    title="Debug: Reset to LOCKED"
+                                >
+                                    Reset
                                 </button>
                             )}
                         </div>
@@ -888,7 +1078,7 @@ export function BetCard({ bet, userPoints, userWager, mode, powerUps: powerUpsPr
                         payout={ticketPayout}
                         isWinning={ticketIsWinning}
                         odds={ticketOdds}
-                        currency={mode === "ZERO_SUM" ? "pts" : "cr"}
+                        currency={mode === "ZERO_SUM" ? "chips" : "pts"}
                         powerUp={ticketPowerUp}
                     />
                 </div>

@@ -218,31 +218,62 @@ export async function verifyBetResult(question: string, context?: any) {
  * Searches the web for actual game results from ESPN, NBA.com, etc.
  * Returns verification metadata for display on bet tickets
  */
+/**
+ * Helper: Safely parse date from various formats (String, Firestore Timestamp, Date)
+ */
+function parseDate(dateInput: any): Date | null {
+    if (!dateInput) return null;
+    if (dateInput instanceof Date) return dateInput;
+    if (typeof dateInput === 'string') return new Date(dateInput);
+    if (typeof dateInput === 'number') return new Date(dateInput);
+    // Firestore Timestamp - Client SDK (has toDate)
+    if (dateInput.toDate && typeof dateInput.toDate === 'function') return dateInput.toDate();
+    // Firestore Timestamp - Serialized / Plain Object (seconds, nanoseconds)
+    if (typeof dateInput.seconds === 'number') return new Date(dateInput.seconds * 1000);
+    return null;
+}
+
+/**
+ * Resolve match bets using AI with Google Search grounding.
+ * Searches the web for actual game results from ESPN, NBA.com, etc.
+ * Returns verification metadata for display on bet tickets
+ */
 async function resolveMatchBetWithAIGrounding(bet: any) {
     if (!apiKey) {
         console.warn("No Gemini API key found. Cannot use AI grounding.");
         return null;
     }
 
+    console.log("🛠️ [AI Grounding] Received bet for resolution:", {
+        id: bet.id,
+        question: bet.question,
+        matchDetails: bet.matchDetails,
+        eventDate: bet.eventDate
+    });
+
     const homeTeam = bet.matchDetails?.homeTeam;
     const awayTeam = bet.matchDetails?.awayTeam;
-    const eventDate = bet.eventDate || bet.matchDetails?.date;
+
+    // Robust date extraction
+    let eventDate = parseDate(bet.eventDate);
+    if (!eventDate && bet.matchDetails?.date) {
+        eventDate = parseDate(bet.matchDetails.date);
+    }
 
     if (!homeTeam || !awayTeam || !eventDate) {
-        console.warn("Missing match details for AI grounding resolution:", bet);
+        console.warn(`⚠️ [AI Grounding] Missing match details. Home: "${homeTeam}", Away: "${awayTeam}", Date: "${eventDate}" (${typeof eventDate})`);
         return null;
     }
 
     try {
-        const dateObj = new Date(eventDate);
-        const formattedDate = dateObj.toLocaleDateString('en-US', {
+        const formattedDate = eventDate.toLocaleDateString('en-US', {
             weekday: 'long',
             year: 'numeric',
             month: 'long',
             day: 'numeric'
         });
 
-        console.log(`🔍 [AI Grounding] Searching for: ${homeTeam} vs ${awayTeam} on ${formattedDate}`);
+        console.log(`🔍 [AI Grounding] Searching for: ${homeTeam} vs ${awayTeam} on ${formattedDate} (${eventDate.toISOString()})`);
 
         const genAI = new GoogleGenerativeAI(apiKey);
 
@@ -255,6 +286,8 @@ async function resolveMatchBetWithAIGrounding(bet: any) {
         
 ${homeTeam} vs ${awayTeam}
 Game Date: ${formattedDate}
+
+If the game was played on a different date recently (within 24 hours), please provide that result instead.
 
 I need you to find the actual final score from a reliable sports source (ESPN, NBA.com, official league sites, etc.).
 
@@ -350,8 +383,9 @@ export async function aiAutoResolveBet(bet: any) {
     }
 
     try {
+        const betType = bet.type?.toUpperCase();
         // For MATCH bets, use AI with Google Search grounding
-        if (bet.type === "MATCH") {
+        if (betType === "MATCH") {
             console.log("🤖 [AI Grounding] Using Gemini 2.5 with Google Search for match resolution...");
             const aiGroundedResult = await resolveMatchBetWithAIGrounding(bet);
             if (aiGroundedResult) {
@@ -359,67 +393,131 @@ export async function aiAutoResolveBet(bet: any) {
             }
 
             console.warn("❌ AI grounding could not resolve match. Manual entry required.");
-            return null;
+            // Don't return null yet! Fallback to generic AI below instead of returning null
+            // return null; 
         }
 
-        // For other bet types, use AI
+        // For other bet types (or failed MATCH grounding), use AI
         const genAI = new GoogleGenerativeAI(apiKey);
         const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
 
         let prompt = "";
 
-        if (bet.type === "CHOICE") {
+        if (betType === "CHOICE") {
+            const d = parseDate(bet.eventDate) || new Date();
+            // If d is effectively "now" (time diff < 1 min), assume user means "Last Night's game"? 
+            // Or just search for the specific date.
+
+            const dateStr = d.toISOString().split('T')[0]; // YYYY-MM-DD
+            const yesterday = new Date(d);
+            yesterday.setDate(yesterday.getDate() - 1);
+            const yesterDateStr = yesterday.toISOString().split('T')[0];
+
             prompt = `
-                Determine the correct answer to this question:
-                Question: "${bet.question}"
+                Search for the result of the "${bet.question}" event.
+                
+                Target Date: ${dateStr}
+                Possible Previous Date (Late Night Game): ${yesterDateStr}
+                
+                Search Queries to run:
+                1. "${bet.question} score ${dateStr}"
+                2. "${bet.question} score ${yesterDateStr}"
+                3. "${bet.question} last match result"
+                
+                Strict Rules for Result Selection:
+                1. Look for a game/event that completely finished on ${dateStr} or ${yesterDateStr}.
+                2. Match the TEAMS and the DATE.
+                3. IGNORE games from previous weeks/months (e.g. ignore November if it's December).
+                
                 Options: ${bet.options?.map((o: any, i: number) => `${i}: ${o.text}`).join(", ")}
-                Event Date: ${bet.eventDate || "Unknown"}
                 
-                Current Time: ${new Date().toISOString()}
-                
-                If you can determine the answer, return the INDEX of the correct option.
-                If you don't know or it hasn't happened, return "UNKNOWN".
-                
-                Return ONLY valid JSON in this format:
-                { "status": "FOUND" | "UNKNOWN", "optionIndex": number }
-                
-                Example: { "status": "FOUND", "optionIndex": 0 }
-                
-                Do not include markdown formatting.
+                Return ONLY valid JSON:
+                { 
+                    "status": "FOUND", 
+                    "optionIndex": number,
+                    "source": "Site Name (e.g. NBA.com)",
+                    "sourceUrl": "Direct URL to match result",
+                    "confidence": "high"|"medium"|"low",
+                    "matchDate": "YYYY-MM-DD"
+                }
+                OR
+                { "status": "UNKNOWN" }
             `;
-        } else if (bet.type === "RANGE") {
+        } else if (betType === "RANGE") {
+            const d = parseDate(bet.eventDate) || new Date();
+            const dateStr = d.toISOString().split('T')[0];
+            const yesterday = new Date(d);
+            yesterday.setDate(yesterday.getDate() - 1);
+            const yesterDateStr = yesterday.toISOString().split('T')[0];
+
+            // --- STATISTICAL / RANGE PROMPT IMPROVEMENT ---
+            const isPlayerStat = bet.question.toLowerCase().match(/(goals|passes|tackles|shots|assists|points|rebounds|steals|yards|touchdowns)/);
+
             prompt = `
-                Determine the actual value for this range question:
-                Question: "${bet.question}"
-                Range: ${bet.rangeMin} to ${bet.rangeMax} ${bet.rangeUnit || ""}
-                Event Date: ${bet.eventDate || "Unknown"}
+                Search for the official statistics/result for this question:
+                "${bet.question}"
                 
-                Current Time: ${new Date().toISOString()}
+                Target Date: ${dateStr} (or late night ${yesterday.toISOString().split('T')[0]})
                 
-                If you can determine the value, return it.
-                If you don't know or it hasn't happened, return "UNKNOWN".
+                Search Strategy:
+                ${isPlayerStat ? `
+                1. Search for "box score ${bet.question} ${dateStr}"
+                2. Search for "player stats ${bet.question} ${dateStr}"
+                3. Look for official post-match statistical summaries.
+                ` : `
+                1. "${bet.question} result ${dateStr}"
+                2. "${bet.question} result ${yesterDateStr}"
+                `}
                 
-                Return ONLY valid JSON in this format:
-                { "status": "FOUND" | "UNKNOWN", "value": number }
+                Strict Rules:
+                1. Verify the date matches ${dateStr} or ${yesterDateStr}.
+                2. IGNORE stats from season averages or previous games.
+                3. For "passes", "tackles", or specific player stats, look for deep box score data on sites like Whoscored, Sofascore, ESPN, or official league sites.
                 
-                Example: { "status": "FOUND", "value": 42 }
-                
-                Do not include markdown formatting.
+                Return ONLY valid JSON:
+                { 
+                    "status": "FOUND", 
+                    "value": number,
+                    "source": "Site Name",
+                    "sourceUrl": "Direct URL",
+                    "confidence": "high"|"medium"|"low" 
+                }
+                OR
+                { "status": "UNKNOWN" }
             `;
         }
 
-        const result = await model.generateContent(prompt);
-        const response = await result.response;
-        const text = response.text();
+        console.log("🤖 AI Generic Prompt:", prompt);
 
-        const cleanText = text.replace(/```json/g, "").replace(/```/g, "").trim();
+        const result = await model.generateContent({
+            contents: [{ role: "user", parts: [{ text: prompt }] }],
+            tools: [{ googleSearch: {} }] as any,
+        });
+
+        const text = result.response.text().replace(/```json/g, "").replace(/```/g, "").trim();
+        console.log("🤖 AI Generic Response:", text);
 
         try {
-            const parsed = JSON.parse(cleanText);
+            // Find the JSON block first
+            const jsonMatch = text.match(/\{[\s\S]*\}/);
+            const jsonString = jsonMatch ? jsonMatch[0] : text;
+
+            const parsed = JSON.parse(jsonString);
             if (parsed.status === "UNKNOWN") {
                 return null;
             }
-            return { type: bet.type, ...parsed };
+            return {
+                type: betType,
+                ...parsed,
+                verification: {
+                    verified: true,
+                    source: parsed.source || "AI Grounding (Gemini)",
+                    url: parsed.sourceUrl || undefined,
+                    verifiedAt: new Date().toISOString(),
+                    method: "AI_GROUNDING",
+                    confidence: parsed.confidence || "high"
+                }
+            };
         } catch (e) {
             console.error("Failed to parse AI auto-resolve response:", text);
             return null;

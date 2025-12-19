@@ -48,7 +48,7 @@ export function SidePanelTicket({
 
                     <div className="flex-shrink-0 text-right md:text-center w-auto md:w-full">
                         <div className="flex justify-end md:justify-center items-center gap-1.5 text-[10px] text-slate-500 font-bold uppercase mb-0.5">
-                            <span>Wager: {wagerAmount}</span>
+                            {wagerAmount > 0 && <span>Wager: {wagerAmount}</span>}
                             {odds && <span className="text-blue-600 bg-blue-50 px-1 rounded">@{odds}</span>}
                         </div>
                         <div className="text-xl font-black text-green-600 leading-none tracking-tight">
@@ -78,7 +78,7 @@ export function SidePanelTicket({
                     </div>
 
                     <div className="flex-shrink-0 text-right md:text-center w-auto md:w-full opacity-75">
-                        <div className="text-[10px] text-slate-500 font-bold uppercase mb-0.5">Wager: {wagerAmount}</div>
+                        {wagerAmount > 0 && <div className="text-[10px] text-slate-500 font-bold uppercase mb-0.5">Wager: {wagerAmount}</div>}
                         <div className="text-xl font-black text-slate-700 leading-none">
                             {potentialPayout > 0 ? `~${Math.floor(potentialPayout)}` : '-'}
                         </div>
@@ -127,7 +127,7 @@ export function SidePanelTicket({
                             </>
                         ) : (
                             <>
-                                <div className="text-[10px] text-blue-500 font-bold uppercase mb-0.5">Wager: {wagerAmount}</div>
+                                {wagerAmount > 0 && <div className="text-[10px] text-blue-500 font-bold uppercase mb-0.5">Wager: {wagerAmount}</div>}
                                 <div className="text-[9px] font-bold text-blue-500 bg-blue-100 px-2 py-0.5 rounded-full inline-block mt-1">Proofing</div>
                             </>
                         )}
@@ -179,8 +179,12 @@ export function SidePanelTicket({
                 </div>
 
                 <div className="flex-shrink-0 text-right md:text-center w-auto md:w-full">
-                    <div className="text-xl font-black text-red-500">-{wagerAmount}</div>
-                    <div className="text-[9px] font-bold text-red-400 uppercase tracking-wide">{currency} lost</div>
+                    <div className="text-xl font-black text-red-500">
+                        {wagerAmount > 0 ? `-${wagerAmount}` : "0"}
+                    </div>
+                    <div className="text-[9px] font-bold text-red-400 uppercase tracking-wide">
+                        {wagerAmount > 0 ? `${currency} lost` : `${currency} earned`}
+                    </div>
                 </div>
             </>
         );

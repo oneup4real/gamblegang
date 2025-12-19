@@ -58,6 +58,7 @@ export interface Bet {
     verification?: {
         verified: boolean;
         source: string; // e.g., "ESPN", "NBA.com", "AI Web Search"
+        url?: string; // Direct link to proof
         verifiedAt: string; // ISO timestamp
         method: "AI_GROUNDING" | "MANUAL" | "API";
         confidence?: "high" | "medium" | "low";
@@ -249,8 +250,11 @@ export async function placeWager(
             selection,
             status: "PENDING",
             placedAt: serverTimestamp(),
-            powerUp // Add powerUp to wager
         };
+
+        if (powerUp) {
+            wagerData.powerUp = powerUp;
+        }
 
         // Update Bet Pool & Count
         const betUpdates: any = {
@@ -462,6 +466,7 @@ export async function resolveBet(
     verification?: {
         verified: boolean;
         source: string;
+        url?: string;
         verifiedAt: string;
         method: "AI_GROUNDING" | "MANUAL" | "API";
         confidence?: "high" | "medium" | "low";
@@ -769,7 +774,7 @@ export async function confirmVerification(leagueId: string, betId: string, user:
  * Finalize a bet after the dispute period has ended
  * This processes payouts and sets the bet to RESOLVED
  */
-export async function finalizeBet(leagueId: string, betId: string, user: User) {
+export async function finalizeBet(leagueId: string, betId: string, user: User, force: boolean = false) {
     const betRef = doc(db, "leagues", leagueId, "bets", betId);
     const betSnap = await getDoc(betRef);
     if (!betSnap.exists()) throw new Error("Bet not found");
@@ -781,7 +786,7 @@ export async function finalizeBet(leagueId: string, betId: string, user: User) {
     }
 
     // Verify dispute deadline has passed
-    if (bet.disputeDeadline) {
+    if (bet.disputeDeadline && !force) {
         const deadline = bet.disputeDeadline.toDate ? bet.disputeDeadline.toDate() : new Date(bet.disputeDeadline);
         if (new Date() < deadline) {
             throw new Error("Dispute period has not ended yet");

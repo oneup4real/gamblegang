@@ -148,7 +148,9 @@ export function CreateLeagueModal({ isOpen, onClose }: CreateLeagueModalProps) {
                         date,
                         finalType === "CHOICE" ? bet.options : undefined,
                         undefined,
-                        finalType === "MATCH" ? { home: bet.matchHome, away: bet.matchAway } : undefined
+                        finalType === "MATCH" ? { home: bet.matchHome, away: bet.matchAway } : undefined,
+                        true, // autoConfirm
+                        120   // autoConfirmDelay
                     );
                     setProgress(40 + Math.round(((i + 1) / betsToCreate.length) * 50));
                 }
@@ -503,8 +505,8 @@ export function CreateLeagueModal({ isOpen, onClose }: CreateLeagueModalProps) {
                                                         type="button"
                                                         onClick={() => setDisputeWindow(h)}
                                                         className={`flex-1 py-2 rounded-lg font-black border-2 transition-all ${disputeWindow === h
-                                                                ? "bg-black text-white border-black"
-                                                                : "bg-white text-gray-500 border-gray-200 hover:border-black"
+                                                            ? "bg-black text-white border-black"
+                                                            : "bg-white text-gray-500 border-gray-200 hover:border-black"
                                                             }`}
                                                     >
                                                         {h}h

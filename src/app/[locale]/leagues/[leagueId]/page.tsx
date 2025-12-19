@@ -80,7 +80,8 @@ export default function LeaguePage() {
                     return;
                 }
 
-                // Fetch Members
+
+                // Fetch members first
                 const membersRef = collection(db, "leagues", leagueId as string, "members");
                 const membersSnap = await getDocs(membersRef);
                 const membersList = membersSnap.docs.map(d => d.data() as LeagueMember);
@@ -95,7 +96,7 @@ export default function LeaguePage() {
                 }
                 // -------------------------------------------
 
-                // Sort by points desc
+                // Initial Sort (Fallback)
                 membersList.sort((a, b) => b.points - a.points);
                 setMembers(membersList);
 
@@ -377,6 +378,31 @@ export default function LeaguePage() {
         fetchAllActiveWagers();
     }, [league?.id, bets]); // Re-fetch when bets change
 
+    // --------------------------------------------------------------------------
+    // DYNAMIC RE-SORTING (Live Leaderboard)
+    // --------------------------------------------------------------------------
+    // We display "Total Points" = Wallet + Active Wagers. 
+    // So we must sort by this total, not just the static wallet points.
+    useEffect(() => {
+        if (members.length > 0) {
+            // Check if we need to re-sort
+            // We create a copy to avoid infinite loops if setMembers triggers this again immediately without change
+            const sorted = [...members].sort((a, b) => {
+                const equityA = a.points + (allMembersActiveWagers[a.uid] || 0);
+                const equityB = b.points + (allMembersActiveWagers[b.uid] || 0);
+                return equityB - equityA; // Descending
+            });
+
+            // Only update if order actually changed to prevent render loops
+            const isDifferent = sorted.some((m, i) => m.uid !== members[i].uid);
+            if (isDifferent) {
+                console.log("⚡️ [Leaderboard] Re-sorting based on Total Equity...");
+                setMembers(sorted);
+            }
+        }
+    }, [allMembersActiveWagers, members.length]); // Intentionally not including 'members' deep dependency to avoid loops, just length check or manual trigger
+
+
     if (loading || dataLoading) {
 
         return (
@@ -456,9 +482,14 @@ export default function LeaguePage() {
 
             } else {
                 // ARCADE: Fixed points (No Wager Amount)
-                displayedOdds = "-";
-                // Fixed 1 point for winning in Arcade Mode
-                displayedReturn = `1 ${tBets('pts')}`;
+                let multiplier = 1;
+                if (wager.powerUp === 'x2') multiplier = 2;
+                if (wager.powerUp === 'x3') multiplier = 3;
+                if (wager.powerUp === 'x4') multiplier = 4;
+
+                displayedOdds = multiplier > 1 ? `${multiplier}x` : "-";
+                const potentialPts = 1 * multiplier;
+                displayedReturn = `${potentialPts} ${tBets('pts')}`;
                 returnColor = "text-green-600";
             }
         }
@@ -543,10 +574,12 @@ export default function LeaguePage() {
 
                         {/* Odds & Return */}
                         <div className="flex gap-6 text-sm shrink-0">
-                            <div className="text-center">
-                                <p className="text-gray-500 text-xs font-bold">{tBets('odds')}</p>
-                                <p className="font-black text-black text-lg">{displayedOdds}</p>
-                            </div>
+                            {mode === "ZERO_SUM" && (
+                                <div className="text-center">
+                                    <p className="text-gray-500 text-xs font-bold">{tBets('odds')}</p>
+                                    <p className="font-black text-black text-lg">{displayedOdds}</p>
+                                </div>
+                            )}
                             <div className="text-center">
                                 <p className="text-gray-500 text-xs font-bold">Net Result</p>
                                 <p className={`font-black text-lg ${returnColor}`}>{displayedReturn}</p>
@@ -966,9 +999,12 @@ export default function LeaguePage() {
                                                                     return `Points Accumulation`;
                                                                 })()}
                                                             </p>
-                                                            <p className="text-xs text-gray-400 font-bold mt-0.5">
-                                                                Buy In: {(member.totalBought || (league.mode === "ZERO_SUM" && league.buyInType === "FIXED" ? league.startCapital : 0)).toLocaleString()} chips
-                                                            </p>
+                                                            {/* Hidet 'Buy In' for ARCADE (non-ZERO_SUM) mode as requested */}
+                                                            {league.mode === "ZERO_SUM" && (
+                                                                <p className="text-xs text-gray-400 font-bold mt-0.5">
+                                                                    Buy In: {(member.totalBought || (league.buyInType === "FIXED" ? league.startCapital : 0)).toLocaleString()} chips
+                                                                </p>
+                                                            )}
                                                             {/* Last 10 Bets Stats */}
                                                             {member.recentResults && member.recentResults.length > 0 && (
                                                                 <div className="flex items-center gap-3 mt-1 bg-gray-50 px-2 py-0.5 rounded border border-gray-200 w-fit">
@@ -1072,21 +1108,7 @@ export default function LeaguePage() {
                                                         <GroupedBetsByTime
                                                             bets={openBets}
                                                             getClosingDate={(bet) => bet.closesAt ? new Date(bet.closesAt.seconds * 1000) : null}
-                                                            renderBet={(bet) => {
-                                                                const wager = myActiveWagers[bet.id];
-                                                                return (
-                                                                    <BetCard
-                                                                        key={bet.id}
-                                                                        bet={bet}
-                                                                        userPoints={myMemberProfile?.points || 0}
-                                                                        mode={league.mode}
-                                                                        userWager={wager}
-                                                                        powerUps={myMemberProfile?.powerUps || league.arcadePowerUpSettings}
-                                                                        onWagerSuccess={fetchLeagueData}
-                                                                        isOwnerOverride={isOwner || user?.uid === bet.creatorId}
-                                                                    />
-                                                                );
-                                                            }}
+                                                            renderBet={(bet) => renderBetItem(bet, myMemberProfile?.points || 0, league.mode)}
                                                         />
                                                     </div>
                                                 );

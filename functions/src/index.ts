@@ -52,6 +52,8 @@ async function resolveMatchWithAI(bet: Bet, apiKey: string): Promise<any | null>
         const prompt = `Search Google for the final score of this game:
         ${homeTeam} vs ${awayTeam}
         Date: ${formattedDate}
+
+        If the game was played on a different date recently (within 24 hours), please provide that result instead.
         
         Return ONLY valid JSON:
         { "status": "FOUND", "home": number, "away": number, "source": "string", "confidence": "high"|"medium"|"low" }
@@ -98,14 +100,96 @@ async function resolveGenericWithAI(bet: Bet, apiKey: string): Promise<any | nul
 
         let prompt = "";
         if (bet.type === "CHOICE") {
-            prompt = `Determine the winner for: "${bet.question}". Options: ${bet.options?.map((o, i) => `${i}: ${o.text}`).join(", ")}. Return JSON: { "status": "FOUND", "optionIndex": number } or { "status": "UNKNOWN" }`;
+            const d = bet.eventDate?.toDate ? bet.eventDate.toDate() : new Date(bet.eventDate);
+            const dateStr = d.toISOString().split('T')[0];
+            const yesterday = new Date(d);
+            yesterday.setDate(yesterday.getDate() - 1);
+            const yesterDateStr = yesterday.toISOString().split('T')[0];
+
+            prompt = `
+                Search for the result of the "${bet.question}" event.
+                
+                Target Date: ${dateStr}
+                Possible Previous Date (Late Night Game): ${yesterDateStr}
+                
+                Search Queries to run:
+                1. "${bet.question} score ${dateStr}"
+                2. "${bet.question} score ${yesterDateStr}"
+                
+                Strict Rules for Result Selection:
+                1. Look for a game/event that completely finished on ${dateStr} or ${yesterDateStr}.
+                2. Match the TEAMS and the DATE.
+                3. IGNORE games from previous weeks/months.
+                
+                Options: ${bet.options?.map((o, i) => `${i}: ${o.text}`).join(", ")}
+                
+                Return ONLY valid JSON:
+                { 
+                    "status": "FOUND", 
+                    "optionIndex": number,
+                    "source": "Site Name (e.g. NBA.com)",
+                    "sourceUrl": "Direct URL",
+                    "confidence": "high"|"medium"|"low" 
+                }
+                OR
+                { "status": "UNKNOWN" }
+            `;
         } else if (bet.type === "RANGE") {
-            prompt = `Determine the value for: "${bet.question}". Return JSON: { "status": "FOUND", "value": number } or { "status": "UNKNOWN" }`;
+            const d = bet.eventDate?.toDate ? bet.eventDate.toDate() : new Date(bet.eventDate);
+            const dateStr = d.toISOString().split('T')[0];
+            const yesterday = new Date(d);
+            yesterday.setDate(yesterday.getDate() - 1);
+            const yesterDateStr = yesterday.toISOString().split('T')[0];
+
+            // --- STATISTICAL / RANGE PROMPT IMPROVEMENT ---
+            const isPlayerStat = bet.question.toLowerCase().match(/(goals|passes|tackles|shots|assists|points|rebounds|steals|yards|touchdowns)/);
+
+            prompt = `
+                Search for the official statistics/result for this question:
+                "${bet.question}"
+                
+                Target Date: ${dateStr} (or late night ${yesterDateStr})
+                
+                Search Strategy:
+                ${isPlayerStat ? `
+                1. Search for "box score ${bet.question} ${dateStr}"
+                2. Search for "player stats ${bet.question} ${dateStr}"
+                3. Look for official post-match statistical summaries.
+                ` : `
+                1. "${bet.question} result ${dateStr}"
+                2. "${bet.question} result ${yesterDateStr}"
+                `}
+                
+                Strict Rules:
+                1. Verify the date matches ${dateStr} or ${yesterDateStr}.
+                2. IGNORE stats from season averages or previous games.
+                3. For "passes", "tackles", or specific player stats, look for deep box score data on sites like Whoscored, Sofascore, ESPN, or official league sites.
+                
+                Return ONLY valid JSON:
+                { 
+                    "status": "FOUND", 
+                    "value": number,
+                    "source": "Site Name",
+                    "sourceUrl": "Direct URL",
+                    "confidence": "high"|"medium"|"low" 
+                }
+                OR
+                { "status": "UNKNOWN" }
+            `;
         }
 
-        const result = await model.generateContent(prompt);
+        const result = await model.generateContent({
+            contents: [{ role: "user", parts: [{ text: prompt }] }],
+            tools: [{ googleSearch: {} }] as any,
+        });
+
         const text = result.response.text().replace(/```json/g, "").replace(/```/g, "").trim();
-        const parsed = JSON.parse(text);
+
+        // Find the JSON block first
+        const jsonMatch = text.match(/\{[\s\S]*\}/);
+        const jsonString = jsonMatch ? jsonMatch[0] : text;
+
+        const parsed = JSON.parse(jsonString);
 
         if (parsed.status === "FOUND") {
             return {
@@ -114,9 +198,11 @@ async function resolveGenericWithAI(bet: Bet, apiKey: string): Promise<any | nul
                 value: parsed.value,
                 verification: {
                     verified: true,
-                    source: "AI Knowledge",
+                    source: parsed.source || "AI Grounding (Auto)",
+                    url: parsed.sourceUrl || undefined,
                     verifiedAt: new Date().toISOString(),
-                    method: "AI_REASONING"
+                    method: "AI_GROUNDING",
+                    confidence: parsed.confidence || "high"
                 }
             };
         }
@@ -155,12 +241,28 @@ export const autoResolveBets = onSchedule(
 
             if (!leagueId) continue;
 
+            // Fetch League Settings to respect custom Dispute Window
+            // Optimization: Could cache this if processing many bets from same league, but for 15min interval fetching is acceptable.
+            const leagueDoc = await db.collection("leagues").doc(leagueId).get();
+            const leagueData = leagueDoc.data();
+            const disputeWindowHours = leagueData?.disputeWindow || 12;
+
             // Check Delay
             const eventDate = bet.eventDate?.toDate ? bet.eventDate.toDate() : new Date(bet.eventDate);
-            if (!eventDate) continue;
+            if (!eventDate || isNaN(eventDate.getTime())) {
+                logger.warn(`Skipping Bet ${doc.id} - Invalid Event Date: ${bet.eventDate}`);
+                continue;
+            }
 
-            const delayMs = (bet.autoConfirmDelay || 120) * 60 * 1000; // Default 120 min
-            if (now < eventDate.getTime() + delayMs) continue; // Too early
+            const delayMinutes = bet.autoConfirmDelay || 120;
+            const delayMs = delayMinutes * 60 * 1000;
+            const resolveTime = eventDate.getTime() + delayMs;
+
+            if (now < resolveTime) {
+                const waitMin = Math.ceil((resolveTime - now) / 60000);
+                logger.info(`Skipping Bet ${doc.id} - Waiting for delay buffer. Game started: ${eventDate.toISOString()}, Delay: ${delayMinutes}m. Ready in ${waitMin} mins.`);
+                continue;
+            }
 
             // Resolve
             updates.push((async () => {
@@ -178,7 +280,7 @@ export const autoResolveBets = onSchedule(
 
                     if (outcome !== undefined) {
                         const disputeDeadline = new Date();
-                        disputeDeadline.setHours(disputeDeadline.getHours() + 12);
+                        disputeDeadline.setHours(disputeDeadline.getHours() + disputeWindowHours);
 
                         await doc.ref.update({
                             status: "PROOFING",
@@ -219,3 +321,40 @@ export const autoResolveBets = onSchedule(
         await Promise.all(updates);
         logger.info("Job Complete");
     });
+
+/**
+ * Scheduled job to lock bets that have passed their closing time.
+ * Runs every 15 minutes.
+ */
+export const lockBets = onSchedule("every 15 minutes", async () => {
+    logger.info("Starting Bet Locking Job");
+    const now = Timestamp.now();
+
+    // Note: This query might require a composite index on (status, closesAt)
+    // If it fails, check logs for the index creation link.
+    const snapshot = await db.collectionGroup("bets")
+        .where("status", "==", "OPEN")
+        .where("closesAt", "<", now)
+        .get();
+
+    if (snapshot.empty) {
+        logger.info("No bets to lock.");
+        return;
+    }
+
+    logger.info(`Found ${snapshot.size} expired bets to lock.`);
+
+    const batch = db.batch();
+    let counter = 0;
+
+    snapshot.docs.forEach((doc) => {
+        batch.update(doc.ref, {
+            status: "LOCKED",
+            lastUpdatedBy: "lock-scheduler"
+        });
+        counter++;
+    });
+
+    await batch.commit();
+    logger.info(`Successfully locked ${counter} bets.`);
+});
