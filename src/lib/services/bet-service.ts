@@ -857,6 +857,7 @@ export interface DashboardBetInfo {
     resolvedAt?: any; // Added resolvedAt
     userPoints: number; // Current user points in this league
     userPowerUps?: PowerUpInventory; // Current user power ups in this league
+    choiceStyle?: "VARIOUS" | "MATCH_WINNER" | "MATCH_1X2"; // For CHOICE bets display
 }
 
 export interface DashboardBetWithWager extends DashboardBetInfo {
@@ -1003,6 +1004,7 @@ export async function getUserDashboardStats(user: User, leagues: League[]): Prom
                 disputeDeadline: bet.disputeDeadline,
                 eventDate: bet.eventDate,
                 votes: bet.votes,
+                choiceStyle: bet.choiceStyle, // Important for VARIOUS style display
                 leagueMode: league.mode,
                 leagueMatchSettings: league.matchSettings,
                 wager: userWager ? {

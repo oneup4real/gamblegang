@@ -771,44 +771,60 @@ export function BetCard({ bet, userPoints, userWager, mode, powerUps: powerUpsPr
                                 <div className="flex flex-col items-center w-5/12 max-w-[160px]">
                                     <span className="text-[10px] font-black text-slate-400 uppercase tracking-tighter leading-tight h-4 mb-2 line-clamp-1 w-full text-center overflow-hidden text-ellipsis whitespace-nowrap">{home}</span>
 
-                                    <div className="flex items-center justify-center gap-2 w-full">
-                                        {/* Home Logo - Interactive for CHOICE */}
-                                        {(() => {
-                                            // Find matching option for Home
-                                            const homeOptIdx = bet.type === "CHOICE" ? bet.options?.findIndex(o => o.text.toLowerCase().includes(home!.toLowerCase())) : -1;
-                                            const isClickable = bet.type === "CHOICE" && bet.status === "OPEN" && !isExpired && (!userWager || isEditing) && homeOptIdx !== -1;
-                                            const isSelected = selectedOption === String(homeOptIdx);
+                                    <div className="flex flex-col items-center gap-1 w-full">
+                                        <div className="flex items-center justify-center gap-2 w-full">
+                                            {/* Home Logo - Interactive for CHOICE */}
+                                            {(() => {
+                                                // Find matching option for Home
+                                                const homeOptIdx = bet.type === "CHOICE" ? bet.options?.findIndex(o => o.text.toLowerCase().includes(home!.toLowerCase())) : -1;
+                                                const isClickable = bet.type === "CHOICE" && bet.status === "OPEN" && !isExpired && (!userWager || isEditing) && homeOptIdx !== -1;
+                                                const isSelected = selectedOption === String(homeOptIdx);
 
-                                            const LogoComp = (
-                                                <TeamLogo teamName={home} size={52} className={`drop-shadow-sm transition-all ${isSelected ? "scale-110 drop-shadow-md" : ""}`} />
-                                            );
-
-                                            if (isClickable) {
-                                                return (
-                                                    <button
-                                                        onClick={() => setSelectedOption(String(homeOptIdx))}
-                                                        className={`p-1 rounded-full border-4 transition-all ${isSelected ? "border-blue-500 bg-blue-50" : "border-transparent hover:bg-slate-50 hover:scale-105"}`}
-                                                    >
-                                                        {LogoComp}
-                                                    </button>
+                                                const LogoComp = (
+                                                    <TeamLogo teamName={home} size={52} className={`drop-shadow-sm transition-all ${isSelected ? "scale-110 drop-shadow-md" : ""}`} />
                                                 );
-                                            }
-                                            return <div className="shrink-0">{LogoComp}</div>;
-                                        })()}
 
-                                        {/* INPUT FIELD (Match betting) */}
-                                        {bet.type === "MATCH" && bet.status === "OPEN" && !isExpired && (!userWager || isEditing) ? (
-                                            <input
-                                                type="number"
-                                                value={matchHome}
-                                                onChange={e => setMatchHome(Number(e.target.value))}
-                                                className="w-12 h-11 text-center text-xl font-black bg-slate-50 border-2 border-slate-300 rounded-lg focus:border-black focus:ring-0 outline-none transition-all shadow-sm shrink-0 p-0"
-                                                placeholder="-"
-                                            />
-                                        ) : (
-                                            /* Spacer */
-                                            (bet.type === "MATCH" && !userWager && bet.status === "OPEN") && <div className="w-12 h-11 shrink-0" />
-                                        )}
+                                                if (isClickable) {
+                                                    return (
+                                                        <button
+                                                            onClick={() => setSelectedOption(String(homeOptIdx))}
+                                                            className={`p-1 rounded-full border-4 transition-all ${isSelected ? "border-blue-500 bg-blue-50" : "border-transparent hover:bg-slate-50 hover:scale-105"}`}
+                                                        >
+                                                            {LogoComp}
+                                                        </button>
+                                                    );
+                                                }
+                                                return <div className="shrink-0">{LogoComp}</div>;
+                                            })()}
+
+                                            {/* INPUT FIELD (Match betting) */}
+                                            {bet.type === "MATCH" && bet.status === "OPEN" && !isExpired && (!userWager || isEditing) ? (
+                                                <input
+                                                    type="number"
+                                                    value={matchHome}
+                                                    onChange={e => setMatchHome(Number(e.target.value))}
+                                                    className="w-12 h-11 text-center text-xl font-black bg-slate-50 border-2 border-slate-300 rounded-lg focus:border-black focus:ring-0 outline-none transition-all shadow-sm shrink-0 p-0"
+                                                    placeholder="-"
+                                                />
+                                            ) : (
+                                                /* Spacer */
+                                                (bet.type === "MATCH" && !userWager && bet.status === "OPEN") && <div className="w-12 h-11 shrink-0" />
+                                            )}
+                                        </div>
+                                        {/* HOME ODDS - Zero Sum Only */}
+                                        {mode === "ZERO_SUM" && bet.type === "CHOICE" && bet.options && (() => {
+                                            const homeOptIdx = bet.options.findIndex(o => o.text.toLowerCase().includes(home!.toLowerCase()));
+                                            if (homeOptIdx === -1) return null;
+                                            const opt = bet.options[homeOptIdx];
+                                            const odds = opt.totalWagered > 0 && bet.totalPool > 0
+                                                ? (bet.totalPool / opt.totalWagered).toFixed(2)
+                                                : "2.00";
+                                            return (
+                                                <span className="text-xs font-black text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
+                                                    @{odds}x
+                                                </span>
+                                            );
+                                        })()}
                                     </div>
                                 </div>
 
@@ -823,13 +839,25 @@ export function BetCard({ bet, userPoints, userWager, mode, powerUps: powerUpsPr
                                         });
                                         if (drawIdx !== -1 && bet.status === "OPEN" && !isExpired && (!userWager || isEditing)) {
                                             const isSelected = selectedOption === String(drawIdx);
+                                            const drawOpt = bet.options[drawIdx];
+                                            const drawOdds = drawOpt.totalWagered > 0 && bet.totalPool > 0
+                                                ? (bet.totalPool / drawOpt.totalWagered).toFixed(2)
+                                                : "3.00";
                                             return (
-                                                <button
-                                                    onClick={() => setSelectedOption(String(drawIdx))}
-                                                    className={`mt-1 px-3 py-0.5 text-[10px] font-black uppercase rounded border-2 transition-all ${isSelected ? "bg-slate-600 text-white border-slate-800" : "bg-white text-slate-400 border-slate-200 hover:border-slate-400"}`}
-                                                >
-                                                    Draw
-                                                </button>
+                                                <div className="flex flex-col items-center gap-1 mt-1">
+                                                    <button
+                                                        onClick={() => setSelectedOption(String(drawIdx))}
+                                                        className={`px-3 py-0.5 text-[10px] font-black uppercase rounded border-2 transition-all ${isSelected ? "bg-slate-600 text-white border-slate-800" : "bg-white text-slate-400 border-slate-200 hover:border-slate-400"}`}
+                                                    >
+                                                        Draw
+                                                    </button>
+                                                    {/* DRAW ODDS - Zero Sum Only */}
+                                                    {mode === "ZERO_SUM" && (
+                                                        <span className="text-[10px] font-bold text-slate-500">
+                                                            @{drawOdds}x
+                                                        </span>
+                                                    )}
+                                                </div>
                                             );
                                         }
                                         return null;
@@ -841,42 +869,58 @@ export function BetCard({ bet, userPoints, userWager, mode, powerUps: powerUpsPr
                                 <div className="flex flex-col items-center w-5/12 max-w-[160px]">
                                     <span className="text-[10px] font-black text-slate-400 uppercase tracking-tighter leading-tight h-4 mb-2 line-clamp-1 w-full text-center overflow-hidden text-ellipsis whitespace-nowrap">{away}</span>
 
-                                    <div className="flex items-center justify-center gap-2 w-full">
-                                        {/* INPUT FIELD (Match betting) */}
-                                        {bet.type === "MATCH" && bet.status === "OPEN" && !isExpired && (!userWager || isEditing) ? (
-                                            <input
-                                                type="number"
-                                                value={matchAway}
-                                                onChange={e => setMatchAway(Number(e.target.value))}
-                                                className="w-12 h-11 text-center text-xl font-black bg-slate-50 border-2 border-slate-300 rounded-lg focus:border-black focus:ring-0 outline-none transition-all shadow-sm shrink-0 p-0"
-                                                placeholder="-"
-                                            />
-                                        ) : (
-                                            /* Spacer */
-                                            (bet.type === "MATCH" && !userWager && bet.status === "OPEN") && <div className="w-12 h-11 shrink-0" />
-                                        )}
+                                    <div className="flex flex-col items-center gap-1 w-full">
+                                        <div className="flex items-center justify-center gap-2 w-full">
+                                            {/* INPUT FIELD (Match betting) */}
+                                            {bet.type === "MATCH" && bet.status === "OPEN" && !isExpired && (!userWager || isEditing) ? (
+                                                <input
+                                                    type="number"
+                                                    value={matchAway}
+                                                    onChange={e => setMatchAway(Number(e.target.value))}
+                                                    className="w-12 h-11 text-center text-xl font-black bg-slate-50 border-2 border-slate-300 rounded-lg focus:border-black focus:ring-0 outline-none transition-all shadow-sm shrink-0 p-0"
+                                                    placeholder="-"
+                                                />
+                                            ) : (
+                                                /* Spacer */
+                                                (bet.type === "MATCH" && !userWager && bet.status === "OPEN") && <div className="w-12 h-11 shrink-0" />
+                                            )}
 
-                                        {/* Away Logo - Interactive for CHOICE */}
-                                        {(() => {
-                                            const awayOptIdx = bet.type === "CHOICE" ? bet.options?.findIndex(o => o.text.toLowerCase().includes(away!.toLowerCase())) : -1;
-                                            const isClickable = bet.type === "CHOICE" && bet.status === "OPEN" && !isExpired && (!userWager || isEditing) && awayOptIdx !== -1;
-                                            const isSelected = selectedOption === String(awayOptIdx);
+                                            {/* Away Logo - Interactive for CHOICE */}
+                                            {(() => {
+                                                const awayOptIdx = bet.type === "CHOICE" ? bet.options?.findIndex(o => o.text.toLowerCase().includes(away!.toLowerCase())) : -1;
+                                                const isClickable = bet.type === "CHOICE" && bet.status === "OPEN" && !isExpired && (!userWager || isEditing) && awayOptIdx !== -1;
+                                                const isSelected = selectedOption === String(awayOptIdx);
 
-                                            const LogoComp = (
-                                                <TeamLogo teamName={away} size={52} className={`drop-shadow-sm transition-all ${isSelected ? "scale-110 drop-shadow-md" : ""}`} />
-                                            );
-
-                                            if (isClickable) {
-                                                return (
-                                                    <button
-                                                        onClick={() => setSelectedOption(String(awayOptIdx))}
-                                                        className={`p-1 rounded-full border-4 transition-all ${isSelected ? "border-blue-500 bg-blue-50" : "border-transparent hover:bg-slate-50 hover:scale-105"}`}
-                                                    >
-                                                        {LogoComp}
-                                                    </button>
+                                                const LogoComp = (
+                                                    <TeamLogo teamName={away} size={52} className={`drop-shadow-sm transition-all ${isSelected ? "scale-110 drop-shadow-md" : ""}`} />
                                                 );
-                                            }
-                                            return <div className="shrink-0">{LogoComp}</div>;
+
+                                                if (isClickable) {
+                                                    return (
+                                                        <button
+                                                            onClick={() => setSelectedOption(String(awayOptIdx))}
+                                                            className={`p-1 rounded-full border-4 transition-all ${isSelected ? "border-blue-500 bg-blue-50" : "border-transparent hover:bg-slate-50 hover:scale-105"}`}
+                                                        >
+                                                            {LogoComp}
+                                                        </button>
+                                                    );
+                                                }
+                                                return <div className="shrink-0">{LogoComp}</div>;
+                                            })()}
+                                        </div>
+                                        {/* AWAY ODDS - Zero Sum Only */}
+                                        {mode === "ZERO_SUM" && bet.type === "CHOICE" && bet.options && (() => {
+                                            const awayOptIdx = bet.options.findIndex(o => o.text.toLowerCase().includes(away!.toLowerCase()));
+                                            if (awayOptIdx === -1) return null;
+                                            const opt = bet.options[awayOptIdx];
+                                            const odds = opt.totalWagered > 0 && bet.totalPool > 0
+                                                ? (bet.totalPool / opt.totalWagered).toFixed(2)
+                                                : "2.00";
+                                            return (
+                                                <span className="text-xs font-black text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
+                                                    @{odds}x
+                                                </span>
+                                            );
                                         })()}
                                     </div>
                                 </div>
@@ -945,10 +989,12 @@ export function BetCard({ bet, userPoints, userWager, mode, powerUps: powerUpsPr
                                                     </div>
                                                     <span className={`font-bold ${selectedOption === String(idx) ? "text-blue-900" : "text-slate-600"}`}>{opt.text}</span>
                                                 </div>
-                                                {/* Odds calculation */}
-                                                {mode === "ZERO_SUM" && opt.totalWagered > 0 && bet.totalPool > 0 && (
-                                                    <span className={`text-xs font-bold ${selectedOption === String(idx) ? "text-blue-600 bg-white border-blue-200" : "text-slate-400"} px-2 py-1 rounded border`}>
-                                                        {(bet.totalPool / opt.totalWagered).toFixed(2)}x
+                                                {/* Odds calculation - Zero Sum Only */}
+                                                {mode === "ZERO_SUM" && (
+                                                    <span className={`text-xs font-black ${selectedOption === String(idx) ? "text-emerald-600 bg-emerald-50 border-emerald-200" : "text-slate-500 bg-slate-50 border-slate-200"} px-2 py-1 rounded-full border`}>
+                                                        @{opt.totalWagered > 0 && bet.totalPool > 0
+                                                            ? (bet.totalPool / opt.totalWagered).toFixed(2)
+                                                            : "2.00"}x
                                                     </span>
                                                 )}
                                             </label>
