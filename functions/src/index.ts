@@ -11,6 +11,11 @@ const db = getFirestore();
 
 // --- SECRETS ---
 const googleApiKey = defineSecret("GOOGLE_API_KEY");
+const sportsDbApiKey = defineSecret("SPORTS_DB_API_KEY");
+
+// --- SPORTSDB API ---
+const SPORTS_DB_BASE_URL = "https://www.thesportsdb.com/api/v1/json";
+let SPORTS_DB_API_KEY = "3"; // Default free tier, will be set from secret in scheduled function
 
 // --- TYPES ---
 interface Bet {
@@ -27,6 +32,18 @@ interface Bet {
     autoConfirm?: boolean;
     autoConfirmDelay?: number;
     status: string;
+    // Smart Routing fields
+    dataSource?: "API" | "AI";
+    sportsDbEventId?: string;
+    sportsDbLeagueId?: string;
+    sportsDbTeamId?: string;
+    liveScore?: {
+        homeScore: number;
+        awayScore: number;
+        matchTime: string;
+        matchStatus: "NOT_STARTED" | "LIVE" | "HALFTIME" | "FINISHED" | "POSTPONED";
+        lastUpdated: any;
+    };
 }
 
 async function resolveMatchWithAI(bet: Bet, apiKey: string): Promise<any | null> {
@@ -224,14 +241,195 @@ async function resolveGenericWithAI(bet: Bet, apiKey: string): Promise<any | nul
     }
 }
 
+// ============================================
+// API-BASED RESOLUTION (TheSportsDB)
+// ============================================
+
+function normalizeTeamName(name: string): string {
+    return name
+        .toLowerCase()
+        .replace(/\s+/g, ' ')
+        .replace(/\./g, '')
+        .replace(/'/g, '')
+        .trim();
+}
+
+async function findTeamByName(teamName: string): Promise<any | null> {
+    try {
+        const encodedTeam = encodeURIComponent(teamName);
+        const url = `${SPORTS_DB_BASE_URL}/${SPORTS_DB_API_KEY}/searchteams.php?t=${encodedTeam}`;
+
+        const response = await fetch(url);
+        if (!response.ok) return null;
+
+        const data = await response.json();
+        if (data.teams && data.teams.length > 0) {
+            return data.teams[0];
+        }
+        return null;
+    } catch (error) {
+        logger.error("Error searching for team:", error);
+        return null;
+    }
+}
+
+async function getTeamPastEvents(teamId: string): Promise<any[]> {
+    try {
+        const url = `${SPORTS_DB_BASE_URL}/${SPORTS_DB_API_KEY}/eventslast.php?id=${teamId}`;
+
+        const response = await fetch(url);
+        if (!response.ok) return [];
+
+        const data = await response.json();
+        return data.results || [];
+    } catch (error) {
+        logger.error("Error fetching team events:", error);
+        return [];
+    }
+}
+
+async function resolveMatchWithAPI(bet: Bet): Promise<any | null> {
+    const homeTeam = bet.matchDetails?.homeTeam;
+    const awayTeam = bet.matchDetails?.awayTeam;
+    const eventDate = bet.eventDate?.toDate ? bet.eventDate.toDate() : new Date(bet.eventDate);
+
+    if (!homeTeam || !awayTeam) return null;
+
+    logger.info(`🏟️ [SportsDB API] Looking for: ${homeTeam} vs ${awayTeam}`);
+
+    try {
+        // Find home team
+        const homeTeamData = await findTeamByName(homeTeam);
+        if (!homeTeamData) {
+            logger.warn(`Could not find team: ${homeTeam}`);
+            return null;
+        }
+
+        // Get past events
+        const events = await getTeamPastEvents(homeTeamData.idTeam);
+
+        // Find matching game
+        const targetDate = eventDate.toISOString().split('T')[0];
+
+        for (const event of events) {
+            const eventDateStr = event.dateEvent;
+            const isDateMatch = eventDateStr === targetDate;
+            const isHomeMatch = normalizeTeamName(event.strHomeTeam) === normalizeTeamName(homeTeam);
+            const isAwayMatch = normalizeTeamName(event.strAwayTeam) === normalizeTeamName(awayTeam);
+
+            // Check within +/- 1 day tolerance
+            const eventDateObj = new Date(eventDateStr);
+            const dayDiff = Math.abs((eventDateObj.getTime() - eventDate.getTime()) / (1000 * 60 * 60 * 24));
+            const isWithinTolerance = dayDiff <= 1;
+
+            if ((isDateMatch || isWithinTolerance) && isHomeMatch && isAwayMatch) {
+                const homeScore = event.intHomeScore ? parseInt(event.intHomeScore) : null;
+                const awayScore = event.intAwayScore ? parseInt(event.intAwayScore) : null;
+
+                if (homeScore !== null && awayScore !== null) {
+                    logger.info(`✅ [SportsDB API] Found score: ${homeScore} - ${awayScore}`);
+                    return {
+                        type: "MATCH",
+                        home: homeScore,
+                        away: awayScore,
+                        verification: {
+                            verified: true,
+                            source: "TheSportsDB API",
+                            verifiedAt: new Date().toISOString(),
+                            method: "API_LOOKUP",
+                            confidence: "high",
+                            actualResult: `${homeScore} - ${awayScore}`
+                        }
+                    };
+                }
+            }
+        }
+
+        return null;
+    } catch (error) {
+        logger.error("API Match Resolution Error", error);
+        return null;
+    }
+}
+
+async function resolveChoiceWithAPI(bet: Bet): Promise<any | null> {
+    // Extract match info
+    let homeTeam = bet.matchDetails?.homeTeam;
+    let awayTeam = bet.matchDetails?.awayTeam;
+
+    // Try parsing from question
+    if (!homeTeam || !awayTeam) {
+        const vsMatch = bet.question?.match(/(.+?)\s+(?:vs\.?|versus)\s+(.+)/i);
+        if (vsMatch) {
+            homeTeam = vsMatch[1].trim();
+            awayTeam = vsMatch[2].trim();
+        }
+    }
+
+    if (!homeTeam || !awayTeam) return null;
+
+    // Find the game result first (the bet already has eventDate)
+    const matchResult = await resolveMatchWithAPI({
+        ...bet,
+        matchDetails: { homeTeam, awayTeam }
+    } as Bet);
+
+    if (matchResult && matchResult.home !== undefined && matchResult.away !== undefined) {
+        // Determine winner
+        let winner: string;
+        if (matchResult.home > matchResult.away) {
+            winner = homeTeam;
+        } else if (matchResult.away > matchResult.home) {
+            winner = awayTeam;
+        } else {
+            winner = "Draw";
+        }
+
+        // Find matching option index
+        const options = bet.options || [];
+        let optionIndex = -1;
+
+        for (let i = 0; i < options.length; i++) {
+            const optionText = options[i].text || options[i];
+            if (normalizeTeamName(String(optionText)) === normalizeTeamName(winner) ||
+                String(optionText).toLowerCase() === "draw" && winner === "Draw") {
+                optionIndex = i;
+                break;
+            }
+        }
+
+        if (optionIndex !== -1) {
+            return {
+                type: "CHOICE",
+                optionIndex,
+                verification: {
+                    verified: true,
+                    source: "TheSportsDB API",
+                    verifiedAt: new Date().toISOString(),
+                    method: "API_LOOKUP",
+                    confidence: "high",
+                    actualResult: winner,
+                    score: `${matchResult.home} - ${matchResult.away}`
+                }
+            };
+        }
+    }
+
+    return null;
+}
 
 // --- SCHEDULED FUNCTION ---
 
 export const autoResolveBets = onSchedule(
-    { schedule: "every 15 minutes", secrets: [googleApiKey] },
+    { schedule: "every 15 minutes", secrets: [googleApiKey, sportsDbApiKey] },
     async () => {
         const apiKey = googleApiKey.value();
-        logger.info("Starting Auto-Resolution Job");
+
+        // Set the SportsDB API key from secret
+        SPORTS_DB_API_KEY = sportsDbApiKey.value() || "3";
+        logger.info(`SportsDB API Key configured: ${SPORTS_DB_API_KEY ? "Premium" : "Free tier"}`);
+
+        logger.info("Starting Auto-Resolution Job (Smart Routing enabled)");
 
         const now = Date.now();
 
@@ -252,7 +450,6 @@ export const autoResolveBets = onSchedule(
             if (!leagueId) continue;
 
             // Fetch League Settings to respect custom Dispute Window
-            // Optimization: Could cache this if processing many bets from same league, but for 15min interval fetching is acceptable.
             const leagueDoc = await db.collection("leagues").doc(leagueId).get();
             const leagueData = leagueDoc.data();
             const disputeWindowHours = leagueData?.disputeWindowHours || 12;
@@ -264,23 +461,149 @@ export const autoResolveBets = onSchedule(
                 continue;
             }
 
-            const delayMinutes = bet.autoConfirmDelay || 120;
-            const delayMs = delayMinutes * 60 * 1000;
-            const resolveTime = eventDate.getTime() + delayMs;
+            // SMART ROUTING: Determine resolution approach based on per-bet dataSource
+            const betDataSource = bet.dataSource || "AI"; // Default to AI if not set
 
-            if (now < resolveTime) {
-                const waitMin = Math.ceil((resolveTime - now) / 60000);
-                logger.info(`Skipping Bet ${doc.id} - Waiting for delay buffer. Game started: ${eventDate.toISOString()}, Delay: ${delayMinutes}m. Ready in ${waitMin} mins.`);
-                continue;
+            // For API bets: Check if game is FINISHED (from liveScore), no delay needed
+            // For AI bets: Use the traditional delay buffer
+            if (betDataSource === "API") {
+                // API mode: Only resolve if game is FINISHED
+                if (!bet.liveScore || bet.liveScore.matchStatus !== "FINISHED") {
+                    logger.info(`Skipping API Bet ${doc.id} - Game not finished yet (Status: ${bet.liveScore?.matchStatus || "NO_DATA"})`);
+                    continue;
+                }
+                logger.info(`✅ API Bet ${doc.id} - Game FINISHED, resolving immediately!`);
+            } else {
+                // AI mode: Use traditional delay buffer
+                const delayMinutes = bet.autoConfirmDelay || 120;
+                const delayMs = delayMinutes * 60 * 1000;
+                const resolveTime = eventDate.getTime() + delayMs;
+
+                if (now < resolveTime) {
+                    const waitMin = Math.ceil((resolveTime - now) / 60000);
+                    logger.info(`Skipping AI Bet ${doc.id} - Waiting for delay buffer. Game started: ${eventDate.toISOString()}, Delay: ${delayMinutes}m. Ready in ${waitMin} mins.`);
+                    continue;
+                }
             }
 
             // Resolve
             updates.push((async () => {
-                logger.info(`Resolving Bet ${doc.id} (${bet.question})`);
+                logger.info(`Resolving Bet ${doc.id} (${bet.question}) using ${betDataSource} mode`);
                 let result = null;
 
-                if (bet.type === "MATCH") result = await resolveMatchWithAI(bet, apiKey);
-                else result = await resolveGenericWithAI(bet, apiKey);
+                // SMART ROUTING: Use per-bet dataSource instead of global mode
+                if (betDataSource === "API" && bet.sportsDbEventId) {
+                    logger.info(`🏟️ [API Mode] Attempting API resolution for bet ${doc.id}`);
+
+                    // If we have liveScore with FINISHED status, we can use that directly!
+                    if (bet.liveScore && bet.liveScore.matchStatus === "FINISHED") {
+                        logger.info(`📊 Using cached liveScore data for resolution`);
+
+                        const homeScore = bet.liveScore.homeScore;
+                        const awayScore = bet.liveScore.awayScore;
+
+                        if (bet.type === "MATCH") {
+                            // For MATCH bets, return home/away scores directly
+                            result = {
+                                type: "MATCH",
+                                home: homeScore,
+                                away: awayScore,
+                                verification: {
+                                    verified: true,
+                                    source: "TheSportsDB API",
+                                    verifiedAt: new Date().toISOString(),
+                                    method: "API_LOOKUP",
+                                    confidence: "high",
+                                    actualResult: `${homeScore} - ${awayScore}`
+                                }
+                            };
+                        } else if (bet.type === "CHOICE" && bet.options) {
+                            // For CHOICE bets (1x2), determine winner and find matching option
+                            let winner: string;
+
+                            // Get team names from matchDetails or parse from question
+                            let homeTeam = bet.matchDetails?.homeTeam;
+                            let awayTeam = bet.matchDetails?.awayTeam;
+
+                            if (!homeTeam || !awayTeam) {
+                                // Try parsing from question
+                                const vsMatch = bet.question?.match(/(.+?)\s+(?:vs\.?|versus)\s+(.+)/i);
+                                if (vsMatch) {
+                                    homeTeam = vsMatch[1].trim();
+                                    awayTeam = vsMatch[2].trim();
+                                }
+                            }
+
+                            if (homeScore > awayScore) {
+                                winner = homeTeam || "Home";
+                            } else if (awayScore > homeScore) {
+                                winner = awayTeam || "Away";
+                            } else {
+                                winner = "Draw";
+                            }
+
+                            // Find matching option index
+                            let optionIndex = -1;
+                            for (let i = 0; i < bet.options.length; i++) {
+                                const optionText = String(bet.options[i].text || bet.options[i]).toLowerCase();
+                                const winnerLower = winner.toLowerCase();
+
+                                // Check for draw/tie
+                                if ((optionText === "draw" || optionText === "tie" || optionText === "x" || optionText === "unentschieden") && winner === "Draw") {
+                                    optionIndex = i;
+                                    break;
+                                }
+                                // Check for team name match
+                                if (normalizeTeamName(optionText) === normalizeTeamName(winnerLower) ||
+                                    optionText.includes(normalizeTeamName(winnerLower)) ||
+                                    normalizeTeamName(winnerLower).includes(optionText)) {
+                                    optionIndex = i;
+                                    break;
+                                }
+                            }
+
+                            if (optionIndex !== -1) {
+                                result = {
+                                    type: "CHOICE",
+                                    optionIndex,
+                                    verification: {
+                                        verified: true,
+                                        source: "TheSportsDB API",
+                                        verifiedAt: new Date().toISOString(),
+                                        method: "API_LOOKUP",
+                                        confidence: "high",
+                                        actualResult: winner,
+                                        score: `${homeScore} - ${awayScore}`
+                                    }
+                                };
+                                logger.info(`✅ CHOICE bet resolved: Winner = ${winner} (option ${optionIndex})`);
+                            } else {
+                                logger.warn(`⚠️ Could not match winner "${winner}" to any option`);
+                            }
+                        }
+                    } else {
+                        // Fallback: Query API directly
+                        if (bet.type === "MATCH") {
+                            result = await resolveMatchWithAPI(bet);
+                        } else if (bet.type === "CHOICE") {
+                            result = await resolveChoiceWithAPI(bet);
+                        }
+                    }
+
+                    if (!result) {
+                        logger.warn(`⚠️ [API Mode] Could not resolve bet ${doc.id}, falling back to AI...`);
+                    }
+                }
+
+                // Use AI if dataSource is AI or if API mode failed
+                if (!result) {
+                    logger.info(`🤖 [AI Mode] Using AI resolution for bet ${doc.id}`);
+                    if (bet.type === "MATCH") {
+                        result = await resolveMatchWithAI(bet, apiKey);
+                    } else {
+                        result = await resolveGenericWithAI(bet, apiKey);
+                    }
+                }
 
                 if (result) {
                     let outcome: any;
@@ -304,26 +627,28 @@ export const autoResolveBets = onSchedule(
 
                         // Log activity to the league's activity log
                         const activityRef = db.collection("leagues").doc(leagueId).collection("activityLog");
+                        const sourceType = betDataSource === "API" && result.verification?.method === "API_LOOKUP" ? "API" : "AI";
                         await activityRef.add({
                             timestamp: Timestamp.now(),
-                            type: "AI_AUTO_RESOLVE",
-                            actorId: "ai-scheduler",
-                            actorName: "AI Auto-Resolver",
+                            type: betDataSource === "API" ? "API_AUTO_RESOLVE" : "AI_AUTO_RESOLVE",
+                            actorId: betDataSource === "API" ? "api-scheduler" : "ai-scheduler",
+                            actorName: betDataSource === "API" ? "TheSportsDB Auto-Resolver" : "AI Auto-Resolver",
                             targetId: doc.id,
                             targetName: bet.question,
                             details: {
                                 aiResult: outcome,
-                                source: result.verification?.source || "AI",
+                                source: result.verification?.source || sourceType,
                                 confidence: result.verification?.confidence || "unknown",
-                                method: result.verification?.method || "AI_GROUNDING"
+                                method: result.verification?.method || (betDataSource === "API" ? "API_LOOKUP" : "AI_GROUNDING"),
+                                dataSource: betDataSource
                             },
-                            message: `AI auto-resolved bet "${bet.question}" - Result: ${JSON.stringify(outcome)} (Source: ${result.verification?.source || 'AI'})`
+                            message: `${sourceType} auto-resolved bet "${bet.question}" - Result: ${JSON.stringify(outcome)} (Source: ${result.verification?.source || sourceType})`
                         });
 
-                        logger.info(`✅ Bet ${doc.id} resolved successfully`);
+                        logger.info(`✅ Bet ${doc.id} resolved successfully via ${result.verification?.method || betDataSource}`);
                     }
                 } else {
-                    logger.info(`Skipping Bet ${doc.id} - AI returned unknown`);
+                    logger.info(`Skipping Bet ${doc.id} - Could not resolve with ${betDataSource} mode`);
                 }
             })());
         }
@@ -336,7 +661,7 @@ export const autoResolveBets = onSchedule(
  * Scheduled job to lock bets that have passed their closing time.
  * Runs every 15 minutes.
  */
-export const lockBets = onSchedule("every 15 minutes", async () => {
+export const lockBets = onSchedule("every 1 minutes", async () => {
     logger.info("Starting Bet Locking Job");
     const now = Timestamp.now();
 
@@ -368,3 +693,168 @@ export const lockBets = onSchedule("every 15 minutes", async () => {
     await batch.commit();
     logger.info(`Successfully locked ${counter} bets.`);
 });
+
+// ============================================
+// LIVE SCORE UPDATES (Every 2 minutes)
+// ============================================
+
+/**
+ * Get live score for an event by ID from TheSportsDB
+ */
+async function getLiveScoreByEventId(eventId: string): Promise<{
+    found: boolean;
+    homeScore?: number;
+    awayScore?: number;
+    matchTime?: string;
+    matchStatus?: "NOT_STARTED" | "LIVE" | "HALFTIME" | "FINISHED" | "POSTPONED";
+}> {
+    try {
+        const url = `${SPORTS_DB_BASE_URL}/${SPORTS_DB_API_KEY}/lookupevent.php?id=${eventId}`;
+
+        const response = await fetch(url);
+        if (!response.ok) {
+            return { found: false };
+        }
+
+        const data = await response.json();
+        if (!data.events || data.events.length === 0) {
+            return { found: false };
+        }
+
+        const event = data.events[0];
+        const homeScore = event.intHomeScore ? parseInt(event.intHomeScore) : undefined;
+        const awayScore = event.intAwayScore ? parseInt(event.intAwayScore) : undefined;
+
+        // Determine match status
+        let matchStatus: "NOT_STARTED" | "LIVE" | "HALFTIME" | "FINISHED" | "POSTPONED" = "NOT_STARTED";
+        const status = (event.strStatus || "").toLowerCase();
+
+        if (status.includes("ft") || status.includes("finished") || status.includes("final") || status.includes("aet")) {
+            matchStatus = "FINISHED";
+        } else if (status.includes("ht") || status.includes("halftime") || status.includes("half time")) {
+            matchStatus = "HALFTIME";
+        } else if (status.includes("live") || status.includes("'") || /^\d+$/.test(status)) {
+            matchStatus = "LIVE";
+        } else if (status.includes("postponed") || status.includes("cancelled") || status.includes("abandoned")) {
+            matchStatus = "POSTPONED";
+        } else if (homeScore !== undefined && awayScore !== undefined) {
+            // Has scores, likely finished or live
+            matchStatus = "FINISHED";
+        }
+
+        return {
+            found: true,
+            homeScore,
+            awayScore,
+            matchTime: event.strProgress || event.strStatus || "",
+            matchStatus
+        };
+
+    } catch (error) {
+        logger.error("Error fetching live score:", error);
+        return { found: false };
+    }
+}
+
+/**
+ * Scheduled job to update live scores for all active bets with API data source.
+ * Runs every 2 minutes for real-time updates.
+ */
+export const updateLiveScores = onSchedule(
+    { schedule: "every 2 minutes", secrets: [sportsDbApiKey] },
+    async () => {
+        // Set the SportsDB API key from secret
+        SPORTS_DB_API_KEY = sportsDbApiKey.value() || "3";
+
+        logger.info("🔴 Starting Live Score Update Job");
+
+        const now = Date.now();
+        const fourHoursAgo = now - (4 * 60 * 60 * 1000);
+        const fourHoursFromNow = now + (4 * 60 * 60 * 1000);
+
+        // Query bets that:
+        // 1. Have dataSource === "API" (linked to SportsDB)
+        // 2. Are LOCKED status (game in progress)
+        // 3. Have an eventDate within the live window (+/- 4 hours)
+        const betsSnapshot = await db.collectionGroup("bets")
+            .where("dataSource", "==", "API")
+            .where("status", "==", "LOCKED")
+            .get();
+
+        if (betsSnapshot.empty) {
+            logger.info("No API-linked locked bets to update.");
+            return;
+        }
+
+        // Filter by event date window
+        const eligibleBets = betsSnapshot.docs.filter(doc => {
+            const bet = doc.data();
+            if (!bet.eventDate) return false;
+
+            const eventTime = bet.eventDate.toDate ? bet.eventDate.toDate().getTime() : new Date(bet.eventDate).getTime();
+
+            // Check if event is within the live window
+            return eventTime >= fourHoursAgo && eventTime <= fourHoursFromNow;
+        });
+
+        logger.info(`Found ${eligibleBets.length} bets to update live scores`);
+
+        let updatedCount = 0;
+        let finishedCount = 0;
+
+        // Process bets in batches
+        const batchSize = 10;
+        for (let i = 0; i < eligibleBets.length; i += batchSize) {
+            const chunk = eligibleBets.slice(i, i + batchSize);
+            const batch = db.batch();
+
+            for (const betDoc of chunk) {
+                const bet = betDoc.data();
+                const eventId = bet.sportsDbEventId;
+
+                if (!eventId) {
+                    logger.warn(`Bet ${betDoc.id} has dataSource: API but no sportsDbEventId`);
+                    continue;
+                }
+
+                try {
+                    const liveScore = await getLiveScoreByEventId(eventId);
+
+                    if (liveScore.found) {
+                        // Update the bet with live score
+                        batch.update(betDoc.ref, {
+                            liveScore: {
+                                homeScore: liveScore.homeScore ?? 0,
+                                awayScore: liveScore.awayScore ?? 0,
+                                matchTime: liveScore.matchTime || "",
+                                matchStatus: liveScore.matchStatus || "NOT_STARTED",
+                                lastUpdated: Timestamp.now()
+                            }
+                        });
+
+                        updatedCount++;
+                        logger.info(`✅ Updated ${bet.question}: ${liveScore.homeScore} - ${liveScore.awayScore} (${liveScore.matchStatus})`);
+
+                        // If game is finished, it will be auto-resolved by autoResolveBets function
+                        if (liveScore.matchStatus === "FINISHED") {
+                            finishedCount++;
+                            logger.info(`🏁 Game finished: ${bet.question}`);
+                        }
+                    }
+
+                } catch (error) {
+                    logger.error(`Error updating live score for bet ${betDoc.id}:`, error);
+                }
+            }
+
+            await batch.commit();
+
+            // Small delay between batches to respect rate limits
+            if (i + batchSize < eligibleBets.length) {
+                await new Promise(r => setTimeout(r, 200));
+            }
+        }
+
+        logger.info(`🔴 Live Score Update Complete: ${updatedCount} updated, ${finishedCount} finished`);
+    }
+);

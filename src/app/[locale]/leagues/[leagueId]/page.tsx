@@ -23,6 +23,8 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Responsi
 import { useTranslations } from "next-intl";
 import { hasPermission } from "@/lib/rbac";
 import { ActivityLog } from "@/components/activity-log";
+import { useLiveLeaderboard } from "@/hooks/use-live-leaderboard";
+import { LiveLeaderboardRow, LiveIndicator, PositionChangeBadge, LiveDeltaBadge, LiveStatusDot } from "@/components/live-leaderboard";
 
 export default function LeaguePage() {
     const tBets = useTranslations('Bets');
@@ -468,6 +470,15 @@ export default function LeaguePage() {
             }
         }
     }, [allMembersActiveWagers, members.length]); // Intentionally not including 'members' deep dependency to avoid loops, just length check or manual trigger
+
+    // --------------------------------------------------------------------------
+    // LIVE LEADERBOARD (Real-time position tracking)
+    // --------------------------------------------------------------------------
+    const {
+        members: liveMembers,
+        hasLiveBets,
+        loading: liveLoading
+    } = useLiveLeaderboard(leagueId, members, allMembersActiveWagers);
 
 
     if (loading || dataLoading) {
@@ -1077,35 +1088,45 @@ export default function LeaguePage() {
                                                     {members.length} {members.length === 1 ? 'player' : 'players'} competing
                                                 </p>
                                             </div>
+                                            {/* Live indicator when there are live bets */}
+                                            <LiveIndicator hasLiveBets={hasLiveBets} />
                                         </div>
                                     </div>
 
-                                    {/* List Part */}
+                                    {/* List Part - Use live members when available */}
                                     <div className="divide-y-2 divide-black bg-white">
-                                        {members.map((member, index) => (
-                                            <div key={member.uid} className="flex items-center justify-between p-4 hover:bg-gray-50 transition-colors">
-                                                <div className="flex items-center gap-4">
-                                                    {/* Ranking */}
-                                                    <div className={`flex h-8 w-8 items-center justify-center rounded-full font-bold text-sm border-2 border-black ${index === 0 ? "bg-yellow-400 text-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]" :
-                                                        index === 1 ? "bg-zinc-300 text-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]" :
-                                                            index === 2 ? "bg-orange-400 text-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]" :
-                                                                "bg-gray-100 text-gray-500"
-                                                        }`}>
-                                                        {index + 1}
-                                                    </div>
-                                                    <div className="flex items-center gap-3">
-                                                        {member.photoURL ? (
-                                                            // eslint-disable-next-line @next/next/no-img-element
-                                                            <img src={member.photoURL} alt={member.displayName} className="h-10 w-10 rounded-full border border-white/10" />
-                                                        ) : (
-                                                            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/20 border border-primary/30">
-                                                                <UserIcon className="h-5 w-5 text-primary" />
-                                                            </div>
-                                                        )}
-                                                        <div>
-                                                            {/* Name */}
-                                                            <span className="font-black text-black">{member.displayName}</span>
-                                                            {/* Role Badge - Right below username */}
+                                        {(hasLiveBets ? liveMembers : members).map((member, index) => {
+                                            // Cast to MemberWithLiveStats if we have live data
+                                            const liveMember = hasLiveBets ? member as any : null;
+
+                                            return (
+                                                <div key={member.uid} className="flex items-center justify-between p-4 hover:bg-gray-50 transition-colors">
+                                                    <div className="flex items-center gap-3 sm:gap-4 min-w-0">
+                                                        {/* Ranking */}
+                                                        <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full font-bold text-sm border-2 border-black ${index === 0 ? "bg-yellow-400 text-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]" :
+                                                            index === 1 ? "bg-zinc-300 text-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]" :
+                                                                index === 2 ? "bg-orange-400 text-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]" :
+                                                                    "bg-gray-100 text-gray-500"
+                                                            }`}>
+                                                            {index + 1}
+                                                        </div>
+
+                                                        {/* Avatar */}
+                                                        <div className="shrink-0">
+                                                            {member.photoURL ? (
+                                                                // eslint-disable-next-line @next/next/no-img-element
+                                                                <img src={member.photoURL} alt={member.displayName} className="h-10 w-10 rounded-full border border-white/10" />
+                                                            ) : (
+                                                                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/20 border border-primary/30">
+                                                                    <UserIcon className="h-5 w-5 text-primary" />
+                                                                </div>
+                                                            )}
+                                                        </div>
+
+                                                        {/* Name & badges */}
+                                                        <div className="min-w-0">
+                                                            <span className="font-black text-black truncate block">{member.displayName}</span>
+                                                            {/* Role Badge */}
                                                             {member.role === 'OWNER' && (
                                                                 <div className="mt-0.5">
                                                                     <span className="inline-flex items-center gap-1 rounded bg-yellow-100 px-1.5 py-0.5 text-[10px] font-bold text-yellow-600 border border-yellow-300">
@@ -1141,35 +1162,55 @@ export default function LeaguePage() {
                                                                     })()}
                                                                 </p>
                                                             )}
-                                                            {/* Buy In - Only Zero Sum */}
-                                                            {league.mode === "ZERO_SUM" && (
-                                                                <p className="text-xs text-gray-400 font-bold mt-0.5">
-                                                                    Buy In: {(member.totalBought || (league.buyInType === "FIXED" ? league.startCapital : 0)).toLocaleString()} chips
-                                                                </p>
+                                                        </div>
+                                                    </div>
+
+                                                    {/* Right side: Live indicators + Points */}
+                                                    <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+                                                        {/* Live indicators (only show when there are live bets) */}
+                                                        {hasLiveBets && liveMember?.activeLiveBets > 0 && (
+                                                            <div className="flex items-center gap-1.5 sm:gap-2">
+                                                                {/* Position change arrow */}
+                                                                <PositionChangeBadge change={liveMember.positionChange} compact />
+
+                                                                {/* Delta points */}
+                                                                <LiveDeltaBadge delta={liveMember.potentialDelta} compact />
+
+                                                                {/* Status dot */}
+                                                                <LiveStatusDot
+                                                                    winningBets={liveMember.winningBets}
+                                                                    losingBets={liveMember.losingBets}
+                                                                    neutralBets={liveMember.neutralBets}
+                                                                    compact
+                                                                />
+                                                            </div>
+                                                        )}
+
+                                                        {/* Points */}
+                                                        <div className="text-right">
+                                                            <div className="font-black text-xl sm:text-2xl text-primary drop-shadow-[2px_2px_0_rgba(0,0,0,1)] font-comic">
+                                                                {hasLiveBets && liveMember
+                                                                    ? liveMember.livePoints.toLocaleString()
+                                                                    : (member.points + (allMembersActiveWagers[member.uid] || 0)).toLocaleString()
+                                                                } pts
+                                                            </div>
+                                                            {/* W/L Record under points */}
+                                                            {member.recentResults && member.recentResults.length > 0 && (
+                                                                <div className="flex items-center justify-end gap-2 mt-1">
+                                                                    <span className="text-[11px] font-black text-green-600">
+                                                                        {member.recentResults.filter(r => r === 'W').length}W
+                                                                    </span>
+                                                                    <span className="text-gray-300">/</span>
+                                                                    <span className="text-[11px] font-black text-red-500">
+                                                                        {member.recentResults.filter(r => r === 'L').length}L
+                                                                    </span>
+                                                                </div>
                                                             )}
                                                         </div>
                                                     </div>
                                                 </div>
-                                                <div className="text-right">
-                                                    <div className="font-black text-2xl text-primary drop-shadow-[2px_2px_0_rgba(0,0,0,1)] font-comic">
-                                                        {/* Show wallet + active wagers for all members */}
-                                                        {(member.points + (allMembersActiveWagers[member.uid] || 0)).toLocaleString()} pts
-                                                    </div>
-                                                    {/* W/L Record under points */}
-                                                    {member.recentResults && member.recentResults.length > 0 && (
-                                                        <div className="flex items-center justify-end gap-2 mt-1">
-                                                            <span className="text-[11px] font-black text-green-600">
-                                                                {member.recentResults.filter(r => r === 'W').length}W
-                                                            </span>
-                                                            <span className="text-gray-300">/</span>
-                                                            <span className="text-[11px] font-black text-red-500">
-                                                                {member.recentResults.filter(r => r === 'L').length}L
-                                                            </span>
-                                                        </div>
-                                                    )}
-                                                </div>
-                                            </div>
-                                        ))}
+                                            );
+                                        })}
                                     </div>
                                 </div>
                             </section>
@@ -1305,23 +1346,34 @@ export default function LeaguePage() {
                                                 history.sort((a, b) => (b.resolvedAt?.seconds || 0) - (a.resolvedAt?.seconds || 0));
 
                                                 return (
-                                                    <div className="space-y-6 pt-6 border-t-4 border-black border-dashed">
-                                                        <h3 className="text-xl font-black text-gray-400 font-comic uppercase mb-4">The Archive</h3>
-                                                        {history.map(bet => {
-                                                            const wager = myActiveWagers[bet.id];
-                                                            return (
-                                                                <BetCard
-                                                                    key={bet.id}
-                                                                    bet={bet}
-                                                                    userPoints={myMemberProfile?.points || 0}
-                                                                    mode={league.mode}
-                                                                    userWager={wager}
-                                                                    powerUps={myMemberProfile?.powerUps || league.arcadePowerUpSettings}
-                                                                    onWagerSuccess={fetchLeagueData}
-                                                                    isOwnerOverride={isOwner || user?.uid === bet.creatorId}
-                                                                />
-                                                            );
-                                                        })}
+                                                    <div className="space-y-3 pt-6 border-t-4 border-black border-dashed">
+                                                        <div className="flex items-center gap-2 mb-2 cursor-pointer select-none" onClick={() => toggleSection('archive')}>
+                                                            <div className={`transition-transform duration-200 ${collapsedSections['archive'] ? '-rotate-90' : ''}`}>
+                                                                <ChevronDown className="h-5 w-5 text-gray-400" />
+                                                            </div>
+                                                            <Archive className="h-5 w-5 text-gray-400" />
+                                                            <h3 className="text-xl font-black text-gray-400 font-comic uppercase">The Archive</h3>
+                                                            <span className="text-sm font-bold text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full">{history.length}</span>
+                                                        </div>
+                                                        {!collapsedSections['archive'] && (
+                                                            <div className="space-y-6">
+                                                                {history.map(bet => {
+                                                                    const wager = myActiveWagers[bet.id];
+                                                                    return (
+                                                                        <BetCard
+                                                                            key={bet.id}
+                                                                            bet={bet}
+                                                                            userPoints={myMemberProfile?.points || 0}
+                                                                            mode={league.mode}
+                                                                            userWager={wager}
+                                                                            powerUps={myMemberProfile?.powerUps || league.arcadePowerUpSettings}
+                                                                            onWagerSuccess={fetchLeagueData}
+                                                                            isOwnerOverride={isOwner || user?.uid === bet.creatorId}
+                                                                        />
+                                                                    );
+                                                                })}
+                                                            </div>
+                                                        )}
                                                     </div>
                                                 );
                                             })()}

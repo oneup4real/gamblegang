@@ -689,6 +689,18 @@ export function BetCard({ bet, userPoints, userWager, mode, powerUps: powerUpsPr
                                     {ticketWagerStatus === "WON" ? "Won" : "Resolved"}
                                 </span>
                             )}
+                            {/* Data Source Indicator - Owner/Admin Only */}
+                            {isOwner && bet.dataSource && (
+                                <span
+                                    className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${bet.dataSource === "API"
+                                            ? "bg-purple-100 text-purple-600 border border-purple-200"
+                                            : "bg-orange-100 text-orange-600 border border-orange-200"
+                                        }`}
+                                    title={bet.dataSource === "API" ? "TheSportsDB Live Tracking" : "AI-powered resolution"}
+                                >
+                                    {bet.dataSource === "API" ? "📡 API" : "🤖 AI"}
+                                </span>
+                            )}
                         </div>
 
                         <div className="flex items-center gap-4 text-xs font-bold text-slate-500">
@@ -837,30 +849,40 @@ export function BetCard({ bet, userPoints, userWager, mode, powerUps: powerUpsPr
                                             const t = o.text.toLowerCase();
                                             return t === "draw" || t === "tie" || t === "x" || t === "unentschieden";
                                         });
-                                        if (drawIdx !== -1 && bet.status === "OPEN" && !isExpired && (!userWager || isEditing)) {
-                                            const isSelected = selectedOption === String(drawIdx);
-                                            const drawOpt = bet.options[drawIdx];
-                                            const drawOdds = drawOpt.totalWagered > 0 && bet.totalPool > 0
-                                                ? (bet.totalPool / drawOpt.totalWagered).toFixed(2)
-                                                : "3.00";
-                                            return (
-                                                <div className="flex flex-col items-center gap-1 mt-1">
+                                        if (drawIdx === -1) return null;
+
+                                        const drawOpt = bet.options[drawIdx];
+                                        const drawOdds = drawOpt.totalWagered > 0 && bet.totalPool > 0
+                                            ? (bet.totalPool / drawOpt.totalWagered).toFixed(2)
+                                            : "3.00";
+
+                                        // Check if user can interact (place bet)
+                                        const canBet = bet.status === "OPEN" && !isExpired && (!userWager || isEditing);
+                                        const isSelected = selectedOption === String(drawIdx);
+                                        const userSelectedDraw = userWager && String(userWager.selection) === String(drawIdx);
+
+                                        return (
+                                            <div className="flex flex-col items-center gap-1 mt-1">
+                                                {canBet ? (
                                                     <button
                                                         onClick={() => setSelectedOption(String(drawIdx))}
                                                         className={`px-3 py-0.5 text-[10px] font-black uppercase rounded border-2 transition-all ${isSelected ? "bg-slate-600 text-white border-slate-800" : "bg-white text-slate-400 border-slate-200 hover:border-slate-400"}`}
                                                     >
                                                         Draw
                                                     </button>
-                                                    {/* DRAW ODDS - Zero Sum Only */}
-                                                    {mode === "ZERO_SUM" && (
-                                                        <span className="text-[10px] font-bold text-slate-500">
-                                                            @{drawOdds}x
-                                                        </span>
-                                                    )}
-                                                </div>
-                                            );
-                                        }
-                                        return null;
+                                                ) : (
+                                                    <span className={`px-3 py-0.5 text-[10px] font-black uppercase rounded border-2 ${userSelectedDraw ? "bg-slate-600 text-white border-slate-800" : "bg-white text-slate-400 border-slate-200"}`}>
+                                                        Draw
+                                                    </span>
+                                                )}
+                                                {/* DRAW ODDS - Zero Sum Only */}
+                                                {mode === "ZERO_SUM" && (
+                                                    <span className="text-[10px] font-bold text-slate-500">
+                                                        @{drawOdds}x
+                                                    </span>
+                                                )}
+                                            </div>
+                                        );
                                     })()}
                                 </div>
 

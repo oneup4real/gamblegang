@@ -20,6 +20,7 @@ import {
     BetTabs
 } from "@/components/dashboard";
 import { subDays } from "date-fns";
+import { LiveBetsSection } from "@/components/live-bets-section";
 
 export default function DashboardPage() {
     const t = useTranslations('Dashboard');
@@ -182,6 +183,9 @@ export default function DashboardPage() {
                     onResolveClick={() => { setSelectedBetTab('pending'); setTimeout(() => document.getElementById('bet-tabs-section')?.scrollIntoView({ behavior: 'smooth' }), 50); }}
                     onNewBetsClick={() => { setSelectedBetTab('available'); setTimeout(() => document.getElementById('bet-tabs-section')?.scrollIntoView({ behavior: 'smooth' }), 50); }}
                 />
+
+                {/* 🔴 Live Bets Section - Real-time scores */}
+                <LiveBetsSection userId={user.uid} />
 
                 {/* Stats Gauges */}
                 <StatsGauges

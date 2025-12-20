@@ -1,6 +1,8 @@
 "use server";
 
 import { GoogleGenerativeAI } from "@google/generative-ai";
+import { getDataMode } from "@/lib/services/data-mode-service";
+import { generateBulkBetsFromAPI, apiAutoResolveBet } from "@/lib/services/sports-data-service";
 
 const apiKey = process.env.GOOGLE_API_KEY;
 
@@ -60,6 +62,25 @@ export async function generateBetIdeas(topic: string) {
 }
 
 export async function generateBulkBets(topic: string, timeframe: string, type: "CHOICE" | "MATCH", outcomeType?: "WINNER" | "WINNER_DRAW") {
+    // Check global data mode setting
+    const dataMode = await getDataMode();
+    console.log(`🔄 [Bulk Generation] Data mode: ${dataMode}`);
+
+    // Route to API-based generation if in API mode
+    if (dataMode === "API") {
+        console.log(`🏟️ [Bulk Generation] Using TheSportsDB API mode...`);
+        try {
+            const apiBets = await generateBulkBetsFromAPI(topic, timeframe, type, outcomeType);
+            if (apiBets.length > 0) {
+                return apiBets;
+            }
+            console.warn(`⚠️ [API Mode] No bets found, falling back to AI...`);
+        } catch (error) {
+            console.error(`❌ [API Mode] Error, falling back to AI:`, error);
+        }
+    }
+
+    // AI Mode or API fallback
     if (!apiKey) {
         console.warn("No Gemini API Key found. Returning mock bulk data.");
         await new Promise(r => setTimeout(r, 1000));
@@ -70,7 +91,7 @@ export async function generateBulkBets(topic: string, timeframe: string, type: "
     }
 
     try {
-        console.log(`🔍 [Bulk Generation] Searching for REAL ${topic} matches in timeframe: ${timeframe}`);
+        console.log(`🔍 [Bulk Generation] Using AI mode - Searching for REAL ${topic} matches in timeframe: ${timeframe}`);
 
         const genAI = new GoogleGenerativeAI(apiKey);
         const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
@@ -365,10 +386,30 @@ Return ONLY the JSON, no other text or markdown.`;
 
 /**
  * AI Auto-Resolve: Looks up actual result and returns structured data for auto-filling
- * For MATCH bets: Uses TheSportsDB API for real sports data
+ * Checks global data mode to determine whether to use AI (Gemini) or API (TheSportsDB)
+ * For MATCH bets: Uses TheSportsDB API for real sports data (in API mode)
  * For CHOICE/RANGE bets: Falls back to AI when appropriate
  */
 export async function aiAutoResolveBet(bet: any) {
+    // Check global data mode setting
+    const dataMode = await getDataMode();
+    console.log(`🔄 [Auto-Resolve] Data mode: ${dataMode}`);
+
+    // Try API-based resolution first if in API mode
+    if (dataMode === "API") {
+        console.log(`🏟️ [Auto-Resolve] Using TheSportsDB API mode...`);
+        try {
+            const apiResult = await apiAutoResolveBet(bet);
+            if (apiResult) {
+                return apiResult;
+            }
+            console.warn(`⚠️ [API Mode] Could not resolve, falling back to AI...`);
+        } catch (error) {
+            console.error(`❌ [API Mode] Error, falling back to AI:`, error);
+        }
+    }
+
+    // AI Mode or API fallback
     if (!apiKey) {
         await new Promise(r => setTimeout(r, 1000));
         // Mock response based on bet type

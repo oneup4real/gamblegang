@@ -57,11 +57,12 @@ export interface Bet {
     // Verification stamp - shown on all bet tickets
     verification?: {
         verified: boolean;
-        source: string; // e.g., "ESPN", "NBA.com", "AI Web Search"
+        source: string; // e.g., "ESPN", "NBA.com", "AI Web Search", "TheSportsDB"
         url?: string; // Direct link to proof
         verifiedAt: string; // ISO timestamp
-        method: "AI_GROUNDING" | "MANUAL" | "API";
+        method: "AI_GROUNDING" | "MANUAL" | "API" | "API_LOOKUP";
         confidence?: "high" | "medium" | "low";
+        actualResult?: string; // Store readable result for verification badge
     };
     // Dispute fields
     disputeDeadline?: any; // Timestamp when dispute period ends (24-48h after proofing)
@@ -82,6 +83,19 @@ export interface Bet {
     autoConfirm?: boolean; // Auto-confirm result via AI
     autoConfirmDelay?: number; // Delay in minutes after eventDate
     choiceStyle?: "VARIOUS" | "MATCH_WINNER" | "MATCH_1X2"; // For CHOICE bets: VARIOUS = classic list, MATCH_WINNER = 2-way logos, MATCH_1X2 = 3-way logos + Draw
+
+    // Smart Routing & Live Tracking (NEW)
+    dataSource?: "API" | "AI"; // Auto-detected: API = TheSportsDB, AI = Gemini fallback
+    sportsDbEventId?: string; // TheSportsDB event ID (if found)
+    sportsDbLeagueId?: string; // TheSportsDB league ID for live queries
+    sportsDbTeamId?: string; // Home team ID for faster lookups
+    liveScore?: { // Updated by cloud function every 2 minutes
+        homeScore: number;
+        awayScore: number;
+        matchTime: string; // e.g., "67'", "HT", "FT", "NS"
+        matchStatus: "NOT_STARTED" | "LIVE" | "HALFTIME" | "FINISHED" | "POSTPONED";
+        lastUpdated: any; // Timestamp
+    };
 }
 
 export interface Wager {
@@ -472,8 +486,9 @@ export async function resolveBet(
         source: string;
         url?: string;
         verifiedAt: string;
-        method: "AI_GROUNDING" | "MANUAL" | "API";
+        method: "AI_GROUNDING" | "MANUAL" | "API" | "API_LOOKUP";
         confidence?: "high" | "medium" | "low";
+        actualResult?: string;
     }
 ) {
     // 0. Fetch League to check Settings & Mode
@@ -741,8 +756,9 @@ export async function startProofing(
         verified: boolean;
         source: string;
         verifiedAt: string;
-        method: "AI_GROUNDING" | "MANUAL" | "API";
+        method: "AI_GROUNDING" | "MANUAL" | "API" | "API_LOOKUP";
         confidence?: "high" | "medium" | "low";
+        actualResult?: string;
     }
 ) {
     // Fetch league to get disputeWindowHours
