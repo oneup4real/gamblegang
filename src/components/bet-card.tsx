@@ -1318,7 +1318,7 @@ export function BetCard({ bet, userPoints, userWager, mode, powerUps: powerUpsPr
             {
                 ticketStatus && !isEditing && (
                     <div
-                        className={`relative cursor-pointer transition-transform hover:scale-[1.02] ${userWager && bet.status === "OPEN" && !isExpired ? 'hover:ring-2 hover:ring-blue-400 rounded-lg' : ''}`}
+                        className={`relative cursor-pointer transition-transform hover:scale-[1.02] self-stretch ${userWager && bet.status === "OPEN" && !isExpired ? 'hover:ring-2 hover:ring-blue-400 rounded-r-xl' : ''}`}
                         onClick={() => {
                             if (isScrolling) return;
                             if (userWager && bet.status === "OPEN" && !isExpired) {

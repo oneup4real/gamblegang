@@ -199,26 +199,47 @@ export function SidePanelTicket({
     };
 
     // --- MAIN WRAPPER STYLES ---
-    let containerClass = "bg-slate-50 border-slate-200"; // Default
-    if (status === "OPEN") containerClass = "bg-slate-50";
-    if (status === "LOCKED") containerClass = "bg-yellow-50/50 border-amber-100";
+    let containerClass = "bg-slate-50"; // Default
+    let perforationBorderClass = "border-slate-300";
+
+    if (status === "OPEN") {
+        containerClass = "bg-slate-50";
+    }
+    if (status === "LOCKED") {
+        containerClass = "bg-yellow-50/50";
+        perforationBorderClass = "border-amber-200";
+    }
     if (status === "PROOFING") {
-        if (isWinning) containerClass = "bg-green-50 border-green-200";
-        else containerClass = "bg-blue-50 border-blue-100";
+        if (isWinning) {
+            containerClass = "bg-green-50";
+            perforationBorderClass = "border-green-300";
+        } else {
+            containerClass = "bg-blue-50";
+            perforationBorderClass = "border-blue-200";
+        }
     }
     if (status === "RESOLVED") {
-        if (wagerStatus === "WON") containerClass = "bg-emerald-100 border-emerald-200";
-        else containerClass = "bg-slate-100 border-slate-200 border-l-4 border-l-slate-300"; // Lost
+        if (wagerStatus === "WON") {
+            containerClass = "bg-emerald-100";
+            perforationBorderClass = "border-emerald-300";
+        } else {
+            containerClass = "bg-slate-100";
+            perforationBorderClass = "border-slate-300";
+        }
     }
 
     return (
-        <div className={`w-full md:w-36 p-3 md:p-4 flex flex-row md:flex-col items-center md:items-stretch justify-between relative min-h-0 md:min-h-[160px] ${containerClass} transition-colors duration-300`}>
-            {/* Perforation Effect */}
-            <div className="absolute hidden md:block -top-1.5 left-1/2 -translate-x-1/2 w-3 h-3 bg-[#f8fafc] rounded-full border-b border-inherit bg-inherit z-10 box-content border-slate-300"></div>
-            <div className="absolute hidden md:block -bottom-1.5 left-1/2 -translate-x-1/2 w-3 h-3 bg-[#f8fafc] rounded-full border-t border-inherit bg-inherit z-10 box-content border-slate-300"></div>
+        <div className={`w-full md:w-36 p-3 md:p-4 flex flex-row md:flex-col items-center md:items-stretch justify-between relative h-full rounded-r-xl ${containerClass} transition-colors duration-300`}>
+            {/* Perforation Effect - Top Hole (uses page background color for punch-through effect) */}
+            <div className="absolute hidden md:block -top-1.5 left-1/2 -translate-x-1/2 w-3 h-3 rounded-full z-20 bg-slate-100" style={{ boxShadow: 'inset 0 2px 3px rgba(0,0,0,0.2), 0 1px 2px rgba(0,0,0,0.1)' }}></div>
+            {/* Perforation Effect - Bottom Hole */}
+            <div className="absolute hidden md:block -bottom-1.5 left-1/2 -translate-x-1/2 w-3 h-3 rounded-full z-20 bg-slate-100" style={{ boxShadow: 'inset 0 -2px 3px rgba(0,0,0,0.2), 0 -1px 2px rgba(0,0,0,0.1)' }}></div>
 
             {/* Dashed line separator for perforation illusion */}
-            <div className="absolute hidden md:block top-0 bottom-0 -left-[1px] w-[1px] border-l-2 border-dashed border-slate-300 opacity-30"></div>
+            <div className={`absolute hidden md:block top-0 bottom-0 -left-[1px] w-[1px] border-l-2 border-dashed ${perforationBorderClass} opacity-50`}></div>
+
+            {/* Inner shadow for depth */}
+            <div className="absolute inset-0 pointer-events-none rounded-r-xl" style={{ boxShadow: 'inset 3px 0 10px rgba(0,0,0,0.06)' }}></div>
 
             {renderTicketContent()}
         </div>
