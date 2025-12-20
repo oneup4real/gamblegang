@@ -1018,17 +1018,17 @@ export default function LeaguePage() {
                                     <div className={`bg-gradient-to-r ${LEAGUE_COLOR_SCHEMES[league.colorScheme || 'blue'].from} ${LEAGUE_COLOR_SCHEMES[league.colorScheme || 'blue'].to} rounded-2xl border-4 border-black p-6 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] mb-6`}>
                                         <div className="flex flex-col md:flex-row items-center justify-between gap-6">
                                             {/* Balance */}
-                                            <div>
-                                                <p className="text-sm font-black uppercase text-white/80 tracking-widest">My Chips</p>
+                                            <div className="text-center md:text-left">
+                                                <p className="text-sm font-black uppercase text-white/80 tracking-widest">My Points</p>
                                                 <p className="text-5xl font-black text-white drop-shadow-[4px_4px_0_rgba(0,0,0,0.3)] font-comic">
-                                                    {/* Show total chips (wallet + active wagers from non-resolved bets only) */}
+                                                    {/* Show total points (wallet + active wagers from non-resolved bets only) */}
                                                     {(myMemberProfile.points + stats.activeWagered).toLocaleString()}
                                                 </p>
                                                 <p className="text-xs text-white/90 font-bold mt-1">
                                                     Wallet: {myMemberProfile.points.toLocaleString()} | Active: {stats.activeWagered.toLocaleString()}
                                                 </p>
                                                 <p className="text-xs text-white/70 font-bold mt-0.5">
-                                                    Total Invested: {(myMemberProfile.totalBought || (league.buyInType === "FIXED" ? league.startCapital : 0)).toLocaleString()} chips
+                                                    Total Invested: {(myMemberProfile.totalBought || (league.buyInType === "FIXED" ? league.startCapital : 0)).toLocaleString()} pts
                                                 </p>
                                             </div>
 
@@ -1052,7 +1052,7 @@ export default function LeaguePage() {
                                             <button
                                                 onClick={handleRebuy}
                                                 disabled={actionLoading || league.buyInType === "FIXED"}
-                                                title={league.buyInType === "FIXED" ? "Rebuys disabled in Fixed mode" : "Buy more chips"}
+                                                title={league.buyInType === "FIXED" ? "Rebuys disabled in Fixed mode" : "Buy more points"}
                                                 className={`flex items-center gap-2 px-6 py-3 border-2 border-black rounded-xl text-lg font-black text-black transition-all shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:translate-y-[-2px] ${league.buyInType === "FIXED" ? "bg-gray-300 cursor-not-allowed opacity-70" : "bg-yellow-400 hover:bg-yellow-500"}`}
                                             >
                                                 <Coins className="h-5 w-5 text-black" />

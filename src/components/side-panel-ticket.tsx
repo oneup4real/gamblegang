@@ -229,17 +229,12 @@ export function SidePanelTicket({
     }
 
     return (
-        <div className={`w-full md:w-36 p-3 md:p-4 flex flex-row md:flex-col items-center md:items-stretch justify-between relative h-full rounded-r-xl ${containerClass} transition-colors duration-300`}>
-            {/* Perforation Effect - Top Hole (uses page background color for punch-through effect) */}
-            <div className="absolute hidden md:block -top-1.5 left-1/2 -translate-x-1/2 w-3 h-3 rounded-full z-20 bg-slate-100" style={{ boxShadow: 'inset 0 2px 3px rgba(0,0,0,0.2), 0 1px 2px rgba(0,0,0,0.1)' }}></div>
-            {/* Perforation Effect - Bottom Hole */}
-            <div className="absolute hidden md:block -bottom-1.5 left-1/2 -translate-x-1/2 w-3 h-3 rounded-full z-20 bg-slate-100" style={{ boxShadow: 'inset 0 -2px 3px rgba(0,0,0,0.2), 0 -1px 2px rgba(0,0,0,0.1)' }}></div>
-
-            {/* Dashed line separator for perforation illusion */}
-            <div className={`absolute hidden md:block top-0 bottom-0 -left-[1px] w-[1px] border-l-2 border-dashed ${perforationBorderClass} opacity-50`}></div>
+        <div className={`w-full md:w-36 p-3 md:p-4 flex flex-row md:flex-col items-center md:items-stretch justify-between relative h-full rounded-b-xl md:rounded-b-none md:rounded-r-xl ${containerClass} transition-colors duration-300`}>
+            {/* Dashed line separator for ticket tear-off effect */}
+            <div className={`absolute hidden md:block top-0 bottom-0 -left-[1px] w-[1px] border-l-2 border-dashed ${perforationBorderClass} opacity-60`}></div>
 
             {/* Inner shadow for depth */}
-            <div className="absolute inset-0 pointer-events-none rounded-r-xl" style={{ boxShadow: 'inset 3px 0 10px rgba(0,0,0,0.06)' }}></div>
+            <div className="absolute inset-0 pointer-events-none rounded-b-xl md:rounded-b-none md:rounded-r-xl" style={{ boxShadow: 'inset 3px 0 12px rgba(0,0,0,0.04)' }}></div>
 
             {renderTicketContent()}
         </div>

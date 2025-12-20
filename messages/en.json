@@ -118,7 +118,7 @@
         "flexibleDesc": "Start at 0, buy points anytime",
         "startCapital": "Starting Capital",
         "rebuyUnit": "Rebuy Unit",
-        "chipsDesc": "Initial chips each player starts with.",
+        "chipsDesc": "Initial points each player starts with.",
         "startDate": "Start Date",
         "endDate": "End Date",
         "aiAutoPopulate": "✨ AI Auto-Populate",

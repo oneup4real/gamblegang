@@ -1344,7 +1344,7 @@ export function BetCard({ bet, userPoints, userWager, mode, powerUps: powerUpsPr
                             payout={ticketPayout}
                             isWinning={ticketIsWinning}
                             odds={ticketOdds}
-                            currency={mode === "ZERO_SUM" ? "chips" : "pts"}
+                            currency="pts"
                             powerUp={ticketPowerUp}
                         />
                     </div>
