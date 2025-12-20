@@ -29,6 +29,11 @@ export function PWAInstallProvider({ children }: { children: ReactNode }) {
             const isStandalone = window.matchMedia('(display-mode: standalone)').matches ||
                 (window.navigator as any).standalone === true;
             setIsInstalled(isStandalone);
+
+            // Register Service Worker
+            if ('serviceWorker' in navigator) {
+                navigator.serviceWorker.register('/sw.js').catch(err => console.error('SW registration failed', err));
+            }
         }
 
         // Listen for the beforeinstallprompt event
