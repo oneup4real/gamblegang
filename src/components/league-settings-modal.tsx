@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { X, Loader2, AlertTriangle, Save, RefreshCw, Trash, Users, Crown, Shield, User } from "lucide-react";
+import { X, Loader2, AlertTriangle, Save, RefreshCw, Trash, Users, Crown, Shield, User, Trophy } from "lucide-react";
 import { useAuth } from "@/components/auth-provider";
 import { League, updateLeague, resetLeague, LeagueMember, updateMemberRole, LEAGUE_COLOR_SCHEMES, LeagueColorScheme, LEAGUE_ICONS, backfillPowerUps } from "@/lib/services/league-service";
 import { Button } from "@/components/ui/button";
@@ -468,6 +468,47 @@ export function LeagueSettingsModal({ league, isOpen, onClose, onUpdate }: Leagu
                                         Reset Points
                                     </Button>
                                 </div>
+
+                                {league.status !== "FINISHED" && (
+                                    <div className="space-y-4 p-4 border-2 border-black bg-blue-50 rounded-xl shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
+                                        <div className="flex items-start gap-4">
+                                            <div className="p-2 bg-blue-100 rounded-lg border-2 border-black">
+                                                <Crown className="h-6 w-6 text-blue-600" />
+                                            </div>
+                                            <div>
+                                                <h4 className="font-black text-blue-700 text-lg uppercase">Finish Season</h4>
+                                                <p className="text-xs font-bold text-blue-600/80 mt-1">
+                                                    End the league, declare a winner, and notify all players.
+                                                    Bets will be disabled.
+                                                </p>
+                                            </div>
+                                        </div>
+                                        <Button
+                                            onClick={async () => {
+                                                if (!confirm("Are you sure you want to FINISH this league? This will notify all members.")) return;
+                                                setLoading(true);
+                                                try {
+                                                    const { finishLeague } = await import("@/lib/services/league-service");
+                                                    // @ts-ignore
+                                                    await finishLeague(league.id, user.uid);
+                                                    onUpdate();
+                                                    alert("League finished successfully! 🎉");
+                                                    onClose();
+                                                } catch (e: any) {
+                                                    console.error(e);
+                                                    alert(e.message || "Failed to finish league");
+                                                } finally {
+                                                    setLoading(false);
+                                                }
+                                            }}
+                                            disabled={loading}
+                                            className="w-full bg-blue-500 text-white border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:bg-blue-600"
+                                        >
+                                            {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Trophy className="mr-2 h-4 w-4" />}
+                                            Finish Season & Announce Results
+                                        </Button>
+                                    </div>
+                                )}
 
                                 {league.mode === "STANDARD" && (
                                     <div className="space-y-4 p-4 border-2 border-black bg-yellow-50 rounded-xl shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">

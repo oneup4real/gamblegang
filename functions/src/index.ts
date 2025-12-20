@@ -729,17 +729,38 @@ async function getLiveScoreByEventId(eventId: string): Promise<{
         let matchStatus: "NOT_STARTED" | "LIVE" | "HALFTIME" | "FINISHED" | "POSTPONED" = "NOT_STARTED";
         const status = (event.strStatus || "").toLowerCase();
 
+        // 1. FINISHED
         if (status.includes("ft") || status.includes("finished") || status.includes("final") || status.includes("aet")) {
             matchStatus = "FINISHED";
-        } else if (status.includes("ht") || status.includes("halftime") || status.includes("half time")) {
+        }
+        // 2. HALFTIME
+        else if (status.includes("ht") || status.includes("halftime") || status.includes("half time") || status.includes("break")) {
             matchStatus = "HALFTIME";
-        } else if (status.includes("live") || status.includes("'") || /^\d+$/.test(status)) {
+        }
+        // 3. LIVE (Expanded Logic)
+        else if (
+            status.includes("live") ||
+            status.includes("'") ||
+            /^\d+$/.test(status) ||           // "35"
+            /\d+h/.test(status) ||            // "1H", "2H"
+            /\d+(st|nd|rd|th)/.test(status) || // "1st", "2nd"
+            status.includes("q") ||           // "Q1", "4th Q"
+            status.includes("period") ||
+            status.includes("inning")
+        ) {
             matchStatus = "LIVE";
-        } else if (status.includes("postponed") || status.includes("cancelled") || status.includes("abandoned")) {
+        }
+        // 4. POSTPONED
+        else if (status.includes("postponed") || status.includes("cancelled") || status.includes("abandoned")) {
             matchStatus = "POSTPONED";
-        } else if (homeScore !== undefined && awayScore !== undefined) {
-            // Has scores, likely finished or live
-            matchStatus = "FINISHED";
+        }
+        // 5. NOT STARTED (Explicit)
+        else if (status.match(/^\d{1,2}:\d{2}$/) || status === "ns" || status.includes("not started")) {
+            matchStatus = "NOT_STARTED";
+        }
+        // 6. FALLBACK: Scores exist -> Assume LIVE (Safer than FINISHED)
+        else if (homeScore !== undefined && awayScore !== undefined) {
+            matchStatus = "LIVE";
         }
 
         return {

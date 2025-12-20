@@ -60,6 +60,9 @@ export function BetCard({ bet, userPoints, userWager, mode, powerUps: powerUpsPr
     // Power Up State
     const [selectedPowerUp, setSelectedPowerUp] = useState<PowerUpType | undefined>(undefined);
 
+    // Debug Reset State
+    const [isResetConfirmOpen, setIsResetConfirmOpen] = useState(false);
+
     // UI States
     const [loading, setLoading] = useState(false);
     const [isEditing, setIsEditing] = useState(false);
@@ -693,8 +696,8 @@ export function BetCard({ bet, userPoints, userWager, mode, powerUps: powerUpsPr
                             {isOwner && bet.dataSource && (
                                 <span
                                     className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${bet.dataSource === "API"
-                                            ? "bg-purple-100 text-purple-600 border border-purple-200"
-                                            : "bg-orange-100 text-orange-600 border border-orange-200"
+                                        ? "bg-purple-100 text-purple-600 border border-purple-200"
+                                        : "bg-orange-100 text-orange-600 border border-orange-200"
                                         }`}
                                     title={bet.dataSource === "API" ? "TheSportsDB Live Tracking" : "AI-powered resolution"}
                                 >
@@ -1200,10 +1203,16 @@ export function BetCard({ bet, userPoints, userWager, mode, powerUps: powerUpsPr
                                     })()}
                                 </div>
 
-                                {/* Show the actual numerical value if different from outcome (e.g., "5 yellow cards") */}
-                                {((bet.verification as any)?.actualValue !== undefined || verificationData?.actualValue !== undefined) && (
+                                {/* Show the actual numerical value or result string */}
+                                {((bet.verification as any)?.score) && (
+                                    <div className="text-sm font-bold text-slate-600 mb-1">
+                                        Score: {(bet.verification as any).score}
+                                    </div>
+                                )}
+
+                                {((bet.verification as any)?.actualValue !== undefined || verificationData?.actualValue !== undefined || (bet.verification as any)?.actualResult || verificationData?.actualResult) && (
                                     <div className="text-sm font-bold text-emerald-600 mb-1">
-                                        📊 Actual: {(bet.verification as any)?.actualValue ?? verificationData?.actualValue}
+                                        📊 Actual: {(bet.verification as any)?.actualValue ?? verificationData?.actualValue ?? (bet.verification as any)?.actualResult ?? verificationData?.actualResult}
                                     </div>
                                 )}
 
@@ -1247,31 +1256,52 @@ export function BetCard({ bet, userPoints, userWager, mode, powerUps: powerUpsPr
 
                             {/* TEMP DEBUG RESET BUTTON */}
                             {isOwner && (bet.status === "PROOFING" || bet.status === "RESOLVED") && (
-                                <button
-                                    onClick={async () => {
-                                        if (!confirm("Start Debug Reset? This will revert status to LOCKED.")) return;
-                                        try {
-                                            const { doc, updateDoc, deleteField, getFirestore } = await import("firebase/firestore");
-                                            const db = getFirestore();
-                                            await updateDoc(doc(db, "leagues", bet.leagueId, "bets", bet.id), {
-                                                status: "LOCKED",
-                                                winningOutcome: deleteField(),
-                                                verification: deleteField(),
-                                                disputeDeadline: deleteField(),
-                                                disputeActive: false,
-                                                resolvedAt: deleteField(),
-                                                resolvedBy: deleteField()
-                                            });
-                                            alert("Reset successful! Refresh page if updates don't appear.");
-                                        } catch (e) {
-                                            alert("Reset failed: " + e);
-                                        }
-                                    }}
-                                    className="scale-75 origin-right ml-auto text-[9px] bg-red-100 text-red-600 px-1.5 py-0.5 rounded border border-red-200 hover:bg-red-200 uppercase font-black tracking-widest opacity-50 hover:opacity-100 transition-all"
-                                    title="Debug: Reset to LOCKED"
-                                >
-                                    Reset
-                                </button>
+                                <div className="ml-auto flex items-center gap-1">
+                                    {isResetConfirmOpen ? (
+                                        <>
+                                            <span className="text-[9px] font-bold text-red-600 uppercase">Confirm Reset?</span>
+                                            <button
+                                                onClick={async () => {
+                                                    try {
+                                                        const { doc, updateDoc, deleteField } = await import("firebase/firestore");
+                                                        // Use the existing db instance if possible, or keep getFirestore if strict separation needed.
+                                                        // Using imported db from config is safer for consistency.
+                                                        await updateDoc(doc(db, "leagues", bet.leagueId, "bets", bet.id), {
+                                                            status: "LOCKED",
+                                                            winningOutcome: deleteField(),
+                                                            verification: deleteField(),
+                                                            disputeDeadline: deleteField(),
+                                                            disputeActive: false,
+                                                            resolvedAt: deleteField(),
+                                                            resolvedBy: deleteField()
+                                                        });
+                                                        alert("Reset successful!");
+                                                        setIsResetConfirmOpen(false);
+                                                    } catch (e) {
+                                                        alert("Reset failed: " + e);
+                                                    }
+                                                }}
+                                                className="text-[9px] bg-red-600 text-white px-2 py-0.5 rounded uppercase font-black hover:bg-red-700"
+                                            >
+                                                Yes
+                                            </button>
+                                            <button
+                                                onClick={() => setIsResetConfirmOpen(false)}
+                                                className="text-[9px] bg-gray-200 text-gray-700 px-2 py-0.5 rounded uppercase font-black hover:bg-gray-300"
+                                            >
+                                                No
+                                            </button>
+                                        </>
+                                    ) : (
+                                        <button
+                                            onClick={() => setIsResetConfirmOpen(true)}
+                                            className="scale-75 origin-right text-[9px] bg-red-100 text-red-600 px-1.5 py-0.5 rounded border border-red-200 hover:bg-red-200 uppercase font-black tracking-widest opacity-50 hover:opacity-100 transition-all"
+                                            title="Debug: Reset to LOCKED"
+                                        >
+                                            Reset
+                                        </button>
+                                    )}
+                                </div>
                             )}
                         </div>
                     )}

@@ -454,3 +454,47 @@ export async function updateMemberRole(
     const memberRef = doc(db, "leagues", leagueId, "members", memberId);
     await setDoc(memberRef, { role: newRole }, { merge: true });
 }
+
+/**
+ * Finish a league: Update status and notify all members.
+ * Only OWNER can finish a league.
+ */
+export async function finishLeague(leagueId: string, userId: string) {
+    const { createNotificationsForUsers } = await import("./notification-service");
+    const { getDocs, collection } = await import("firebase/firestore");
+
+    const leagueRef = doc(db, "leagues", leagueId);
+    const leagueSnap = await getDoc(leagueRef);
+
+    if (!leagueSnap.exists()) throw new Error("League not found");
+    const league = leagueSnap.data() as League;
+
+    if (league.ownerId !== userId) throw new Error("Only the owner can finish the league");
+
+    // 1. Update status
+    await updateLeagueStatus(leagueId, "FINISHED");
+
+    // 2. Notify all members
+    const membersRef = collection(db, "leagues", leagueId, "members");
+    const membersSnap = await getDocs(membersRef);
+    const memberIds = membersSnap.docs.map(d => d.data().uid);
+
+    await createNotificationsForUsers(
+        memberIds,
+        "VOTE_NEEDED", // Using VOTE_NEEDED icon (Archive/Box) or similar roughly appropriate icon until generic "INFO" type added
+        `🏆 ${league.name} Ended`,
+        "The league has officially finished! Click here to see the final results.",
+        { leagueId, leagueName: league.name }
+    );
+
+    // 3. Log activity
+    const activityRef = collection(db, "leagues", leagueId, "activityLog");
+    await import("firebase/firestore").then(({ addDoc, serverTimestamp }) => {
+        addDoc(activityRef, {
+            type: "LEAGUE_FINISHED",
+            message: "League finished by owner",
+            timestamp: serverTimestamp(),
+            actorId: userId
+        });
+    });
+}

@@ -315,7 +315,12 @@ export default function LeaguePage() {
         if (!confirm(`Are you sure you want to change status to ${newStatus}?`)) return;
         setActionLoading(true);
         try {
-            await updateLeagueStatus(leagueId, newStatus);
+            if (newStatus === "FINISHED" && user?.uid) {
+                const { finishLeague } = await import("@/lib/services/league-service");
+                await finishLeague(leagueId, user.uid);
+            } else {
+                await updateLeagueStatus(leagueId, newStatus);
+            }
             await fetchLeagueData();
         } catch (error) {
             console.error(error);
@@ -812,6 +817,67 @@ export default function LeaguePage() {
             </header>
             {/* Tabs + Main Content */}
             <main className="max-w-5xl mx-auto px-3 sm:px-6 pb-8 space-y-0">
+                {/* 🏆 FINAL RESULTS BANNER */}
+                {league.status === "FINISHED" && (
+                    <motion.div
+                        initial={{ opacity: 0, y: -20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        className="mb-8 p-6 md:p-8 bg-yellow-50 border-4 border-black rounded-xl shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] text-center relative overflow-hidden"
+                    >
+                        <div className="absolute top-0 left-0 w-full h-3 bg-gradient-to-r from-red-500 via-yellow-500 via-green-500 to-blue-500 animate-gradient-x" />
+
+                        <div className="relative z-10 flex flex-col items-center">
+                            <div className="bg-yellow-100 p-4 rounded-full border-4 border-black shadow-lg mb-4">
+                                <Trophy className="h-12 w-12 text-yellow-600 fill-yellow-400" />
+                            </div>
+
+                            <h2 className="text-3xl md:text-5xl font-black font-comic uppercase tracking-wider text-black mb-2 drop-shadow-sm">
+                                Final Results
+                            </h2>
+                            <p className="text-base md:text-lg font-bold text-gray-600 mb-6 bg-white/50 px-4 py-1 rounded-full border-2 border-black/5 inline-block">
+                                The season has officially ended. Congratulations to the winner!
+                            </p>
+
+                            {/* Winner Showcase */}
+                            {members.length > 0 && (
+                                <div className="flex flex-col items-center">
+                                    <div className="relative">
+                                        <Crown className="absolute -top-8 left-1/2 -translate-x-1/2 h-10 w-10 text-yellow-500 fill-yellow-300 drop-shadow-md animate-bounce" />
+                                        <div className="flex items-center gap-4 bg-white px-8 py-4 rounded-2xl border-4 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:scale-105 transition-transform">
+                                            {members[0].photoURL ? (
+                                                <img src={members[0].photoURL} className="w-16 h-16 rounded-full border-2 border-black object-cover" />
+                                            ) : (
+                                                <div className="w-16 h-16 rounded-full border-2 border-black bg-gray-200 flex items-center justify-center">
+                                                    <span className="text-2xl">👤</span>
+                                                </div>
+                                            )}
+                                            <div className="text-left">
+                                                <span className="block text-xs font-black uppercase text-yellow-600 tracking-widest mb-1">League Champion</span>
+                                                <span className="block text-2xl md:text-3xl font-black text-black leading-none">{members[0].displayName}</span>
+                                                <span className="block text-sm font-bold text-gray-500 mt-1">
+                                                    {members[0].points.toLocaleString()} Points
+                                                </span>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {/* Personal Message */}
+                                    {members[0].uid === user?.uid && (
+                                        <div className="mt-4 animate-pulse">
+                                            <span className="px-4 py-2 bg-black text-white font-black uppercase rounded-lg shadow-lg rotate-2 inline-block">
+                                                You Won! 🏆
+                                            </span>
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Confetti Background Effect (CSS only for now) */}
+                        <div className="absolute inset-0 opacity-10 pointer-events-none" style={{ backgroundImage: 'radial-gradient(circle, #000 2px, transparent 2.5px)', backgroundSize: '30px 30px' }}></div>
+                    </motion.div>
+                )}
+
                 {/* TABS: BETS vs ANALYTICS vs ACTIVITY */}
                 <div className="flex items-end gap-1 md:gap-2 -mb-[2px] relative z-10 overflow-x-auto scrollbar-hide">
                     <button

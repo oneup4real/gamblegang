@@ -207,6 +207,10 @@ export function useLiveBets(userId: string, leagueId?: string): UseLiveBetsRetur
                     // Also include bets that are technically OPEN but have liveScore (rare edge case)
                     if (!bet || bet.status !== "LOCKED") return;
 
+                    // Filter out games that haven't started yet (User request)
+                    // They will appear in the "Pending" tab instead
+                    if (!bet.liveScore || bet.liveScore.matchStatus === "NOT_STARTED") return;
+
                     const wagers = wagersByBetId.get(betId) || [];
 
                     wagers.forEach(wager => {

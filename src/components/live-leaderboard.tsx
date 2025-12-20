@@ -115,11 +115,13 @@ export function LiveIndicator({ hasLiveBets }: LiveIndicatorProps) {
     if (!hasLiveBets) return null;
 
     return (
-        <div className="flex items-center gap-1.5 bg-red-500 px-2 py-0.5 rounded-full">
-            <Circle className="h-2 w-2 fill-white text-white animate-pulse" />
-            <span className="text-[10px] font-bold text-white uppercase tracking-wider">
-                Live
-            </span>
+        <div className="bg-white/20 backdrop-blur-md px-1.5 py-1 rounded-full border border-white/40 shadow-sm">
+            <div className="flex items-center gap-1.5 bg-red-500 px-2 py-0.5 rounded-full shadow-[0px_1px_2px_rgba(0,0,0,0.2)]">
+                <Circle className="h-2 w-2 fill-white text-white animate-pulse" />
+                <span className="text-[10px] font-bold text-white uppercase tracking-wider">
+                    Live
+                </span>
+            </div>
         </div>
     );
 }
@@ -154,9 +156,9 @@ export function LiveLeaderboardRow({
             <div className="flex items-center gap-3">
                 {/* Ranking */}
                 <div className={`flex h-8 w-8 items-center justify-center rounded-full font-bold text-sm border-2 border-black ${index === 0 ? "bg-yellow-400 text-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]" :
-                        index === 1 ? "bg-zinc-300 text-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]" :
-                            index === 2 ? "bg-orange-400 text-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]" :
-                                "bg-gray-100 text-gray-500"
+                    index === 1 ? "bg-zinc-300 text-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]" :
+                        index === 2 ? "bg-orange-400 text-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]" :
+                            "bg-gray-100 text-gray-500"
                     }`}>
                     {index + 1}
                 </div>

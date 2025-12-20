@@ -310,11 +310,16 @@ Game Date: ${formattedDate}
 
 If the game was played on a different date recently (within 24 hours), please provide that result instead.
 
-I need you to find the actual final score from a reliable sports source (ESPN, NBA.com, official league sites, etc.).
+I need you to find the actual FINAL score from a reliable sports source (ESPN, NBA.com, official league sites, etc.).
 
 Current time: ${new Date().toISOString()}
 
-If you find the final score, return it in this EXACT JSON format:
+CRITICAL CHECK:
+- You MUST verify the match status is "Final", "Full Time", "FT", or "Finished".
+- If the match is still IN PROGRESS (Live, 1st Half, 2nd Half, Halftime, HT, 85', etc.), you MUST return status "UNKNOWN".
+- Do NOT return a score for a live game. The bet must only resolve when the game is over.
+
+If you find the FINAL score, return it in this EXACT JSON format:
 { 
   "status": "FOUND", 
   "home": <number>, 
@@ -325,10 +330,10 @@ If you find the final score, return it in this EXACT JSON format:
 
 For example: { "status": "FOUND", "home": 124, "away": 122, "source": "ESPN", "confidence": "high" }
 
-If you cannot find the result or the game hasn't been played yet, return:
+If you cannot find the FINAL result or the game hasn't been played/finished yet, return:
 { "status": "UNKNOWN", "home": null, "away": null, "source": null, "confidence": null }
 
-IMPORTANT: Only return "FOUND" if you can verify the score from an official source.
+IMPORTANT: Only return "FOUND" if you can verify the FINAL score from an official source.
 
 Return ONLY the JSON, no other text or markdown.`;
 
