@@ -745,11 +745,17 @@ export async function startProofing(
         confidence?: "high" | "medium" | "low";
     }
 ) {
+    // Fetch league to get disputeWindowHours
+    const leagueRef = doc(db, "leagues", leagueId);
+    const leagueSnap = await getDoc(leagueRef);
+    const league = leagueSnap.exists() ? leagueSnap.data() as League : null;
+
     const betRef = doc(db, "leagues", leagueId, "bets", betId);
 
-    // Set proofing/dispute deadline to 12 hours from now
+    // Use league setting or default to 12 hours
+    const disputeWindowHours = league?.disputeWindowHours || 12;
     const disputeDeadline = new Date();
-    disputeDeadline.setHours(disputeDeadline.getHours() + 12);
+    disputeDeadline.setHours(disputeDeadline.getHours() + disputeWindowHours);
 
     const updateData: any = {
         status: "PROOFING",
@@ -1130,15 +1136,22 @@ export async function getUserDashboardStats(user: User, leagues: League[]): Prom
 
 /**
  * Start the dispute period after proofing
- * Sets a 48-hour deadline for players to dispute
+ * Uses league's disputeWindowHours setting
  */
 export async function startDisputePeriod(leagueId: string, betId: string) {
-    const betRef = doc(db, "leagues", leagueId, "bets", betId);
     const { getDoc, updateDoc } = await import("firebase/firestore");
 
-    // Set dispute deadline to 48 hours from now
+    // Fetch league to get disputeWindowHours
+    const leagueRef = doc(db, "leagues", leagueId);
+    const leagueSnap = await getDoc(leagueRef);
+    const league = leagueSnap.exists() ? leagueSnap.data() as League : null;
+
+    const betRef = doc(db, "leagues", leagueId, "bets", betId);
+
+    // Use league setting or default to 12 hours
+    const disputeWindowHours = league?.disputeWindowHours || 12;
     const disputeDeadline = new Date();
-    disputeDeadline.setHours(disputeDeadline.getHours() + 48);
+    disputeDeadline.setHours(disputeDeadline.getHours() + disputeWindowHours);
 
     await updateDoc(betRef, {
         disputeDeadline: disputeDeadline,

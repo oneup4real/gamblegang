@@ -199,8 +199,16 @@ export function BetCard({ bet, userPoints, userWager, mode, powerUps: powerUpsPr
 
     const handlePlaceWager = async () => {
         if (!user) return;
+
+        const newAmount = Number(wagerAmount) || 0;
+
         if (mode === "ZERO_SUM") {
-            if (userPoints < (Number(wagerAmount) || 0) || (Number(wagerAmount) || 0) <= 0) return alert("Insufficient points or invalid amount");
+            // When editing, add back the original wager amount to available points
+            const originalWagerAmount = isEditing && userWager ? userWager.amount : 0;
+            const effectiveAvailablePoints = userPoints + originalWagerAmount;
+
+            if (newAmount <= 0) return alert("Invalid amount");
+            if (effectiveAvailablePoints < newAmount) return alert("Insufficient points");
         }
 
         let prediction: string | number | { home: number, away: number } = selectedOption;
@@ -217,7 +225,7 @@ export function BetCard({ bet, userPoints, userWager, mode, powerUps: powerUpsPr
             return alert("Invalid bet type or selection.");
         }
 
-        const amount = mode === "STANDARD" ? 0 : Number(wagerAmount);
+        const amount = mode === "STANDARD" ? 0 : newAmount;
 
         if (mode === "ZERO_SUM" && amount >= userPoints && amount > 0 && !isEditing) {
             setPendingWagerData({ amount, prediction });
@@ -983,7 +991,11 @@ export function BetCard({ bet, userPoints, userWager, mode, powerUps: powerUpsPr
                                         <input
                                             type="number"
                                             value={wagerAmount}
-                                            onChange={e => setWagerAmount(Number(e.target.value))}
+                                            onChange={e => {
+                                                const val = e.target.value;
+                                                // Allow empty string for better UX when clearing
+                                                setWagerAmount(val === "" ? "" : Number(val));
+                                            }}
                                             className="w-full h-12 pl-3 pr-8 rounded-xl border-2 border-slate-300 font-bold text-sm focus:border-black focus:outline-none"
                                             placeholder="Amt"
                                         />
@@ -1113,11 +1125,20 @@ export function BetCard({ bet, userPoints, userWager, mode, powerUps: powerUpsPr
                                 <div className="text-xs font-bold uppercase tracking-wide mb-0.5 opacity-70">Verified Result</div>
                                 <div className="font-black text-slate-800 mb-1 text-base">
                                     {(() => {
+                                        // First show the winning outcome (which option won)
                                         if (typeof bet.winningOutcome === 'object') return `${(bet.winningOutcome as any).home} - ${(bet.winningOutcome as any).away}`;
                                         if (bet.type === "CHOICE" && bet.options) return bet.options[Number(bet.winningOutcome)]?.text || String(bet.winningOutcome);
                                         return String(bet.winningOutcome);
                                     })()}
                                 </div>
+
+                                {/* Show the actual numerical value if different from outcome (e.g., "5 yellow cards") */}
+                                {((bet.verification as any)?.actualValue !== undefined || verificationData?.actualValue !== undefined) && (
+                                    <div className="text-sm font-bold text-emerald-600 mb-1">
+                                        📊 Actual: {(bet.verification as any)?.actualValue ?? verificationData?.actualValue}
+                                    </div>
+                                )}
+
                                 <div className="text-[10px] font-medium flex items-center gap-1 opacity-60">
                                     <CheckCircle className="w-3 h-3" />
                                     Source:

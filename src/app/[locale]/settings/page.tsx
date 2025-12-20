@@ -3,7 +3,7 @@
 import { useAuth } from "@/components/auth-provider";
 import { AvatarSelector } from "@/components/avatar-selector";
 import { UserProfile, updateUserProfile } from "@/lib/services/user-service";
-import { LogOut, Save, Loader2 } from "lucide-react";
+import { LogOut, Save, Loader2, Download, CheckCircle2, Smartphone } from "lucide-react";
 import { useRouter } from "@/i18n/navigation";
 import { useEffect, useState } from "react";
 import { doc, getDoc } from "firebase/firestore";
@@ -12,12 +12,15 @@ import { useTranslations, useLocale } from 'next-intl';
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
+import { usePWAInstall } from "@/hooks/use-pwa-install";
 
 export default function SettingsPage() {
     const t = useTranslations('Settings');
     const currentLocale = useLocale();
     const router = useRouter();
     const { user, loading, logout } = useAuth();
+    const { canInstall, isInstalled, promptInstall } = usePWAInstall();
+    const [installing, setInstalling] = useState(false);
 
     const [profile, setProfile] = useState<UserProfile | null>(null);
     const [fetchingProfile, setFetchingProfile] = useState(true);
@@ -138,6 +141,54 @@ export default function SettingsPage() {
                                     <option value="de">Deutsch</option>
                                 </select>
                             </div>
+                        </div>
+
+                        {/* Install App Section */}
+                        <div className="pt-4 border-t-2 border-dashed border-gray-300">
+                            <div className="flex items-center gap-3 mb-3">
+                                <Smartphone className="h-5 w-5 text-primary" />
+                                <h2 className="text-lg font-black font-comic uppercase">Install App</h2>
+                            </div>
+
+                            {isInstalled ? (
+                                <div className="flex items-center gap-2 p-4 bg-green-50 border-2 border-green-300 rounded-xl">
+                                    <CheckCircle2 className="h-5 w-5 text-green-600" />
+                                    <span className="font-bold text-green-700">App is installed!</span>
+                                </div>
+                            ) : canInstall ? (
+                                <Button
+                                    type="button"
+                                    onClick={async () => {
+                                        setInstalling(true);
+                                        await promptInstall();
+                                        setInstalling(false);
+                                    }}
+                                    disabled={installing}
+                                    className="w-full h-12 text-lg font-black uppercase border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:translate-y-[-2px] hover:shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] transition-all bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600"
+                                >
+                                    {installing ? (
+                                        <>
+                                            <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                                            Installing...
+                                        </>
+                                    ) : (
+                                        <>
+                                            <Download className="mr-2 h-5 w-5" />
+                                            Install GambleGang App
+                                        </>
+                                    )}
+                                </Button>
+                            ) : (
+                                <div className="p-4 bg-gray-50 border-2 border-gray-200 rounded-xl text-center">
+                                    <p className="text-sm font-bold text-gray-500 mb-2">
+                                        📱 To install, use your browser menu:
+                                    </p>
+                                    <p className="text-xs text-gray-400">
+                                        iOS: Safari → Share → Add to Home Screen<br />
+                                        Android: Chrome → Menu (⋮) → Install App
+                                    </p>
+                                </div>
+                            )}
                         </div>
 
                         <div className="pt-4 border-t-2 border-dashed border-gray-300 space-y-4">

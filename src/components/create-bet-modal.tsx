@@ -144,6 +144,9 @@ export function CreateBetModal({ leagueId, leagueMode, aiAutoConfirmEnabled, isO
         }
     }, [isOpen, betToEdit, leagueMode]);
 
+    // Check if bet has existing wagers (prevents editing options)
+    const hasWagers = betToEdit && betToEdit.wagerCount && betToEdit.wagerCount > 0;
+
     // Outcome Type for Bulk
     const [bulkOutcomeType, setBulkOutcomeType] = useState<"WINNER" | "WINNER_DRAW">("WINNER_DRAW");
 
@@ -461,6 +464,15 @@ export function CreateBetModal({ leagueId, leagueMode, aiAutoConfirmEnabled, isO
                                             // ... Choice options UI ...
                                             <div className="space-y-3">
                                                 <label className="text-sm font-black text-black uppercase block">{t('options')}</label>
+
+                                                {/* Warning when editing bet with wagers */}
+                                                {hasWagers && (
+                                                    <div className="bg-yellow-50 border-2 border-yellow-400 rounded-lg p-3 text-sm">
+                                                        <p className="font-bold text-yellow-800">⚠️ Options Locked</p>
+                                                        <p className="text-yellow-700 text-xs">This bet has {betToEdit.wagerCount} wager(s). Options cannot be changed, but you can edit the question text and event date.</p>
+                                                    </div>
+                                                )}
+
                                                 {options.map((opt, idx) => (
                                                     <div key={idx} className="flex gap-2">
                                                         <input
@@ -469,43 +481,48 @@ export function CreateBetModal({ leagueId, leagueMode, aiAutoConfirmEnabled, isO
                                                             value={opt}
                                                             onChange={(e) => handleOptionChange(idx, e.target.value)}
                                                             placeholder={`Option ${idx + 1}`}
-                                                            className="flex h-10 w-full rounded-lg border-2 border-black bg-white px-3 py-2 text-black placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-primary shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
+                                                            disabled={hasWagers}
+                                                            className={`flex h-10 w-full rounded-lg border-2 border-black px-3 py-2 text-black placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-primary shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] ${hasWagers ? 'bg-gray-100 cursor-not-allowed opacity-60' : 'bg-white'}`}
                                                         />
-                                                        {options.length > 2 && (
+                                                        {options.length > 2 && !hasWagers && (
                                                             <button type="button" onClick={() => handleRemoveOption(idx)} className="p-2 text-red-500 hover:text-red-700 transition-colors border-2 border-red-500 rounded-lg shadow-[2px_2px_0px_0px_rgba(239,68,68,1)] active:translate-y-[1px] active:shadow-none hover:bg-red-50">
                                                                 <Trash className="h-4 w-4" />
                                                             </button>
                                                         )}
                                                     </div>
                                                 ))}
-                                                <div className="flex gap-2">
-                                                    <button type="button" onClick={handleAddOption} className="text-sm text-primary font-bold flex items-center hover:text-primary/80 transition-colors uppercase tracking-wide">
-                                                        <Plus className="h-4 w-4 mr-1 border-2 border-primary rounded-full p-0.5" /> {t('addOption')}
-                                                    </button>
 
-                                                    {/* Pre-fill Helpers - Also set choiceStyle */}
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => { setOptions(["Yes", "No"]); setChoiceStyle("VARIOUS"); }}
-                                                        className={`text-xs font-bold border rounded px-2 py-0.5 transition-all ${choiceStyle === "VARIOUS" ? "text-primary border-primary bg-primary/10" : "text-gray-400 hover:text-black border-gray-300"}`}
-                                                    >
-                                                        {t('optYesNo')}
-                                                    </button>
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => { setOptions(["Home Team", "Away Team"]); setChoiceStyle("MATCH_WINNER"); }}
-                                                        className={`text-xs font-bold border rounded px-2 py-0.5 transition-all ${choiceStyle === "MATCH_WINNER" ? "text-primary border-primary bg-primary/10" : "text-gray-400 hover:text-black border-gray-300"}`}
-                                                    >
-                                                        {t('optWinnerDesc')}
-                                                    </button>
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => { setOptions(["Home Team", "Draw", "Away Team"]); setChoiceStyle("MATCH_1X2"); }}
-                                                        className={`text-xs font-bold border rounded px-2 py-0.5 transition-all ${choiceStyle === "MATCH_1X2" ? "text-primary border-primary bg-primary/10" : "text-gray-400 hover:text-black border-gray-300"}`}
-                                                    >
-                                                        {t('opt1x2Desc')}
-                                                    </button>
-                                                </div>
+                                                {/* Only show add/prefill buttons when no wagers exist */}
+                                                {!hasWagers && (
+                                                    <div className="flex gap-2">
+                                                        <button type="button" onClick={handleAddOption} className="text-sm text-primary font-bold flex items-center hover:text-primary/80 transition-colors uppercase tracking-wide">
+                                                            <Plus className="h-4 w-4 mr-1 border-2 border-primary rounded-full p-0.5" /> {t('addOption')}
+                                                        </button>
+
+                                                        {/* Pre-fill Helpers - Also set choiceStyle */}
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => { setOptions(["Yes", "No"]); setChoiceStyle("VARIOUS"); }}
+                                                            className={`text-xs font-bold border rounded px-2 py-0.5 transition-all ${choiceStyle === "VARIOUS" ? "text-primary border-primary bg-primary/10" : "text-gray-400 hover:text-black border-gray-300"}`}
+                                                        >
+                                                            {t('optYesNo')}
+                                                        </button>
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => { setOptions(["Home Team", "Away Team"]); setChoiceStyle("MATCH_WINNER"); }}
+                                                            className={`text-xs font-bold border rounded px-2 py-0.5 transition-all ${choiceStyle === "MATCH_WINNER" ? "text-primary border-primary bg-primary/10" : "text-gray-400 hover:text-black border-gray-300"}`}
+                                                        >
+                                                            {t('optWinnerDesc')}
+                                                        </button>
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => { setOptions(["Home Team", "Draw", "Away Team"]); setChoiceStyle("MATCH_1X2"); }}
+                                                            className={`text-xs font-bold border rounded px-2 py-0.5 transition-all ${choiceStyle === "MATCH_1X2" ? "text-primary border-primary bg-primary/10" : "text-gray-400 hover:text-black border-gray-300"}`}
+                                                        >
+                                                            {t('opt1x2Desc')}
+                                                        </button>
+                                                    </div>
+                                                )}
                                             </div>
                                         )}
 

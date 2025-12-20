@@ -11,12 +11,13 @@ import { BetCard } from "@/components/bet-card";
 import { GroupedBetsByTime } from "@/components/grouped-bets";
 import { BetStatusStepper } from "@/components/bet-status-stepper";
 import { format } from "date-fns";
-import { ArrowLeft, Crown, User as UserIcon, Settings, Play, Flag, Archive, Coins, AlertOctagon, CheckCircle2, XCircle, Trash2, Pencil, QrCode, Gamepad2, Gavel, TrendingUp, Target, Award, Activity, ExternalLink, ChevronDown, ChevronUp, Ticket as TicketIcon, Timer, Trophy } from "lucide-react";
+import { ArrowLeft, Crown, User as UserIcon, Settings, Play, Flag, Archive, Coins, AlertOctagon, CheckCircle2, XCircle, Trash2, Pencil, QrCode, Gamepad2, Gavel, TrendingUp, Target, Award, Activity, ExternalLink, ChevronDown, ChevronUp, Ticket as TicketIcon, Timer, Trophy, Megaphone } from "lucide-react";
 import QRCode from "react-qr-code";
 
 import Link from "next/link";
 import { CreateBetModal } from "@/components/create-bet-modal";
 import { LeagueSettingsModal } from "@/components/league-settings-modal";
+import { LeagueAnnouncementModal } from "@/components/league-announcement-modal";
 import { motion } from "framer-motion";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { useTranslations } from "next-intl";
@@ -43,6 +44,7 @@ export default function LeaguePage() {
     const [betToEdit, setBetToEdit] = useState<Bet | undefined>(undefined);
     const [isSettingsOpen, setIsSettingsOpen] = useState(false);
     const [isQROpen, setIsQROpen] = useState(false);
+    const [isAnnouncementOpen, setIsAnnouncementOpen] = useState(false);
     const [actionLoading, setActionLoading] = useState(false);
     const [expandedBets, setExpandedBets] = useState<Set<string>>(new Set()); // Track which bets are expanded
     const [expandAll, setExpandAll] = useState(false); // Toggle all expand/collapse
@@ -101,24 +103,36 @@ export default function LeaguePage() {
                 setMembers(membersList);
 
                 // --- KEY FIX: Sync current user's avatar if missing/outdated ---
-                // If the user has a photoURL in Auth but not in the league member record, update it.
-                if (user?.uid && user?.photoURL) {
-                    const myMember = membersList.find(m => m.uid === user.uid);
-                    // Check if member exists AND (photo is missing OR photo is different)
-                    if (myMember && (!myMember.photoURL || myMember.photoURL !== user.photoURL)) {
-                        console.log("[LeaguePage] Syncing member avatar for:", user.uid);
+                // Check BOTH Firebase Auth (user.photoURL) AND Firestore user profile (users/{uid}/photoURL)
+                if (user?.uid) {
+                    // Fetch user profile from Firestore to get the latest photoURL
+                    const userProfileRef = doc(db, "users", user.uid);
+                    const userProfileSnap = await getDoc(userProfileRef);
+                    const userProfile = userProfileSnap.exists() ? userProfileSnap.data() : null;
 
-                        // 1. Update local state immediately so user sees it
-                        myMember.photoURL = user.photoURL;
-                        setMembers([...membersList]); // Trigger re-render
+                    // Use Firestore profile photo first, fallback to Auth photo
+                    const latestPhotoURL = userProfile?.photoURL || user.photoURL;
+                    const latestDisplayName = userProfile?.displayName || user.displayName;
 
-                        // 2. Update Firestore background
-                        const { updateDoc } = await import("firebase/firestore");
-                        const memberRef = doc(db, "leagues", leagueId as string, "members", user.uid);
-                        updateDoc(memberRef, {
-                            photoURL: user.photoURL,
-                            displayName: user.displayName || myMember.displayName // Sync name too while we're at it
-                        }).catch(e => console.error("Error syncing profile to league:", e));
+                    if (latestPhotoURL) {
+                        const myMember = membersList.find(m => m.uid === user.uid);
+                        // Check if member exists AND (photo is missing OR photo is different)
+                        if (myMember && (!myMember.photoURL || myMember.photoURL !== latestPhotoURL)) {
+                            console.log("[LeaguePage] Syncing member avatar for:", user.uid);
+
+                            // 1. Update local state immediately so user sees it
+                            myMember.photoURL = latestPhotoURL;
+                            if (latestDisplayName) myMember.displayName = latestDisplayName;
+                            setMembers([...membersList]); // Trigger re-render
+
+                            // 2. Update Firestore background
+                            const { updateDoc } = await import("firebase/firestore");
+                            const memberRef = doc(db, "leagues", leagueId as string, "members", user.uid);
+                            updateDoc(memberRef, {
+                                photoURL: latestPhotoURL,
+                                displayName: latestDisplayName || myMember.displayName
+                            }).catch(e => console.error("Error syncing profile to league:", e));
+                        }
                     }
                 }
                 // -------------------------------------------------------------
@@ -580,8 +594,24 @@ export default function LeaguePage() {
                         )}
                     </div>
 
-                    {/* Question Title - Full Width Row */}
-                    <p className="font-black text-black text-sm sm:text-lg mb-2">{bet.question}</p>
+                    {/* Question Title - Full Width Row with Edit Icon */}
+                    <div className="flex items-start gap-2 mb-2">
+                        <p className="font-black text-black text-sm sm:text-lg flex-1">{bet.question}</p>
+                        {isOwner && bet.status === "OPEN" && (
+                            <div
+                                role="button"
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    setBetToEdit(bet);
+                                    setIsBetModalOpen(true);
+                                }}
+                                className="p-1 hover:bg-blue-100 rounded-lg text-gray-400 hover:text-blue-500 transition-colors shrink-0"
+                                title="Edit Bet"
+                            >
+                                <Pencil className="h-4 w-4" />
+                            </div>
+                        )}
+                    </div>
 
                     {/* Bottom Row: Date/Timer | Odds/Return | Icons */}
                     <div className="flex items-center justify-between gap-2">
@@ -744,8 +774,16 @@ export default function LeaguePage() {
                                         <button
                                             onClick={() => setIsSettingsOpen(true)}
                                             className="p-2 bg-white border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] rounded-lg hover:translate-y-[2px] hover:shadow-none transition-all text-black hover:bg-gray-50"
+                                            title="League Settings"
                                         >
                                             <Settings className="h-5 w-5" />
+                                        </button>
+                                        <button
+                                            onClick={() => setIsAnnouncementOpen(true)}
+                                            className="p-2 bg-white border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] rounded-lg hover:translate-y-[2px] hover:shadow-none transition-all text-orange-500 hover:bg-orange-50"
+                                            title="Send Announcement"
+                                        >
+                                            <Megaphone className="h-5 w-5" />
                                         </button>
                                     </>
                                 )}
@@ -1394,6 +1432,17 @@ export default function LeaguePage() {
                     </div>
                 )
             }
+
+            {/* Announcement Modal */}
+            {league && user && (
+                <LeagueAnnouncementModal
+                    isOpen={isAnnouncementOpen}
+                    onClose={() => setIsAnnouncementOpen(false)}
+                    leagueId={leagueId as string}
+                    leagueName={league.name}
+                    user={user}
+                />
+            )}
         </div >
     );
 }

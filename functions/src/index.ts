@@ -79,7 +79,8 @@ async function resolveMatchWithAI(bet: Bet, apiKey: string): Promise<any | null>
                     source: parsed.source || "AI Search",
                     verifiedAt: new Date().toISOString(),
                     method: "AI_GROUNDING",
-                    confidence: parsed.confidence || "high"
+                    confidence: parsed.confidence || "high",
+                    actualResult: `${parsed.home} - ${parsed.away}` // Store the actual score
                 }
             };
         }
@@ -192,6 +193,13 @@ async function resolveGenericWithAI(bet: Bet, apiKey: string): Promise<any | nul
         const parsed = JSON.parse(jsonString);
 
         if (parsed.status === "FOUND") {
+            // For CHOICE bets, get the actual answer text if available
+            let actualResult = parsed.value !== undefined ? String(parsed.value) : undefined;
+            if (bet.type === "CHOICE" && bet.options && parsed.optionIndex !== undefined) {
+                const selectedOption = bet.options[parsed.optionIndex];
+                actualResult = selectedOption?.text || actualResult;
+            }
+
             return {
                 type: bet.type,
                 optionIndex: parsed.optionIndex,
@@ -202,7 +210,9 @@ async function resolveGenericWithAI(bet: Bet, apiKey: string): Promise<any | nul
                     url: parsed.sourceUrl || undefined,
                     verifiedAt: new Date().toISOString(),
                     method: "AI_GROUNDING",
-                    confidence: parsed.confidence || "high"
+                    confidence: parsed.confidence || "high",
+                    actualResult: actualResult, // Store the actual answer
+                    actualValue: parsed.value // Store the raw numerical value if applicable
                 }
             };
         }
@@ -245,7 +255,7 @@ export const autoResolveBets = onSchedule(
             // Optimization: Could cache this if processing many bets from same league, but for 15min interval fetching is acceptable.
             const leagueDoc = await db.collection("leagues").doc(leagueId).get();
             const leagueData = leagueDoc.data();
-            const disputeWindowHours = leagueData?.disputeWindow || 12;
+            const disputeWindowHours = leagueData?.disputeWindowHours || 12;
 
             // Check Delay
             const eventDate = bet.eventDate?.toDate ? bet.eventDate.toDate() : new Date(bet.eventDate);
