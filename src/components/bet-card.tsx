@@ -1189,8 +1189,14 @@ export function BetCard({ bet, userPoints, userWager, mode, powerUps: powerUpsPr
                     {(bet.status === "PROOFING" || bet.status === "RESOLVED") && (
                         <div className={`mt-2 rounded-lg p-3 flex items-start gap-3 border ${bet.status === "PROOFING" ? "bg-green-50 border-green-200" : "bg-white border-slate-200"}`}>
                             {/* Source Icon/Avatar */}
-                            <div className={`w-8 h-8 rounded flex items-center justify-center text-white font-bold text-xs shrink-0 ${bet.status === "PROOFING" ? "bg-green-500" : "bg-slate-500"}`}>
-                                {(bet.verification?.source || verificationData?.source) ? (bet.verification?.source || verificationData?.source).substring(0, 3).toUpperCase() : "AI"}
+                            <div className={`w-8 h-8 rounded flex items-center justify-center text-white font-bold text-[10px] shrink-0 ${bet.status === "PROOFING" ? "bg-green-500" : "bg-slate-500"}`}>
+                                {(() => {
+                                    const src = (bet.verification?.source || verificationData?.source || "AI").toUpperCase();
+                                    if (src.includes("API") || src.includes("SPORTSDB")) return "API";
+                                    if (src.includes("AI") && !src.includes("SEARCH")) return "AI";
+                                    if (src.includes("SEARCH") || src.includes("GOOGLE") || src.includes("WEB")) return "WEB";
+                                    return src.substring(0, 3);
+                                })()}
                             </div>
                             <div className="flex-1">
                                 <div className="text-xs font-bold uppercase tracking-wide mb-0.5 opacity-70">Verified Result</div>

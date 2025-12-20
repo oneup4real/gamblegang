@@ -11,7 +11,8 @@ import { BetCard } from "@/components/bet-card";
 import { GroupedBetsByTime } from "@/components/grouped-bets";
 import { BetStatusStepper } from "@/components/bet-status-stepper";
 import { format } from "date-fns";
-import { ArrowLeft, Crown, User as UserIcon, Settings, Play, Flag, Archive, Coins, AlertOctagon, CheckCircle2, XCircle, Trash2, Pencil, QrCode, Gamepad2, Gavel, TrendingUp, Target, Award, Activity, ExternalLink, ChevronDown, ChevronUp, Ticket as TicketIcon, Timer, Trophy, Megaphone } from "lucide-react";
+import { LeagueChat } from "@/components/league-chat";
+import { ArrowLeft, Crown, User as UserIcon, Settings, Play, Flag, Archive, Coins, AlertOctagon, CheckCircle2, XCircle, Trash2, Pencil, QrCode, Gamepad2, Gavel, TrendingUp, Target, Award, Activity, ExternalLink, ChevronDown, ChevronUp, Ticket as TicketIcon, Timer, Trophy, Megaphone, MessageSquare } from "lucide-react";
 import QRCode from "react-qr-code";
 
 import Link from "next/link";
@@ -50,7 +51,7 @@ export default function LeaguePage() {
     const [actionLoading, setActionLoading] = useState(false);
     const [expandedBets, setExpandedBets] = useState<Set<string>>(new Set()); // Track which bets are expanded
     const [expandAll, setExpandAll] = useState(false); // Toggle all expand/collapse
-    const [viewMode, setViewMode] = useState<"bets" | "analytics" | "activity">("bets");
+    const [viewMode, setViewMode] = useState<"bets" | "analytics" | "activity" | "chat">("bets");
     const [analyticsMetric, setAnalyticsMetric] = useState<"profit" | "roi" | "rank">("profit");
     const [analyticsData, setAnalyticsData] = useState<any[]>([]);
     const [analyticsLoading, setAnalyticsLoading] = useState(false);
@@ -869,6 +870,7 @@ export default function LeaguePage() {
                                             </span>
                                         </div>
                                     )}
+                                    ```
                                 </div>
                             )}
                         </div>
@@ -888,6 +890,18 @@ export default function LeaguePage() {
                             }`}
                     >
                         {t('tabBets')}
+                    </button>
+                    <button
+                        onClick={() => setViewMode("chat")}
+                        className={`relative px-3 md:px-6 py-2 rounded-t-lg font-black uppercase tracking-wider text-xs md:text-sm transition-all duration-200 whitespace-nowrap shrink-0 ${viewMode === "chat"
+                            ? "bg-white text-black border-2 border-b-0 border-black pb-3 z-10"
+                            : "bg-gray-200 text-gray-500 hover:bg-gray-300 border-2 border-transparent mb-[2px]"
+                            }`}
+                    >
+                        <div className="flex items-center gap-2">
+                            <MessageSquare className="w-4 h-4" />
+                            <span>TRASH TALK</span>
+                        </div>
                     </button>
                     <button
                         onClick={() => setViewMode("analytics")}
@@ -918,7 +932,9 @@ export default function LeaguePage() {
 
                 {/* Content Area */}
                 <div className="bg-white border-2 border-black rounded-b-xl rounded-tr-xl p-6 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
-                    {viewMode === "activity" ? (
+                    {viewMode === "chat" ? (
+                        <LeagueChat leagueId={leagueId} currentUser={user!} members={members} />
+                    ) : viewMode === "activity" ? (
                         <ActivityLog
                             leagueId={leagueId}
                             isAdmin={user?.uid === league?.ownerId || members.find(m => m.uid === user?.uid)?.role === 'ADMIN'}

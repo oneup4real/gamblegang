@@ -73,7 +73,14 @@ async function resolveMatchWithAI(bet: Bet, apiKey: string): Promise<any | null>
         If the game was played on a different date recently (within 24 hours), please provide that result instead.
         
         Return ONLY valid JSON:
-        { "status": "FOUND", "home": number, "away": number, "source": "string", "confidence": "high"|"medium"|"low" }
+        { 
+            "status": "FOUND", 
+            "home": number, 
+            "away": number, 
+            "source": "Site Name (e.g. ESPN, BBC)",
+            "sourceUrl": "Direct URL to the report/score", 
+            "confidence": "high"|"medium"|"low" 
+        }
         OR
         { "status": "UNKNOWN" }
         `;
@@ -84,16 +91,29 @@ async function resolveMatchWithAI(bet: Bet, apiKey: string): Promise<any | null>
         });
 
         const text = result.response.text().replace(/```json/g, "").replace(/```/g, "").trim();
-        const parsed = JSON.parse(text);
+        const jsonMatch = text.match(/\{[\s\S]*\}/);
+        const jsonString = jsonMatch ? jsonMatch[0] : text;
+        const parsed = JSON.parse(jsonString);
 
         if (parsed.status === "FOUND") {
+            let finalSource = parsed.source;
+            if ((!finalSource || finalSource.includes("AI")) && parsed.sourceUrl) {
+                try {
+                    const domain = new URL(parsed.sourceUrl).hostname.replace('www.', '');
+                    finalSource = domain;
+                } catch (e) {
+                    finalSource = "Web Search";
+                }
+            }
+
             return {
                 type: "MATCH",
                 home: parsed.home,
                 away: parsed.away,
                 verification: {
                     verified: true,
-                    source: parsed.source || "AI Search",
+                    source: finalSource || "AI Search",
+                    url: parsed.sourceUrl || undefined,
                     verifiedAt: new Date().toISOString(),
                     method: "AI_GROUNDING",
                     confidence: parsed.confidence || "high",
@@ -288,16 +308,59 @@ async function getTeamPastEvents(teamId: string): Promise<any[]> {
     }
 }
 
+async function getEventById(eventId: string): Promise<any | null> {
+    try {
+        const url = `${SPORTS_DB_BASE_URL}/${SPORTS_DB_API_KEY}/lookupevent.php?id=${eventId}`;
+        const response = await fetch(url);
+        if (!response.ok) return null;
+        const data = await response.json();
+        return data.events ? data.events[0] : null;
+    } catch (error) {
+        logger.error(`Error looking up event ${eventId}:`, error);
+        return null;
+    }
+}
+
 async function resolveMatchWithAPI(bet: Bet): Promise<any | null> {
     const homeTeam = bet.matchDetails?.homeTeam;
     const awayTeam = bet.matchDetails?.awayTeam;
     const eventDate = bet.eventDate?.toDate ? bet.eventDate.toDate() : new Date(bet.eventDate);
 
+    // 1. PRIORITIZE ID LOOKUP
+    if (bet.sportsDbEventId) {
+        logger.info(`🏟️ [SportsDB API] resolving via ID: ${bet.sportsDbEventId}`);
+        const event = await getEventById(bet.sportsDbEventId);
+        if (event) {
+            const homeScore = event.intHomeScore ? parseInt(event.intHomeScore) : null;
+            const awayScore = event.intAwayScore ? parseInt(event.intAwayScore) : null;
+
+            if (homeScore !== null && awayScore !== null) {
+                logger.info(`✅ [SportsDB API] Found score via ID: ${homeScore} - ${awayScore}`);
+                return {
+                    type: "MATCH",
+                    home: homeScore,
+                    away: awayScore,
+                    verification: {
+                        verified: true,
+                        source: "TheSportsDB API",
+                        verifiedAt: new Date().toISOString(),
+                        method: "API_LOOKUP",
+                        confidence: "high",
+                        actualResult: `${homeScore} - ${awayScore}`
+                    }
+                };
+            } else {
+                logger.warn(`⚠️ [SportsDB API] Event ${bet.sportsDbEventId} found but no scores yet.`);
+            }
+        }
+    }
+
     if (!homeTeam || !awayTeam) return null;
 
-    logger.info(`🏟️ [SportsDB API] Looking for: ${homeTeam} vs ${awayTeam}`);
+    logger.info(`🏟️ [SportsDB API] fallback to Search Name: ${homeTeam} vs ${awayTeam}`);
 
     try {
+        // Find home team
         // Find home team
         const homeTeamData = await findTeamByName(homeTeam);
         if (!homeTeamData) {

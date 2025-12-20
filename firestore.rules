@@ -81,6 +81,12 @@ service cloud.firestore {
         // Allow write for authenticated users (logging happens from services)
         allow write: if request.auth != null;
       }
+
+      // Subcollection: Chat
+      match /chat/{messageId} {
+        allow read: if request.auth != null;
+        allow create: if request.auth != null;
+      }
     }
 
     // Explicitly allow Collection Group queries for members

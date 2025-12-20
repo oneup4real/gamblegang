@@ -44,6 +44,7 @@ export const viewport: Viewport = {
 import { AuthProvider } from "@/components/auth-provider";
 import { NavBar } from "@/components/navbar";
 import { PWAInstallProvider } from "@/hooks/use-pwa-install";
+import { PwaPopup } from "@/components/pwa-popup";
 
 export const dynamicParams = false;
 
@@ -82,6 +83,7 @@ export default async function LocaleLayout({
               <NavBar />
               {children}
             </AuthProvider>
+            <PwaPopup />
           </PWAInstallProvider>
         </NextIntlClientProvider>
       </body>
