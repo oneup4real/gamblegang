@@ -54,9 +54,11 @@
       opacity: 0;
       transform: scale(0.3);
     }
+
     70% {
       transform: scale(1.1);
     }
+
     100% {
       opacity: 1;
       transform: scale(1);
@@ -205,5 +207,18 @@
       linear-gradient(#e5e5f7 1px, transparent 1px),
       linear-gradient(90deg, #e5e5f7 1px, transparent 1px);
     background-size: 20px 20px;
+  }
+
+  /* Hide scrollbar for horizontal scroll containers */
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    /* IE and Edge */
+    scrollbar-width: none;
+    /* Firefox */
+  }
+
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+    /* Chrome, Safari, Opera */
   }
 }

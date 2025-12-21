@@ -330,6 +330,48 @@ export async function resetLeague(leagueId: string, startCapital: number) {
 
 export async function deleteLeague(leagueId: string) {
     const leagueRef = doc(db, "leagues", leagueId);
+
+    // 1. Delete all bets and their wagers (nested subcollections)
+    const betsSnapshot = await getDocs(collection(db, "leagues", leagueId, "bets"));
+    for (const betDoc of betsSnapshot.docs) {
+        // Delete wagers for this bet
+        const wagersSnapshot = await getDocs(collection(db, "leagues", leagueId, "bets", betDoc.id, "wagers"));
+        if (wagersSnapshot.docs.length > 0) {
+            const wagerBatch = writeBatch(db);
+            for (const wagerDoc of wagersSnapshot.docs) {
+                wagerBatch.delete(wagerDoc.ref);
+            }
+            await wagerBatch.commit();
+        }
+        // Delete the bet itself
+        await deleteDoc(betDoc.ref);
+    }
+
+    // 2. Delete other subcollections (chat, activityLog, announcements, members)
+    const subcollections = ["chat", "activityLog", "announcements", "members"];
+    for (const subcollection of subcollections) {
+        const subDocs = await getDocs(collection(db, "leagues", leagueId, subcollection));
+        if (subDocs.docs.length > 0) {
+            const subBatch = writeBatch(db);
+            for (const subDoc of subDocs.docs) {
+                subBatch.delete(subDoc.ref);
+            }
+            await subBatch.commit();
+        }
+    }
+
+    // 3. Delete notifications for this league (top-level collection)
+    const notificationsQuery = query(collection(db, "notifications"), where("leagueId", "==", leagueId));
+    const notificationsSnapshot = await getDocs(notificationsQuery);
+    if (notificationsSnapshot.docs.length > 0) {
+        const notifBatch = writeBatch(db);
+        for (const notifDoc of notificationsSnapshot.docs) {
+            notifBatch.delete(notifDoc.ref);
+        }
+        await notifBatch.commit();
+    }
+
+    // 4. Finally delete the league document itself
     await deleteDoc(leagueRef);
 }
 

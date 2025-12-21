@@ -378,6 +378,31 @@ export function CreateLeagueModal({ isOpen, onClose }: CreateLeagueModalProps) {
                                         <p className="text-xs font-bold text-gray-500 ml-1">
                                             {t('chipsDesc')}
                                         </p>
+
+                                        {/* Dispute Window Settings for Zero Sum */}
+                                        <div className="space-y-2 mt-4 pt-4 border-t-2 border-gray-200">
+                                            <label className="text-sm font-black uppercase flex items-center gap-2">
+                                                <Gavel className="w-4 h-4" /> Dispute Window
+                                            </label>
+                                            <p className="text-xs text-gray-500 font-bold -mt-1 mb-2">
+                                                Hours allowed to dispute a result.
+                                            </p>
+                                            <div className="flex gap-2 flex-wrap">
+                                                {[1, 6, 12, 24, 48].map(h => (
+                                                    <button
+                                                        key={h}
+                                                        type="button"
+                                                        onClick={() => setDisputeWindow(h)}
+                                                        className={`px-4 py-2 rounded-lg font-black border-2 text-sm transition-all ${disputeWindow === h
+                                                            ? "bg-orange-500 text-white border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
+                                                            : "bg-white text-gray-500 border-gray-200 hover:border-orange-500"
+                                                            }`}
+                                                    >
+                                                        {h}h
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        </div>
                                     </motion.div>
                                 )}
 
@@ -497,7 +522,7 @@ export function CreateLeagueModal({ isOpen, onClose }: CreateLeagueModalProps) {
                                             </p>
                                         </div>
 
-                                        {/* Dispute Window Settings */}
+                                        {/* Dispute Window Settings for Arcade */}
                                         <div className="space-y-2 mt-4 pt-4 border-t-2 border-gray-200">
                                             <label className="text-sm font-black uppercase flex items-center gap-2">
                                                 <Gavel className="w-4 h-4" /> Dispute Window
@@ -505,34 +530,24 @@ export function CreateLeagueModal({ isOpen, onClose }: CreateLeagueModalProps) {
                                             <p className="text-xs text-gray-500 font-bold -mt-1 mb-2">
                                                 Hours allowed to dispute a result.
                                             </p>
-                                            <div className="flex gap-2">
-                                                {[12, 24, 48].map(h => (
+                                            <div className="flex gap-2 flex-wrap">
+                                                {[1, 6, 12, 24, 48].map(h => (
                                                     <button
                                                         key={h}
                                                         type="button"
                                                         onClick={() => setDisputeWindow(h)}
-                                                        className={`flex-1 py-2 rounded-lg font-black border-2 transition-all ${disputeWindow === h
-                                                            ? "bg-black text-white border-black"
-                                                            : "bg-white text-gray-500 border-gray-200 hover:border-black"
+                                                        className={`px-4 py-2 rounded-lg font-black border-2 text-sm transition-all ${disputeWindow === h
+                                                            ? "bg-orange-500 text-white border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
+                                                            : "bg-white text-gray-500 border-gray-200 hover:border-orange-500"
                                                             }`}
                                                     >
                                                         {h}h
                                                     </button>
                                                 ))}
-                                                <div className="relative flex-1">
-                                                    <input
-                                                        type="number"
-                                                        min={1}
-                                                        value={disputeWindow}
-                                                        onChange={e => setDisputeWindow(Math.max(1, Number(e.target.value)))}
-                                                        className={`w-full h-full px-2 rounded-lg font-bold border-2 text-center focus:outline-none ${![12, 24, 48].includes(disputeWindow) ? "border-black bg-gray-50" : "border-gray-200"
-                                                            }`}
-                                                        placeholder="Custom"
-                                                    />
-                                                    <span className="absolute right-2 top-2.5 text-xs font-bold text-gray-400">h</span>
-                                                </div>
                                             </div>
                                         </div>
+
+
                                     </motion.div>
                                 )}
 

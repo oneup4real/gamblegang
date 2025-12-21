@@ -14,8 +14,24 @@ const googleApiKey = defineSecret("GOOGLE_API_KEY");
 const sportsDbApiKey = defineSecret("SPORTS_DB_API_KEY");
 
 // --- SPORTSDB API ---
-const SPORTS_DB_BASE_URL = "https://www.thesportsdb.com/api/v1/json";
+// V1 API (legacy, key in URL)
+// V2 API (modern, key in headers) - for gradual migration
+const SPORTS_DB_V2_URL = "https://www.thesportsdb.com/api/v2/json";
 let SPORTS_DB_API_KEY = "3"; // Default free tier, will be set from secret in scheduled function
+
+/**
+ * Helper for V2 API calls with proper header authentication.
+ */
+async function sportsDbV2Fetch(endpoint: string): Promise<any> {
+    const url = `${SPORTS_DB_V2_URL}${endpoint}`;
+    const response = await fetch(url, {
+        headers: { 'X-API-KEY': SPORTS_DB_API_KEY }
+    });
+    if (!response.ok) {
+        throw new Error(`SportsDB V2 error: ${response.status}`);
+    }
+    return response.json();
+}
 
 // --- TYPES ---
 interface Bet {
@@ -276,13 +292,10 @@ function normalizeTeamName(name: string): string {
 
 async function findTeamByName(teamName: string): Promise<any | null> {
     try {
-        const encodedTeam = encodeURIComponent(teamName);
-        const url = `${SPORTS_DB_BASE_URL}/${SPORTS_DB_API_KEY}/searchteams.php?t=${encodedTeam}`;
+        // V2: /search/team/{name} with underscores for spaces
+        const encodedTeam = teamName.toLowerCase().replace(/\s+/g, '_');
+        const data = await sportsDbV2Fetch(`/search/team/${encodedTeam}`);
 
-        const response = await fetch(url);
-        if (!response.ok) return null;
-
-        const data = await response.json();
         if (data.teams && data.teams.length > 0) {
             return data.teams[0];
         }
@@ -295,13 +308,9 @@ async function findTeamByName(teamName: string): Promise<any | null> {
 
 async function getTeamPastEvents(teamId: string): Promise<any[]> {
     try {
-        const url = `${SPORTS_DB_BASE_URL}/${SPORTS_DB_API_KEY}/eventslast.php?id=${teamId}`;
-
-        const response = await fetch(url);
-        if (!response.ok) return [];
-
-        const data = await response.json();
-        return data.results || [];
+        // V2: /schedule/previous/team/{id}
+        const data = await sportsDbV2Fetch(`/schedule/previous/team/${teamId}`);
+        return data.schedule || data.results || [];
     } catch (error) {
         logger.error("Error fetching team events:", error);
         return [];
@@ -310,10 +319,8 @@ async function getTeamPastEvents(teamId: string): Promise<any[]> {
 
 async function getEventById(eventId: string): Promise<any | null> {
     try {
-        const url = `${SPORTS_DB_BASE_URL}/${SPORTS_DB_API_KEY}/lookupevent.php?id=${eventId}`;
-        const response = await fetch(url);
-        if (!response.ok) return null;
-        const data = await response.json();
+        // V2: /lookup/event/{id}
+        const data = await sportsDbV2Fetch(`/lookup/event/${eventId}`);
         return data.events ? data.events[0] : null;
     } catch (error) {
         logger.error(`Error looking up event ${eventId}:`, error);
@@ -772,14 +779,8 @@ async function getLiveScoreByEventId(eventId: string): Promise<{
     matchStatus?: "NOT_STARTED" | "LIVE" | "HALFTIME" | "FINISHED" | "POSTPONED";
 }> {
     try {
-        const url = `${SPORTS_DB_BASE_URL}/${SPORTS_DB_API_KEY}/lookupevent.php?id=${eventId}`;
-
-        const response = await fetch(url);
-        if (!response.ok) {
-            return { found: false };
-        }
-
-        const data = await response.json();
+        // V2: /lookup/event/{id}
+        const data = await sportsDbV2Fetch(`/lookup/event/${eventId}`);
         if (!data.events || data.events.length === 0) {
             return { found: false };
         }

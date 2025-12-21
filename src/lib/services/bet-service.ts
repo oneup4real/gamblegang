@@ -1451,43 +1451,89 @@ export async function submitDisputeResult(
 
 
 /**
- * Mark bet as INVALID and refund all wagers
+ * Mark bet as INVALID and fully reverse all its effects.
+ * This ensures players return to the exact state they were in before the bet existed:
+ * 1. Reverse any payouts that were distributed (if bet was already resolved/proofing)
+ * 2. Refund original wager amounts back to players
+ * 3. Refund power-ups that were used on wagers
  */
 export async function markBetInvalidAndRefund(leagueId: string, betId: string) {
     const { getDocs, collection, getDoc } = await import("firebase/firestore");
     const betRef = doc(db, "leagues", leagueId, "bets", betId);
 
-    // Get bet data and league name for notification before transaction
+    // Get bet data and league info before transaction
     const betSnap = await getDoc(betRef);
     const bet = betSnap.exists() ? { id: betSnap.id, ...betSnap.data() } as Bet : null;
     const leagueSnap = await getDoc(doc(db, "leagues", leagueId));
     const leagueName = leagueSnap.exists() ? leagueSnap.data().name : undefined;
+    const league = leagueSnap.exists() ? leagueSnap.data() as League : null;
 
-    // Get wagerer IDs before transaction
+    // Get all wagers
     const wagersCol = collection(db, "leagues", leagueId, "bets", betId, "wagers");
     const wagersSnapForNotifs = await getDocs(wagersCol);
-    const wagererIds = wagersSnapForNotifs.docs.map(d => d.data().userId as string);
+    const wagers = wagersSnapForNotifs.docs.map(d => ({ id: d.id, ...d.data() } as Wager));
+    const wagererIds = wagers.map(w => w.userId);
 
     await runTransaction(db, async (transaction) => {
         const betSnap = await transaction.get(betRef);
         if (!betSnap.exists()) throw new Error("Bet not found");
+        const currentBet = betSnap.data() as Bet;
 
-        // Get all wagers
+        // Get current wager states
         const wagersSnap = await getDocs(wagersCol);
 
-        // Refund each wager
+        // Refund each wager and reverse any payouts
         for (const wagerDoc of wagersSnap.docs) {
             const wager = wagerDoc.data() as Wager;
             const memberRef = doc(db, "leagues", leagueId, "members", wager.userId);
+            const memberSnap = await transaction.get(memberRef);
 
-            transaction.update(memberRef, {
-                points: increment(wager.amount), // Refund points
+            if (!memberSnap.exists()) continue;
+            const member = memberSnap.data() as LeagueMember;
+
+            // Calculate the net adjustment needed to return player to pre-bet state
+            // Pre-bet state: player had their points + the wager amount
+            // Current state: player has points + payout (if won) or points (if lost)
+            // 
+            // To return to pre-bet state:
+            // - Add back wager amount (they spent this to bet)
+            // - Subtract any payout they received (reverse winnings)
+
+            let pointsAdjustment = wager.amount; // Always refund the original wager
+
+            // If they received a payout (WON), we need to reverse it
+            if (wager.payout && wager.payout > 0 && (wager.status === "WON" || wager.status === "PUSH")) {
+                pointsAdjustment -= wager.payout; // Take back the payout
+            }
+
+            // Update member points and stats
+            const memberUpdates: any = {
+                points: increment(pointsAdjustment),
                 totalInvested: increment(-wager.amount) // Remove from invested since bet is invalid
-            });
+            };
+
+            // Refund power-up if one was used (Arcade mode)
+            if (wager.powerUp && league?.mode === "STANDARD") {
+                const powerUpKey = wager.powerUp as 'x2' | 'x3' | 'x4';
+                const currentPowerUps = member.powerUps || { x2: 0, x3: 0, x4: 0 };
+                memberUpdates.powerUps = {
+                    ...currentPowerUps,
+                    [powerUpKey]: (currentPowerUps[powerUpKey] || 0) + 1
+                };
+            }
+
+            // Remove the last result from recentResults (if this bet added one)
+            if (member.recentResults && member.recentResults.length > 0) {
+                // Remove the most recent entry (this bet's result)
+                memberUpdates.recentResults = member.recentResults.slice(1);
+            }
+
+            transaction.update(memberRef, memberUpdates);
 
             // Update wager status
             transaction.update(wagerDoc.ref, {
-                status: "PUSH"
+                status: "PUSH",
+                payout: 0
             });
         }
 
@@ -1501,7 +1547,7 @@ export async function markBetInvalidAndRefund(leagueId: string, betId: string) {
     // Send refund notifications (fire and forget)
     Promise.all(
         wagererIds.map(userId =>
-            createNotification(userId, "BET_REFUNDED", "♻️ Bet Refunded", `"${bet?.question || 'Bet'}" was marked invalid.Your wager has been refunded.`, {
+            createNotification(userId, "BET_REFUNDED", "♻️ Bet Invalidated & Refunded", `"${bet?.question || 'Bet'}" was marked invalid. Your wager and any used power-ups have been refunded.`, {
                 betId,
                 leagueId,
                 leagueName

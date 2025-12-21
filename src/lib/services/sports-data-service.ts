@@ -2,12 +2,26 @@
 
 /**
  * Sports Data Service
- * Integrates with TheSportsDB API to fetch real sports results
- * Documentation: https://www.thesportsdb.com/api.php
+ * Integrates with TheSportsDB V2 API to fetch real sports results
+ * Documentation: https://www.thesportsdb.com/documentation
  */
 
-const SPORTS_DB_API_KEY = process.env.SPORTS_DB_API_KEY || "3"; // Free tier key for testing
-const SPORTS_DB_BASE_URL = "https://www.thesportsdb.com/api/v1/json";
+const SPORTS_DB_API_KEY = process.env.SPORTS_DB_API_KEY || "3";
+const SPORTS_DB_V2_URL = "https://www.thesportsdb.com/api/v2/json";
+
+/**
+ * Helper for V2 API calls with proper header authentication.
+ */
+async function sportsDbV2Fetch(endpoint: string): Promise<any> {
+    const url = `${SPORTS_DB_V2_URL}${endpoint}`;
+    const response = await fetch(url, {
+        headers: { 'X-API-KEY': SPORTS_DB_API_KEY }
+    });
+    if (!response.ok) {
+        throw new Error(`SportsDB V2 error: ${response.status}`);
+    }
+    return response.json();
+}
 
 interface SportsDBEvent {
     idEvent: string;
@@ -39,20 +53,14 @@ interface GameResult {
 }
 
 /**
- * Search for a team by name in TheSportsDB
+ * Search for a team by name in TheSportsDB V2
  */
 async function findTeamByName(teamName: string): Promise<SportsDBTeam | null> {
     try {
-        const encodedTeam = encodeURIComponent(teamName);
-        const url = `${SPORTS_DB_BASE_URL}/${SPORTS_DB_API_KEY}/searchteams.php?t=${encodedTeam}`;
+        // V2: /search/team/{name}
+        const encodedTeam = teamName.toLowerCase().replace(/\s+/g, '_');
+        const data = await sportsDbV2Fetch(`/search/team/${encodedTeam}`);
 
-        const response = await fetch(url);
-        if (!response.ok) {
-            console.error("Failed to search team:", response.statusText);
-            return null;
-        }
-
-        const data = await response.json();
         if (data.teams && data.teams.length > 0) {
             return data.teams[0];
         }
@@ -65,24 +73,14 @@ async function findTeamByName(teamName: string): Promise<SportsDBTeam | null> {
 }
 
 /**
- * Get past events for a specific team
+ * Get past events for a specific team (V2)
  */
 async function getTeamPastEvents(teamId: string, limit: number = 15): Promise<SportsDBEvent[]> {
     try {
-        const url = `${SPORTS_DB_BASE_URL}/${SPORTS_DB_API_KEY}/eventslast.php?id=${teamId}`;
-
-        const response = await fetch(url);
-        if (!response.ok) {
-            console.error("Failed to fetch team events:", response.statusText);
-            return [];
-        }
-
-        const data = await response.json();
-        if (data.results) {
-            return data.results.slice(0, limit);
-        }
-
-        return [];
+        // V2: /schedule/previous/team/{id}
+        const data = await sportsDbV2Fetch(`/schedule/previous/team/${teamId}`);
+        const events = data.schedule || data.results || [];
+        return events.slice(0, limit);
     } catch (error) {
         console.error("Error fetching team events:", error);
         return [];
@@ -190,26 +188,19 @@ interface SportsDBLeague {
 }
 
 /**
- * Search for leagues by name (e.g., "Premier League", "NBA")
+ * Search for leagues by name - V2 API
  */
 export async function searchLeagues(query: string): Promise<SportsDBLeague[]> {
     try {
-        const encodedQuery = encodeURIComponent(query);
-        const url = `${SPORTS_DB_BASE_URL}/${SPORTS_DB_API_KEY}/search_all_leagues.php?s=${encodedQuery}`;
+        // V2: /search/league/{name}
+        const encodedQuery = query.toLowerCase().replace(/\s+/g, '_');
+        console.log(`🔍 [SportsDB V2] Searching leagues for: ${query}`);
 
-        console.log(`🔍 [SportsDB] Searching leagues for: ${query}`);
+        const data = await sportsDbV2Fetch(`/search/league/${encodedQuery}`);
 
-        const response = await fetch(url);
-        if (!response.ok) {
-            console.error("Failed to search leagues:", response.statusText);
-            return [];
-        }
-
-        const data = await response.json();
-        if (data.countrys) {
-            // The API returns leagues under "countrys" when searching by sport
-            console.log(`✅ [SportsDB] Found ${data.countrys.length} leagues`);
-            return data.countrys;
+        if (data.leagues && data.leagues.length > 0) {
+            console.log(`✅ [SportsDB V2] Found ${data.leagues.length} leagues`);
+            return data.leagues;
         }
 
         return [];
@@ -220,35 +211,19 @@ export async function searchLeagues(query: string): Promise<SportsDBLeague[]> {
 }
 
 /**
- * Search for a league by exact name
+ * Search for a league by exact name - V2 API
  */
 async function findLeagueByName(leagueName: string): Promise<SportsDBLeague | null> {
     try {
-        const encodedName = encodeURIComponent(leagueName);
-        const url = `${SPORTS_DB_BASE_URL}/${SPORTS_DB_API_KEY}/search_all_leagues.php?l=${encodedName}`;
+        // V2: /search/league/{name}
+        const encodedName = leagueName.toLowerCase().replace(/\s+/g, '_');
+        console.log(`🔍 [SportsDB V2] Searching for league: ${leagueName}`);
 
-        console.log(`🔍 [SportsDB] Searching for league: ${leagueName}`);
+        const data = await sportsDbV2Fetch(`/search/league/${encodedName}`);
 
-        const response = await fetch(url);
-        if (!response.ok) {
-            return null;
-        }
-
-        const data = await response.json();
         if (data.leagues && data.leagues.length > 0) {
-            console.log(`✅ [SportsDB] Found league: ${data.leagues[0].strLeague}`);
+            console.log(`✅ [SportsDB V2] Found league: ${data.leagues[0].strLeague}`);
             return data.leagues[0];
-        }
-
-        // Try searching by sport if direct league search fails
-        const leagues = await searchLeagues(leagueName);
-        if (leagues.length > 0) {
-            // Find best match
-            const match = leagues.find(l =>
-                l.strLeague.toLowerCase().includes(leagueName.toLowerCase()) ||
-                leagueName.toLowerCase().includes(l.strLeague.toLowerCase())
-            );
-            return match || leagues[0];
         }
 
         return null;
@@ -259,24 +234,19 @@ async function findLeagueByName(leagueName: string): Promise<SportsDBLeague | nu
 }
 
 /**
- * Get next/upcoming events for a league
+ * Get next/upcoming events for a league - V2 API
  */
 export async function getLeagueNextEvents(leagueId: string, limit: number = 15): Promise<SportsDBEvent[]> {
     try {
-        const url = `${SPORTS_DB_BASE_URL}/${SPORTS_DB_API_KEY}/eventsnextleague.php?id=${leagueId}`;
+        // V2: /schedule/next/league/{id}
+        console.log(`📅 [SportsDB V2] Fetching next events for league ID: ${leagueId}`);
 
-        console.log(`📅 [SportsDB] Fetching next events for league ID: ${leagueId}`);
+        const data = await sportsDbV2Fetch(`/schedule/next/league/${leagueId}`);
+        const events = data.schedule || data.events || [];
 
-        const response = await fetch(url);
-        if (!response.ok) {
-            console.error("Failed to fetch league events:", response.statusText);
-            return [];
-        }
-
-        const data = await response.json();
-        if (data.events) {
-            console.log(`✅ [SportsDB] Found ${data.events.length} upcoming events`);
-            return data.events.slice(0, limit);
+        if (events.length > 0) {
+            console.log(`✅ [SportsDB V2] Found ${events.length} upcoming events`);
+            return events.slice(0, limit);
         }
 
         return [];
@@ -287,25 +257,21 @@ export async function getLeagueNextEvents(leagueId: string, limit: number = 15):
 }
 
 /**
- * Get events for a specific date range from a league
+ * Get events for a league season - V2 API
  */
 async function getLeagueEventsByDate(leagueId: string, startDate: string, endDate: string): Promise<SportsDBEvent[]> {
     try {
-        // Note: This endpoint requires premium API key
-        const url = `${SPORTS_DB_BASE_URL}/${SPORTS_DB_API_KEY}/eventsseason.php?id=${leagueId}&s=${new Date().getFullYear()}`;
+        // V2: /schedule/league/{id}/{season}
+        const season = `${new Date().getFullYear()}-${new Date().getFullYear() + 1}`;
+        const data = await sportsDbV2Fetch(`/schedule/league/${leagueId}/${season}`);
 
-        const response = await fetch(url);
-        if (!response.ok) {
-            return [];
-        }
-
-        const data = await response.json();
-        if (data.events) {
+        const events = data.schedule || data.events || [];
+        if (events.length > 0) {
             // Filter by date range
             const start = new Date(startDate);
             const end = new Date(endDate);
 
-            return data.events.filter((event: SportsDBEvent) => {
+            return events.filter((event: SportsDBEvent) => {
                 const eventDate = new Date(event.dateEvent);
                 return eventDate >= start && eventDate <= end;
             });
@@ -385,23 +351,14 @@ export async function generateBulkBetsFromAPI(
 }
 
 /**
- * Get upcoming events for a team
+ * Get upcoming events for a team - V2 API
  */
 async function getTeamNextEvents(teamId: string, limit: number = 15): Promise<SportsDBEvent[]> {
     try {
-        const url = `${SPORTS_DB_BASE_URL}/${SPORTS_DB_API_KEY}/eventsnext.php?id=${teamId}`;
-
-        const response = await fetch(url);
-        if (!response.ok) {
-            return [];
-        }
-
-        const data = await response.json();
-        if (data.events) {
-            return data.events.slice(0, limit);
-        }
-
-        return [];
+        // V2: /schedule/next/team/{id}
+        const data = await sportsDbV2Fetch(`/schedule/next/team/${teamId}`);
+        const events = data.schedule || data.events || [];
+        return events.slice(0, limit);
     } catch (error) {
         console.error("Error fetching team next events:", error);
         return [];
@@ -745,166 +702,4 @@ export async function findSportsDbEvent(
         console.error("Error finding SportsDB event:", error);
         return { found: false };
     }
-}
-
-// ============================================
-// LIVE SCORE TRACKING
-// ============================================
-
-interface LiveScoreResult {
-    found: boolean;
-    homeScore?: number;
-    awayScore?: number;
-    matchTime?: string;
-    matchStatus?: "NOT_STARTED" | "LIVE" | "HALFTIME" | "FINISHED" | "POSTPONED";
-    eventId?: string;
-}
-
-/**
- * Get live score for a specific event by ID
- */
-export async function getLiveScoreByEventId(eventId: string): Promise<LiveScoreResult> {
-    try {
-        const url = `${SPORTS_DB_BASE_URL}/${SPORTS_DB_API_KEY}/lookupevent.php?id=${eventId}`;
-
-        const response = await fetch(url);
-        if (!response.ok) {
-            return { found: false };
-        }
-
-        const data = await response.json();
-        if (!data.events || data.events.length === 0) {
-            return { found: false };
-        }
-
-        const event = data.events[0];
-        const homeScore = event.intHomeScore ? parseInt(event.intHomeScore) : undefined;
-        const awayScore = event.intAwayScore ? parseInt(event.intAwayScore) : undefined;
-
-        // Determine match status
-        let matchStatus: LiveScoreResult["matchStatus"] = "NOT_STARTED";
-        const status = (event.strStatus || "").toLowerCase();
-
-        if (status.includes("ft") || status.includes("finished") || status.includes("final")) {
-            matchStatus = "FINISHED";
-        } else if (status.includes("ht") || status.includes("halftime") || status.includes("half time")) {
-            matchStatus = "HALFTIME";
-        } else if (status.includes("live") || status.includes("'") || /^\d+$/.test(status)) {
-            matchStatus = "LIVE";
-        } else if (status.includes("postponed") || status.includes("cancelled")) {
-            matchStatus = "POSTPONED";
-        } else if (homeScore !== undefined || awayScore !== undefined) {
-            // If we have scores but no clear status, assume it's live or finished
-            matchStatus = homeScore !== undefined && awayScore !== undefined ? "LIVE" : "NOT_STARTED";
-        }
-
-        return {
-            found: true,
-            homeScore,
-            awayScore,
-            matchTime: event.strProgress || event.strStatus || "",
-            matchStatus,
-            eventId: event.idEvent
-        };
-
-    } catch (error) {
-        console.error("Error fetching live score:", error);
-        return { found: false };
-    }
-}
-
-/**
- * Get live score by looking up team and matching event
- * Fallback when we don't have eventId stored
- */
-export async function getLiveScoreByTeams(
-    homeTeam: string,
-    awayTeam: string,
-    eventDate: Date
-): Promise<LiveScoreResult> {
-    try {
-        // First find the team
-        const homeTeamData = await findTeamByName(homeTeam);
-        if (!homeTeamData) {
-            return { found: false };
-        }
-
-        // Check past events (for finished games)
-        const pastEvents = await getTeamPastEvents(homeTeamData.idTeam, 5);
-        // Check upcoming/live events
-        const upcomingEvents = await getTeamNextEvents(homeTeamData.idTeam, 5);
-
-        const allEvents = [...pastEvents, ...upcomingEvents];
-        const targetDate = eventDate.toISOString().split('T')[0];
-
-        for (const event of allEvents) {
-            const eventDateStr = event.dateEvent;
-            const isHomeMatch = normalizeTeamName(event.strHomeTeam) === normalizeTeamName(homeTeam);
-            const isAwayMatch = normalizeTeamName(event.strAwayTeam) === normalizeTeamName(awayTeam);
-
-            const eventDateObj = new Date(eventDateStr);
-            const dayDiff = Math.abs((eventDateObj.getTime() - eventDate.getTime()) / (1000 * 60 * 60 * 24));
-            const isWithinTolerance = dayDiff <= 1;
-
-            if (isWithinTolerance && isHomeMatch && isAwayMatch) {
-                // Found matching event, get its live score
-                return await getLiveScoreByEventId(event.idEvent);
-            }
-        }
-
-        return { found: false };
-
-    } catch (error) {
-        console.error("Error getting live score by teams:", error);
-        return { found: false };
-    }
-}
-
-/**
- * Batch get live scores for multiple events
- * More efficient for the cloud function updating many bets
- */
-export async function batchGetLiveScores(
-    bets: Array<{
-        betId: string;
-        sportsDbEventId?: string;
-        homeTeam?: string;
-        awayTeam?: string;
-        eventDate?: Date;
-    }>
-): Promise<Map<string, LiveScoreResult>> {
-    const results = new Map<string, LiveScoreResult>();
-
-    // Process in parallel with concurrency limit
-    const concurrencyLimit = 5;
-    const chunks: typeof bets[] = [];
-
-    for (let i = 0; i < bets.length; i += concurrencyLimit) {
-        chunks.push(bets.slice(i, i + concurrencyLimit));
-    }
-
-    for (const chunk of chunks) {
-        const promises = chunk.map(async (bet) => {
-            let result: LiveScoreResult;
-
-            if (bet.sportsDbEventId) {
-                // Fast path: direct event lookup
-                result = await getLiveScoreByEventId(bet.sportsDbEventId);
-            } else if (bet.homeTeam && bet.awayTeam && bet.eventDate) {
-                // Slow path: search by team names
-                result = await getLiveScoreByTeams(bet.homeTeam, bet.awayTeam, bet.eventDate);
-            } else {
-                result = { found: false };
-            }
-
-            results.set(bet.betId, result);
-        });
-
-        await Promise.all(promises);
-
-        // Small delay between batches to respect rate limits
-        await new Promise(r => setTimeout(r, 200));
-    }
-
-    return results;
 }
