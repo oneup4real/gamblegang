@@ -9,6 +9,7 @@ export interface UserProfile {
     displayName: string | null;
     photoURL: string | null;
     language?: string;
+    isSuperAdmin?: boolean; // Super Admin privilege
     createdAt: any;
     updatedAt: any;
 }
@@ -26,6 +27,7 @@ export async function createUserProfile(user: User) {
             displayName: user.displayName,
             photoURL: user.photoURL,
             language: "en",
+            isSuperAdmin: false, // Default to false
             createdAt: serverTimestamp(),
             updatedAt: serverTimestamp(),
         };

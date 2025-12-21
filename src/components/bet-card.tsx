@@ -605,14 +605,17 @@ export function BetCard({ bet, userPoints, userWager, mode, powerUps: powerUpsPr
                 }
             } else {
                 // STANDARD/ARCADE MODE
-                // Assuming Base Win = 1 Point
+                // Calculate Max Potential (Exact Score = 3pts, Others = 1pt)
+                // This reflects the 3-tier system: Exact(3) > Diff(2) > Winner(1)
+                let basePoints = (bet.type === "MATCH") ? 3 : 1;
+
                 let mult = 1;
                 if (userWager.powerUp === 'x2') mult = 2;
                 if (userWager.powerUp === 'x3') mult = 3;
                 if (userWager.powerUp === 'x4') mult = 4;
 
                 ticketOdds = `${mult}x Boost`;
-                ticketPotential = 1 * mult;
+                ticketPotential = basePoints * mult;
             }
 
             // Preliminary Winning Check
@@ -817,7 +820,10 @@ export function BetCard({ bet, userPoints, userWager, mode, powerUps: powerUpsPr
                                                 <input
                                                     type="number"
                                                     value={matchHome}
-                                                    onChange={e => setMatchHome(Number(e.target.value))}
+                                                    onChange={e => {
+                                                        const val = e.target.value;
+                                                        setMatchHome(val === "" ? "" : Number(val));
+                                                    }}
                                                     className="w-12 h-11 text-center text-xl font-black bg-slate-50 border-2 border-slate-300 rounded-lg focus:border-black focus:ring-0 outline-none transition-all shadow-sm shrink-0 p-0"
                                                     placeholder="-"
                                                 />
@@ -901,7 +907,10 @@ export function BetCard({ bet, userPoints, userWager, mode, powerUps: powerUpsPr
                                                 <input
                                                     type="number"
                                                     value={matchAway}
-                                                    onChange={e => setMatchAway(Number(e.target.value))}
+                                                    onChange={e => {
+                                                        const val = e.target.value;
+                                                        setMatchAway(val === "" ? "" : Number(val));
+                                                    }}
                                                     className="w-12 h-11 text-center text-xl font-black bg-slate-50 border-2 border-slate-300 rounded-lg focus:border-black focus:ring-0 outline-none transition-all shadow-sm shrink-0 p-0"
                                                     placeholder="-"
                                                 />
@@ -1038,7 +1047,10 @@ export function BetCard({ bet, userPoints, userWager, mode, powerUps: powerUpsPr
                                         type="number"
                                         placeholder={`Enter ${bet.rangeUnit || "value"}`}
                                         value={rangeValue}
-                                        onChange={e => setRangeValue(Number(e.target.value))}
+                                        onChange={e => {
+                                            const val = e.target.value;
+                                            setRangeValue(val === "" ? "" : Number(val));
+                                        }}
                                         className="w-full p-2 font-bold border-2 border-slate-300 rounded"
                                     />
                                 </div>

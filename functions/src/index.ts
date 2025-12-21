@@ -321,7 +321,13 @@ async function getEventById(eventId: string): Promise<any | null> {
     try {
         // V2: /lookup/event/{id}
         const data = await sportsDbV2Fetch(`/lookup/event/${eventId}`);
-        return data.events ? data.events[0] : null;
+
+        if (data.events && Array.isArray(data.events) && data.events.length > 0) return data.events[0];
+        if (data.lookup && Array.isArray(data.lookup) && data.lookup.length > 0) return data.lookup[0];
+        if (data.event) return data.event;
+        if (data.idEvent) return data;
+
+        return null;
     } catch (error) {
         logger.error(`Error looking up event ${eventId}:`, error);
         return null;
@@ -338,8 +344,13 @@ async function resolveMatchWithAPI(bet: Bet): Promise<any | null> {
         logger.info(`🏟️ [SportsDB API] resolving via ID: ${bet.sportsDbEventId}`);
         const event = await getEventById(bet.sportsDbEventId);
         if (event) {
-            const homeScore = event.intHomeScore ? parseInt(event.intHomeScore) : null;
-            const awayScore = event.intAwayScore ? parseInt(event.intAwayScore) : null;
+            const parseScore = (val: any) => {
+                if (val === null || val === undefined || val === "") return null;
+                return parseInt(String(val));
+            };
+
+            const homeScore = parseScore(event.intHomeScore) ?? parseScore(event.homeScore) ?? parseScore(event.strHomeScore);
+            const awayScore = parseScore(event.intAwayScore) ?? parseScore(event.awayScore) ?? parseScore(event.strAwayScore);
 
             if (homeScore !== null && awayScore !== null) {
                 logger.info(`✅ [SportsDB API] Found score via ID: ${homeScore} - ${awayScore}`);
@@ -781,17 +792,40 @@ async function getLiveScoreByEventId(eventId: string): Promise<{
     try {
         // V2: /lookup/event/{id}
         const data = await sportsDbV2Fetch(`/lookup/event/${eventId}`);
-        if (!data.events || data.events.length === 0) {
+
+        // DEBUG: Log the full response to debug V2 migration issues
+        logger.info(`🔍 [API V2] Lookup for ${eventId} returned keys: ${Object.keys(data).join(', ')}`);
+        logger.info(`🔍 [API V2] Raw Response: ${JSON.stringify(data).substring(0, 500)}`);
+
+        let event: any = null;
+        if (data.events && Array.isArray(data.events) && data.events.length > 0) {
+            event = data.events[0];
+        } else if (data.lookup && Array.isArray(data.lookup) && data.lookup.length > 0) {
+            // V2 Format often returns "lookup" array
+            event = data.lookup[0];
+        } else if (data.event) {
+            event = data.event;
+        } else if (data.idEvent) {
+            event = data;
+        }
+
+        if (!event) {
+            logger.warn(`⚠️ [API V2] Could not resolve 'event' object from response for ${eventId}`);
             return { found: false };
         }
 
-        const event = data.events[0];
-        const homeScore = event.intHomeScore ? parseInt(event.intHomeScore) : undefined;
-        const awayScore = event.intAwayScore ? parseInt(event.intAwayScore) : undefined;
+        // Parse scores (Handle V1 'intHomeScore' and V2 'homeScore'/'intHomeScore')
+        const parseScore = (val: any) => {
+            if (val === null || val === undefined || val === "") return undefined;
+            return parseInt(String(val));
+        };
+
+        const homeScore = parseScore(event.intHomeScore) ?? parseScore(event.homeScore) ?? parseScore(event.strHomeScore);
+        const awayScore = parseScore(event.intAwayScore) ?? parseScore(event.awayScore) ?? parseScore(event.strAwayScore);
 
         // Determine match status
         let matchStatus: "NOT_STARTED" | "LIVE" | "HALFTIME" | "FINISHED" | "POSTPONED" = "NOT_STARTED";
-        const status = (event.strStatus || "").toLowerCase();
+        const status = String(event.strStatus || event.status || "").toLowerCase();
 
         // 1. FINISHED
         if (status.includes("ft") || status.includes("finished") || status.includes("final") || status.includes("aet")) {

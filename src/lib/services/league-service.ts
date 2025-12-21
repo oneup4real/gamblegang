@@ -5,7 +5,6 @@ import { LeagueRole, hasPermission } from "@/lib/rbac";
 import { logMemberJoined, logPointsBought } from "./activity-log-service";
 
 export type LeagueMode = "ZERO_SUM" | "STANDARD";
-export type LeagueStatus = "NOT_STARTED" | "STARTED" | "FINISHED" | "ARCHIVED";
 export type BuyInType = "FIXED" | "FLEXIBLE";
 
 // Power Up Types for Arcade Mode
@@ -34,11 +33,11 @@ export interface League {
     createdAt: any;
     memberCount: number;
     mode: LeagueMode;
-    status: LeagueStatus;
     disputeWindowHours?: number; // Configurable dispute period (default: 12)
     aiAutoConfirmEnabled?: boolean;
     icon?: string; // Custom emoji or icon identifier
     colorScheme?: LeagueColorScheme; // Predefined color scheme
+    isFinished?: boolean; // Whether the league has been ended by owner
 }
 
 // Predefined color schemes for leagues
@@ -77,6 +76,7 @@ export interface MatchSettings {
     winner: number;
     choice?: number; // Multiple Choice points
     range?: number; // Guessing points
+    excludeDrawDiff?: boolean; // If true, draws do not award 'diff' points (prevents 2pt min for draws)
 }
 
 export interface LeagueMember {
@@ -125,8 +125,6 @@ export async function createLeague(
         startCapital,
         createdAt: serverTimestamp(),
         memberCount: 1,
-        status: "NOT_STARTED",
-        aiAutoConfirmEnabled: true, // Default enabled
         icon: icon || (mode === "ZERO_SUM" ? "💰" : "🎮"),
         colorScheme: colorScheme || "purple",
         disputeWindowHours
@@ -137,7 +135,7 @@ export async function createLeague(
     }
 
     if (mode === "STANDARD") {
-        leagueData.matchSettings = matchSettings || { exact: 3, diff: 1, winner: 2, choice: 1, range: 1 };
+        leagueData.matchSettings = matchSettings || { exact: 3, diff: 2, winner: 1, choice: 1, range: 1 };
         // Default power-up settings if not provided
         if (arcadePowerUpSettings) {
             leagueData.arcadePowerUpSettings = arcadePowerUpSettings;
@@ -182,10 +180,7 @@ export async function createLeague(
     }
 }
 
-export async function updateLeagueStatus(leagueId: string, status: LeagueStatus) {
-    const leagueRef = doc(db, "leagues", leagueId);
-    await setDoc(leagueRef, { status }, { merge: true });
-}
+
 
 export async function rebuy(leagueId: string, userId: string, amount: number) {
     const memberRef = doc(db, "leagues", leagueId, "members", userId);
@@ -513,8 +508,8 @@ export async function finishLeague(leagueId: string, userId: string) {
 
     if (league.ownerId !== userId) throw new Error("Only the owner can finish the league");
 
-    // 1. Update status
-    await updateLeagueStatus(leagueId, "FINISHED");
+    // 1. Mark league as finished
+    await setDoc(leagueRef, { isFinished: true }, { merge: true });
 
     // 2. Notify all members
     const membersRef = collection(db, "leagues", leagueId, "members");

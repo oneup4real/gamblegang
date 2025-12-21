@@ -3,7 +3,7 @@
 import { useAuth } from "@/components/auth-provider";
 import { Link } from '@/i18n/navigation';
 import { useState, useEffect } from "react";
-import { HelpCircle } from "lucide-react";
+import { HelpCircle, ShieldAlert } from "lucide-react";
 import { ManualModal } from "@/components/user-manual/manual-modal";
 import { UserSettingsModal } from "@/components/user-settings-modal";
 import { NotificationBell } from "@/components/notification-bell";
@@ -15,10 +15,11 @@ export function NavBar() {
     const [isManualOpen, setIsManualOpen] = useState(false);
     const [isSettingsOpen, setIsSettingsOpen] = useState(false);
     const [userPhotoURL, setUserPhotoURL] = useState<string | null>(null);
+    const [isSuperAdmin, setIsSuperAdmin] = useState(false);
 
-    // Fetch user's photoURL from Firestore
+    // Fetch user's photoURL and admin status from Firestore
     useEffect(() => {
-        async function fetchUserPhoto() {
+        async function fetchUserProfile() {
             if (!user) return;
 
             try {
@@ -26,16 +27,17 @@ export function NavBar() {
                 if (userDoc.exists()) {
                     const userData = userDoc.data();
                     setUserPhotoURL(userData.photoURL || user.photoURL || null);
+                    setIsSuperAdmin(!!userData.isSuperAdmin); // Check for Super Admin flag
                 } else {
                     setUserPhotoURL(user.photoURL || null);
                 }
             } catch (error) {
-                console.error("Error fetching user photo:", error);
+                console.error("Error fetching user profile:", error);
                 setUserPhotoURL(user.photoURL || null);
             }
         }
 
-        fetchUserPhoto();
+        fetchUserProfile();
     }, [user]);
 
     if (!user) return null;
@@ -53,6 +55,15 @@ export function NavBar() {
                     </Link>
 
                     <div className="flex items-center gap-4">
+                        {isSuperAdmin && (
+                            <Link
+                                href="/admin"
+                                className="h-10 w-10 flex items-center justify-center rounded-full border-2 border-black bg-red-600 hover:scale-110 hover:shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] transition-all cursor-pointer shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
+                                title="Super Admin Dashboard"
+                            >
+                                <ShieldAlert className="w-6 h-6 text-white" />
+                            </Link>
+                        )}
                         <button
                             onClick={() => setIsManualOpen(true)}
                             className="h-10 w-10 flex items-center justify-center rounded-full border-2 border-black bg-yellow-400 hover:scale-110 hover:shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] transition-all cursor-pointer shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"

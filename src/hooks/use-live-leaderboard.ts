@@ -49,6 +49,27 @@ function calculateWinStatus(
 ): "WINNING" | "LOSING" | "NEUTRAL" | "UNKNOWN" {
     const liveScore = bet.liveScore;
 
+    // Handle PROOFING status (Final Result known but points not yet distributed)
+    if (bet.status === "PROOFING" && bet.winningOutcome !== undefined) {
+        if (bet.type === "MATCH" && typeof wager.selection === "object") {
+            const outcome = bet.winningOutcome as { home: number; away: number };
+            const prediction = wager.selection as { home: number; away: number };
+
+            if (outcome.home === prediction.home && outcome.away === prediction.away) return "WINNING";
+
+            const actualTendency = outcome.home > outcome.away ? "H" : outcome.home < outcome.away ? "A" : "D";
+            const predictedTendency = prediction.home > prediction.away ? "H" : prediction.home < prediction.away ? "A" : "D";
+
+            if (actualTendency === predictedTendency) return "NEUTRAL";
+            return "LOSING";
+        }
+
+        if (bet.type === "CHOICE") {
+            if (String(bet.winningOutcome) === String(wager.selection)) return "WINNING";
+            return "LOSING";
+        }
+    }
+
     if (!liveScore || liveScore.matchStatus === "NOT_STARTED") {
         return "UNKNOWN";
     }
@@ -149,13 +170,13 @@ export function useLiveLeaderboard(
         const betsRef = collection(db, "leagues", leagueId, "bets");
         const betsQuery = query(
             betsRef,
-            where("status", "==", "LOCKED")
+            where("status", "in", ["LOCKED", "PROOFING"])
         );
 
         const unsubscribe = onSnapshot(betsQuery, async (snapshot) => {
             const bets = snapshot.docs
                 .map(doc => ({ id: doc.id, ...doc.data() } as Bet))
-                .filter(bet => bet.liveScore && bet.dataSource === "API");
+                .filter(bet => (bet.liveScore && bet.dataSource === "API") || bet.status === "PROOFING");
 
             setLiveBets(bets);
 

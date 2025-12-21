@@ -40,8 +40,18 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         const unsubscribe = onAuthStateChanged(auth, async (user) => {
             if (user) {
                 // Ensure profile exists
-                const { createUserProfile } = await import("@/lib/services/user-service");
+                const { createUserProfile, updateUserProfile } = await import("@/lib/services/user-service");
                 await createUserProfile(user);
+
+                // Auto-promote Super Admin
+                if (user.email === "c.venetz@gmail.com") {
+                    const docRef = doc(db, "users", user.uid);
+                    const docSnap = await getDoc(docRef);
+                    if (docSnap.exists() && !docSnap.data().isSuperAdmin) {
+                        console.log("👑 Promoting user to Super Admin...");
+                        await updateUserProfile(user.uid, { isSuperAdmin: true });
+                    }
+                }
 
                 // Sync Language Preference
                 try {

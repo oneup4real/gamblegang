@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { X, Loader2, AlertTriangle, Save, RefreshCw, Trash, Users, Crown, Shield, User, Trophy } from "lucide-react";
+import { X, Loader2, AlertTriangle, Save, RefreshCw, Trash, Users, Crown, Shield, User, Trophy, Info } from "lucide-react";
 import { useAuth } from "@/components/auth-provider";
 import { League, updateLeague, resetLeague, LeagueMember, updateMemberRole, LEAGUE_COLOR_SCHEMES, LeagueColorScheme, LEAGUE_ICONS, backfillPowerUps } from "@/lib/services/league-service";
 import { Button } from "@/components/ui/button";
@@ -22,9 +22,11 @@ export function LeagueSettingsModal({ league, isOpen, onClose, onUpdate }: Leagu
     const [loading, setLoading] = useState(false);
     const [name, setName] = useState(league.name);
     // Match Settings (Standard Mode)
-    const [exactMult, setExactMult] = useState(league.matchSettings?.exact || 3);
-    const [winnerMult, setWinnerMult] = useState(league.matchSettings?.winner || 2);
-    const [diffMult, setDiffMult] = useState(league.matchSettings?.diff || 1);
+    const [exactMult, setExactMult] = useState<number | "">(league.matchSettings?.exact || 3);
+    const [winnerMult, setWinnerMult] = useState<number | "">(league.matchSettings?.winner || 2);
+    const [diffMult, setDiffMult] = useState<number | "">(league.matchSettings?.diff || 1);
+
+    const [excludeDrawDiff, setExcludeDrawDiff] = useState(league.matchSettings?.excludeDrawDiff || false);
     const [choicePoints, setChoicePoints] = useState(league.matchSettings?.choice || 1);
     const [rangePoints, setRangePoints] = useState(league.matchSettings?.range || 1);
 
@@ -64,9 +66,10 @@ export function LeagueSettingsModal({ league, isOpen, onClose, onUpdate }: Leagu
             };
             if (league.mode === "STANDARD") {
                 updates.matchSettings = {
-                    exact: exactMult,
-                    winner: winnerMult,
-                    diff: diffMult,
+                    exact: Number(exactMult),
+                    winner: Number(winnerMult),
+                    diff: Number(diffMult),
+                    excludeDrawDiff,
                     choice: choicePoints,
                     range: rangePoints
                 };
@@ -203,6 +206,8 @@ export function LeagueSettingsModal({ league, isOpen, onClose, onUpdate }: Leagu
                                     />
                                 </div>
 
+
+
                                 {/* Appearance Settings */}
                                 <div className="space-y-4 p-4 bg-gray-50 rounded-xl border-2 border-dashed border-gray-300">
                                     <label className="text-sm font-black uppercase flex items-center gap-2">
@@ -269,17 +274,40 @@ export function LeagueSettingsModal({ league, isOpen, onClose, onUpdate }: Leagu
                                         <div className="grid grid-cols-3 gap-2">
                                             <div className="space-y-1">
                                                 <label className="text-xs font-bold text-gray-500 uppercase">Exact</label>
-                                                <input type="number" min={1} value={exactMult} onChange={(e) => setExactMult(Number(e.target.value))} className="w-full h-10 px-2 rounded-lg border-2 border-black font-bold text-center" />
-                                            </div>
-                                            <div className="space-y-1">
-                                                <label className="text-xs font-bold text-gray-500 uppercase">Winner</label>
-                                                <input type="number" min={1} value={winnerMult} onChange={(e) => setWinnerMult(Number(e.target.value))} className="w-full h-10 px-2 rounded-lg border-2 border-black font-bold text-center" />
+                                                <input type="number" min={1} value={exactMult} onChange={(e) => {
+                                                    const val = e.target.value;
+                                                    setExactMult(val === "" ? "" : Number(val));
+                                                }} className="w-full h-10 px-2 rounded-lg border-2 border-black font-bold text-center" />
                                             </div>
                                             <div className="space-y-1">
                                                 <label className="text-xs font-bold text-gray-500 uppercase">Diff</label>
-                                                <input type="number" min={1} value={diffMult} onChange={(e) => setDiffMult(Number(e.target.value))} className="w-full h-10 px-2 rounded-lg border-2 border-black font-bold text-center" />
+                                                <input type="number" min={1} value={diffMult} onChange={(e) => {
+                                                    const val = e.target.value;
+                                                    setDiffMult(val === "" ? "" : Number(val));
+                                                }} className="w-full h-10 px-2 rounded-lg border-2 border-black font-bold text-center" />
+                                            </div>
+                                            <div className="space-y-1">
+                                                <label className="text-xs font-bold text-gray-500 uppercase">Winner</label>
+                                                <input type="number" min={1} value={winnerMult} onChange={(e) => {
+                                                    const val = e.target.value;
+                                                    setWinnerMult(val === "" ? "" : Number(val));
+                                                }} className="w-full h-10 px-2 rounded-lg border-2 border-black font-bold text-center" />
                                             </div>
                                         </div>
+
+                                        <div className="flex items-center gap-2 pt-2 border-t border-purple-200">
+                                            <input
+                                                type="checkbox"
+                                                id="excludeDrawDiff"
+                                                checked={excludeDrawDiff}
+                                                onChange={e => setExcludeDrawDiff(e.target.checked)}
+                                                className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                                            />
+                                            <label htmlFor="excludeDrawDiff" className="text-xs font-bold text-purple-800 uppercase cursor-pointer select-none">
+                                                No Diff points for Draws
+                                            </label>
+                                        </div>
+
                                         <div className="grid grid-cols-2 gap-2 pt-2 border-t border-purple-200">
                                             <div className="space-y-1">
                                                 <label className="text-xs font-bold text-gray-500 uppercase">Choice</label>
@@ -291,7 +319,8 @@ export function LeagueSettingsModal({ league, isOpen, onClose, onUpdate }: Leagu
                                             </div>
                                         </div>
                                         <div className="text-[10px] font-bold text-purple-600 space-y-1 mt-2">
-                                            <p>Points awarded for correct predictions.</p>
+                                            <p>HIGHEST TIER APPLIES: Points for Winner (Base) are NOT added to Exact/Diff bonus.</p>
+                                            <p>Example: Exact Score wins the 'Exact' amount only.</p>
                                             <p className="opacity-75 italic border-t border-purple-200 pt-1">
                                                 Note: No fixed points can be set for Zero Sum betting, because the odds are calculated dynamically like in real life.
                                             </p>
@@ -469,7 +498,7 @@ export function LeagueSettingsModal({ league, isOpen, onClose, onUpdate }: Leagu
                                     </Button>
                                 </div>
 
-                                {league.status !== "FINISHED" && (
+                                {!league.isFinished && (
                                     <div className="space-y-4 p-4 border-2 border-black bg-blue-50 rounded-xl shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
                                         <div className="flex items-start gap-4">
                                             <div className="p-2 bg-blue-100 rounded-lg border-2 border-black">

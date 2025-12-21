@@ -611,7 +611,9 @@ export async function resolveBet(
 
         // ARCADE MODE LOGIC
         if (league && league.mode === "STANDARD") {
-            const settings = league.matchSettings || { exact: 3, diff: 1, winner: 2, choice: 1, range: 1 };
+            const settings = league.matchSettings || { exact: 3, diff: 2, winner: 1, choice: 1, range: 1 };
+
+
 
             // Power Up Multiplier
             let powerUpMult = 1;
@@ -635,9 +637,16 @@ export async function resolveBet(
                 }
 
                 // 2. Correct Difference
-                if ((oH - oA) === (pH - pA)) {
-                    points = Math.max(points, settings.diff);
-                    if (settings.diff > 0) isWinner = true;
+                const diff = oH - oA;
+                if (diff === (pH - pA)) {
+                    // Check exclusion rule: If draw (diff 0) and exclusion enabled, skip diff points
+                    const isDraw = diff === 0;
+                    if (isDraw && settings.excludeDrawDiff) {
+                        // Do not award diff points
+                    } else {
+                        points = Math.max(points, settings.diff);
+                        if (settings.diff > 0) isWinner = true;
+                    }
                 }
 
                 // 3. Correct Winner (Tendency)

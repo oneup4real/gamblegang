@@ -5,7 +5,7 @@ import { useRouter, useParams } from "next/navigation";
 import { useEffect, useState, useMemo } from "react";
 import { doc, getDoc, collection, getDocs, query, where, onSnapshot } from "firebase/firestore";
 import { db } from "@/lib/firebase/config";
-import { League, LeagueMember, updateLeagueStatus, rebuy, LEAGUE_COLOR_SCHEMES } from "@/lib/services/league-service";
+import { League, LeagueMember, rebuy, LEAGUE_COLOR_SCHEMES, finishLeague } from "@/lib/services/league-service";
 import { getLeagueBets, Bet, Wager, deleteBet } from "@/lib/services/bet-service";
 import { BetCard } from "@/components/bet-card";
 import { GroupedBetsByTime } from "@/components/grouped-bets";
@@ -48,6 +48,11 @@ export default function LeaguePage() {
     const [isSettingsOpen, setIsSettingsOpen] = useState(false);
     const [isQROpen, setIsQROpen] = useState(false);
     const [isAnnouncementOpen, setIsAnnouncementOpen] = useState(false);
+    const [isFinishModalOpen, setIsFinishModalOpen] = useState(false);
+    const [finishConfirmation, setFinishConfirmation] = useState({
+        betsDisabled: false,
+        cannotUndo: false
+    });
     const [actionLoading, setActionLoading] = useState(false);
     const [expandedBets, setExpandedBets] = useState<Set<string>>(new Set()); // Track which bets are expanded
     const [expandAll, setExpandAll] = useState(false); // Toggle all expand/collapse
@@ -200,6 +205,13 @@ export default function LeaguePage() {
 
     const fetchLeagueData = async () => {
         refreshMyWagers(bets);
+
+        // Refresh League Data
+        const leagueDoc = await getDoc(doc(db, "leagues", leagueId as string));
+        if (leagueDoc.exists()) {
+            setLeague({ id: leagueDoc.id, ...leagueDoc.data() } as League);
+        }
+
         // Refresh members
         const membersRef = collection(db, "leagues", leagueId as string, "members");
         const snap = await getDocs(membersRef);
@@ -312,20 +324,16 @@ export default function LeaguePage() {
         setAnalyticsLoading(false);
     };
 
-    const handleStatusUpdate = async (newStatus: "STARTED" | "FINISHED" | "ARCHIVED") => {
-        if (!confirm(`Are you sure you want to change status to ${newStatus}?`)) return;
+    const handleFinishLeague = async () => {
+        if (!user?.uid) return;
         setActionLoading(true);
         try {
-            if (newStatus === "FINISHED" && user?.uid) {
-                const { finishLeague } = await import("@/lib/services/league-service");
-                await finishLeague(leagueId, user.uid);
-            } else {
-                await updateLeagueStatus(leagueId, newStatus);
-            }
+            await finishLeague(leagueId, user.uid);
+            setIsFinishModalOpen(false);
             await fetchLeagueData();
         } catch (error) {
             console.error(error);
-            alert("Failed to update status");
+            alert("Failed to finish league");
         } finally {
             setActionLoading(false);
         }
@@ -764,28 +772,24 @@ export default function LeaguePage() {
                                             {league.mode === "ZERO_SUM" ? "ZERO SUM" : "ARCADE"}
                                         </span>
                                     </h1>
-                                    <p className="text-[10px] md:text-xs text-gray-600 font-bold tracking-widest uppercase mt-1">
-                                        STATUS: <span className="text-primary font-black">{league.status}</span>
-                                    </p>
+                                    {league.isFinished && (
+                                        <span className="text-[10px] md:text-xs font-bold bg-red-100 px-2 py-0.5 rounded border-2 border-black text-red-600 mt-1">
+                                            FINISHED
+                                        </span>
+                                    )}
                                 </div>
                             </div>
 
                             <div className="flex items-center gap-2 w-full md:w-auto justify-end md:justify-start">
                                 {isOwner && (
                                     <>
-                                        {league.status === "NOT_STARTED" && (
-                                            <button onClick={() => handleStatusUpdate("STARTED")} className="p-2 bg-white border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] rounded-lg hover:translate-y-[2px] hover:shadow-none transition-all text-green-500 hover:text-green-600" title="Start League">
-                                                <Play className="h-5 w-5" />
-                                            </button>
-                                        )}
-                                        {league.status === "STARTED" && (
-                                            <button onClick={() => handleStatusUpdate("FINISHED")} className="p-2 bg-white border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] rounded-lg hover:translate-y-[2px] hover:shadow-none transition-all text-red-500 hover:text-red-600" title="End League">
+                                        {!league.isFinished && (
+                                            <button
+                                                onClick={() => setIsFinishModalOpen(true)}
+                                                className="p-2 bg-white border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] rounded-lg hover:translate-y-[2px] hover:shadow-none transition-all text-red-500 hover:text-red-600 hover:bg-red-50"
+                                                title="Finish Season"
+                                            >
                                                 <Flag className="h-5 w-5" />
-                                            </button>
-                                        )}
-                                        {league.status === "FINISHED" && (
-                                            <button onClick={() => handleStatusUpdate("ARCHIVED")} className="p-2 bg-white border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] rounded-lg hover:translate-y-[2px] hover:shadow-none transition-all text-zinc-500 hover:text-zinc-600" title="Archive">
-                                                <Archive className="h-5 w-5" />
                                             </button>
                                         )}
                                         <button
@@ -819,7 +823,7 @@ export default function LeaguePage() {
             {/* Tabs + Main Content */}
             <main className="max-w-5xl mx-auto px-3 sm:px-6 pb-8 space-y-0">
                 {/* 🏆 FINAL RESULTS BANNER */}
-                {league.status === "FINISHED" && (
+                {league.isFinished && (
                     <motion.div
                         initial={{ opacity: 0, y: -20 }}
                         animate={{ opacity: 1, y: 0 }}
@@ -1306,7 +1310,7 @@ export default function LeaguePage() {
                                     {bets.length === 0 ? (
                                         <div className="flex flex-col items-center justify-center py-12 border-2 border-dashed border-gray-300 rounded-xl bg-gray-50">
                                             <p className="text-gray-500 font-bold">{tBets('noBetsFound')}</p>
-                                            {(league.status === "STARTED" || (league.status === "NOT_STARTED" && isOwner)) && (
+                                            {!league.isFinished && (
                                                 <button
                                                     onClick={() => setIsBetModalOpen(true)}
                                                     className="mt-4 px-6 py-3 bg-primary text-white font-black rounded-xl border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:translate-y-[-2px] transition-all uppercase"
@@ -1317,6 +1321,18 @@ export default function LeaguePage() {
                                         </div>
                                     ) : (
                                         <>
+                                            {/* Global Create Bet Button (When bets exist) */}
+                                            {!league.isFinished && myMemberProfile && hasPermission(myMemberProfile.role, "CREATE_BET") && (
+                                                <div className="flex justify-end mb-4">
+                                                    <button
+                                                        onClick={() => setIsBetModalOpen(true)}
+                                                        className="px-3 py-1.5 bg-primary hover:bg-primary/90 text-white font-black text-xs rounded-lg border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:translate-y-[-1px] transition-all uppercase flex items-center gap-1"
+                                                    >
+                                                        <span>+</span> {tBets('newBet')}
+                                                    </button>
+                                                </div>
+                                            )}
+
                                             {/* 1. DRAFTS (Owner Only) */}
                                             {(() => {
                                                 const drafts = bets.filter(b => b.status === "DRAFT");
@@ -1347,19 +1363,7 @@ export default function LeaguePage() {
 
                                                 return (
                                                     <div className="mb-8">
-                                                        {(league.status === "STARTED" || (league.status === "NOT_STARTED" && isOwner)) && myMemberProfile && hasPermission(myMemberProfile.role, "CREATE_BET") && (
-                                                            <div className="flex justify-end mb-4">
-                                                                <button
-                                                                    onClick={(e) => {
-                                                                        e.stopPropagation();
-                                                                        setIsBetModalOpen(true);
-                                                                    }}
-                                                                    className="px-3 py-1.5 bg-primary hover:bg-primary/90 text-white font-black text-xs rounded-lg border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:translate-y-[-1px] transition-all uppercase flex items-center gap-1"
-                                                                >
-                                                                    <span>+</span> {tBets('newBet')}
-                                                                </button>
-                                                            </div>
-                                                        )}
+
                                                         <GroupedBetsByTime
                                                             bets={openBets}
                                                             getClosingDate={(bet) => bet.closesAt ? new Date(bet.closesAt.seconds * 1000) : null}
@@ -1577,7 +1581,89 @@ export default function LeaguePage() {
                     user={user}
                 />
             )}
-        </div >
+            {/* Finish League Modal */}
+            {isFinishModalOpen && (
+                <div className="fixed inset-0 bg-black/50 z-[60] flex items-center justify-center p-4 backdrop-blur-sm">
+                    <motion.div
+                        initial={{ opacity: 0, scale: 0.95 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        className="bg-white rounded-xl border-4 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] max-w-md w-full overflow-hidden"
+                    >
+                        <div className="bg-red-500 px-6 py-4 border-b-4 border-black flex items-center justify-between">
+                            <h2 className="text-xl font-black text-white uppercase flex items-center gap-2 font-comic tracking-wide">
+                                <Flag className="h-6 w-6" />
+                                Finish Season?
+                            </h2>
+                            <button
+                                onClick={() => setIsFinishModalOpen(false)}
+                                className="text-white/80 hover:text-white transition-colors"
+                            >
+                                <XCircle className="h-6 w-6" />
+                            </button>
+                        </div>
+
+                        <div className="p-6 space-y-6">
+                            <div className="bg-red-50 border-l-4 border-red-500 p-4">
+                                <div className="flex">
+                                    <div className="flex-shrink-0">
+                                        <AlertOctagon className="h-5 w-5 text-red-500" />
+                                    </div>
+                                    <div className="ml-3">
+                                        <p className="text-sm font-bold text-red-700">
+                                            Warning: This action is permanent!
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <p className="text-gray-600 font-bold">
+                                To confirm finishing the league <strong>{league.name}</strong>, please acknowledge the following:
+                            </p>
+
+                            <div className="space-y-3">
+                                <label className="flex items-start gap-3 p-3 rounded-lg border-2 border-transparent hover:bg-gray-50 cursor-pointer transition-colors">
+                                    <input
+                                        type="checkbox"
+                                        className="mt-1 w-5 h-5 border-2 border-black rounded text-primary focus:ring-primary"
+                                        checked={finishConfirmation.betsDisabled}
+                                        onChange={(e) => setFinishConfirmation(prev => ({ ...prev, betsDisabled: e.target.checked }))}
+                                    />
+                                    <span className="text-sm font-medium text-gray-700">
+                                        I understand that all active bets will be cancelled and betting will be disabled.
+                                    </span>
+                                </label>
+
+                                <label className="flex items-start gap-3 p-3 rounded-lg border-2 border-transparent hover:bg-gray-50 cursor-pointer transition-colors">
+                                    <input
+                                        type="checkbox"
+                                        className="mt-1 w-5 h-5 border-2 border-black rounded text-primary focus:ring-primary"
+                                        checked={finishConfirmation.cannotUndo}
+                                        onChange={(e) => setFinishConfirmation(prev => ({ ...prev, cannotUndo: e.target.checked }))}
+                                    />
+                                    <span className="text-sm font-medium text-gray-700">
+                                        I understand this action <strong>cannot be undone</strong> and the winner will be declared immediately.
+                                    </span>
+                                </label>
+                            </div>
+
+                            <div className="flex justify-end pt-2">
+                                <button
+                                    onClick={handleFinishLeague}
+                                    disabled={!finishConfirmation.betsDisabled || !finishConfirmation.cannotUndo || actionLoading}
+                                    className={`px-6 py-3 rounded-lg border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] font-black uppercase text-sm tracking-wide transition-all
+                                        ${(!finishConfirmation.betsDisabled || !finishConfirmation.cannotUndo)
+                                            ? 'bg-gray-200 text-gray-400 cursor-not-allowed shadow-none border-gray-300'
+                                            : 'bg-red-500 text-white hover:bg-red-600 hover:translate-y-[-2px] hover:shadow-[6px_6px_0px_0px_rgba(0,0,0,1)]'
+                                        }
+                                    `}
+                                >
+                                    {actionLoading ? 'Finishing...' : 'Confirm & Finish'}
+                                </button>
+                            </div>
+                        </div>
+                    </motion.div>
+                </div>
+            )}
+        </div>
     );
 }
-
