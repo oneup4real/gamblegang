@@ -548,12 +548,19 @@ export const autoResolveBets = onSchedule(
             // For API bets: Check if game is FINISHED (from liveScore), no delay needed
             // For AI bets: Use the traditional delay buffer
             if (betDataSource === "API") {
-                // API mode: Only resolve if game is FINISHED
-                if (!bet.liveScore || bet.liveScore.matchStatus !== "FINISHED") {
-                    logger.info(`Skipping API Bet ${doc.id} - Game not finished yet (Status: ${bet.liveScore?.matchStatus || "NO_DATA"})`);
+                const hoursSinceStart = (now - eventDate.getTime()) / (1000 * 60 * 60);
+
+                // API mode:
+                // 1. If Live Score says FINISHED -> Resolve immediately
+                // 2. If > 5 hours since start (missed live window) -> Attempt force resolution
+                const isFinished = bet.liveScore?.matchStatus === "FINISHED";
+                const isStale = hoursSinceStart > 5;
+
+                if (!isFinished && !isStale) {
+                    logger.info(`Skipping API Bet ${doc.id} - Game not finished yet and within 5h window (Status: ${bet.liveScore?.matchStatus || "NO_DATA"})`);
                     continue;
                 }
-                logger.info(`✅ API Bet ${doc.id} - Game FINISHED, resolving immediately!`);
+                logger.info(`✅ API Bet ${doc.id} - Ready for resolution (Finished: ${isFinished}, Stale: ${isStale})`);
             } else {
                 // AI mode: Use traditional delay buffer
                 const delayMinutes = bet.autoConfirmDelay || 120;

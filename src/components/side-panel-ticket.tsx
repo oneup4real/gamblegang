@@ -229,7 +229,7 @@ export function SidePanelTicket({
     }
 
     return (
-        <div className={`w-full md:w-36 p-3 md:p-4 flex flex-row md:flex-col items-center md:items-stretch justify-between relative h-full rounded-b-xl md:rounded-b-none md:rounded-r-xl ${containerClass} transition-colors duration-300`}>
+        <div className={`w-full md:w-36 p-3 md:p-4 flex flex-row md:flex-col items-center md:items-stretch justify-between relative h-full rounded-b-xl md:rounded-none md:rounded-tr-xl md:rounded-br-xl ${containerClass} transition-colors duration-300`}>
             {/* Dashed line separator for ticket tear-off effect */}
             <div className={`absolute hidden md:block top-0 bottom-0 -left-[1px] w-[1px] border-l-2 border-dashed ${perforationBorderClass} opacity-60`}></div>
 

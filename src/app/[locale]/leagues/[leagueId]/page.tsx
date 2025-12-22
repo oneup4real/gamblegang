@@ -70,99 +70,86 @@ export default function LeaguePage() {
     // --------------------------------------------------------------------------
     useEffect(() => {
         if (!user || !leagueId) {
-            if (!loading && !user) { // If not loading and no user, redirect to login
-                router.push("/login");
+            if (!loading && !user) {
+                router.push("/login"); // Redirect to login
             }
             return;
         }
 
-        setDataLoading(true); // Set dataLoading true at the start of the real-time sync
+        setDataLoading(true);
 
-        // 1. Fetch Static/Less Frequent Data (League & Members)
-        const initData = async () => {
-            try {
-                // Fetch League
-                const leagueDoc = await getDoc(doc(db, "leagues", leagueId as string));
-                if (leagueDoc.exists()) {
-                    setLeague({ id: leagueDoc.id, ...leagueDoc.data() } as League);
-                } else {
-                    router.push("/dashboard"); // League not found
-                    return;
-                }
+        // 1. LEAGUE LISTENER (Real-time)
+        const leagueRef = doc(db, "leagues", leagueId as string);
+        const unsubLeague = onSnapshot(leagueRef, (docSnap) => {
+            if (docSnap.exists()) {
+                setLeague({ id: docSnap.id, ...docSnap.data() } as League);
+            } else {
+                router.push("/dashboard"); // League deleted or lost access
+            }
+        }, (error) => {
+            console.error("Error watching league:", error);
+        });
 
+        // 2. MEMBERS LISTENER (Real-time)
+        const membersRef = collection(db, "leagues", leagueId as string, "members");
+        const unsubMembers = onSnapshot(membersRef, async (snapshot) => {
+            const membersList = snapshot.docs.map(d => d.data() as LeagueMember);
 
-                // Fetch members first
-                const membersRef = collection(db, "leagues", leagueId as string, "members");
-                const membersSnap = await getDocs(membersRef);
-                const membersList = membersSnap.docs.map(d => d.data() as LeagueMember);
+            // --- INJECT TEST USERS FOR VISUALIZATION ---
+            if (leagueId === "TgQl09NawgRNrKcPi5Bh") {
+                membersList.push(
+                    { uid: "test1", leagueId: leagueId, role: "MEMBER", points: 2500, joinedAt: null, displayName: "Test Pro Player", photoURL: "https://api.dicebear.com/7.x/avataaars/svg?seed=Felix", totalInvested: 100, totalBought: 1000 },
+                    { uid: "test2", leagueId: leagueId, role: "MEMBER", points: 1250, joinedAt: null, displayName: "Luigi Gambler", photoURL: "https://api.dicebear.com/7.x/avataaars/svg?seed=Luigi", totalInvested: 500, totalBought: 1000 },
+                    { uid: "test3", leagueId: leagueId, role: "MEMBER", points: 0, joinedAt: null, displayName: "Bad Luck Brian", photoURL: "https://api.dicebear.com/7.x/avataaars/svg?seed=Brian", totalInvested: 2000, totalBought: 1000 }
+                );
+            }
 
-                // --- INJECT TEST USERS FOR VISUALIZATION ---
-                if (leagueId === "TgQl09NawgRNrKcPi5Bh") {
-                    membersList.push(
-                        { uid: "test1", leagueId: leagueId, role: "MEMBER", points: 2500, joinedAt: null, displayName: "Test Pro Player", photoURL: "https://api.dicebear.com/7.x/avataaars/svg?seed=Felix", totalInvested: 100, totalBought: 1000 },
-                        { uid: "test2", leagueId: leagueId, role: "MEMBER", points: 1250, joinedAt: null, displayName: "Luigi Gambler", photoURL: "https://api.dicebear.com/7.x/avataaars/svg?seed=Luigi", totalInvested: 500, totalBought: 1000 },
-                        { uid: "test3", leagueId: leagueId, role: "MEMBER", points: 0, joinedAt: null, displayName: "Bad Luck Brian", photoURL: "https://api.dicebear.com/7.x/avataaars/svg?seed=Brian", totalInvested: 2000, totalBought: 1000 }
-                    );
-                }
-                // -------------------------------------------
+            // Sync User Avatar if outdated
+            if (user?.uid) {
+                try {
+                    const myMember = membersList.find(m => m.uid === user.uid);
+                    if (myMember) {
+                        // Check against Firestore Profile (authoritative)
+                        const userProfileRef = doc(db, "users", user.uid);
+                        const userProfileSnap = await getDoc(userProfileRef);
+                        const latestPhoto = userProfileSnap.exists() ? userProfileSnap.data().photoURL : user.photoURL;
+                        const latestName = userProfileSnap.exists() ? userProfileSnap.data().displayName : user.displayName;
 
-                // Initial Sort (Fallback)
-                membersList.sort((a, b) => b.points - a.points);
-                setMembers(membersList);
-
-                // --- KEY FIX: Sync current user's avatar if missing/outdated ---
-                // Check BOTH Firebase Auth (user.photoURL) AND Firestore user profile (users/{uid}/photoURL)
-                if (user?.uid) {
-                    // Fetch user profile from Firestore to get the latest photoURL
-                    const userProfileRef = doc(db, "users", user.uid);
-                    const userProfileSnap = await getDoc(userProfileRef);
-                    const userProfile = userProfileSnap.exists() ? userProfileSnap.data() : null;
-
-                    // Use Firestore profile photo first, fallback to Auth photo
-                    const latestPhotoURL = userProfile?.photoURL || user.photoURL;
-                    const latestDisplayName = userProfile?.displayName || user.displayName;
-
-                    if (latestPhotoURL) {
-                        const myMember = membersList.find(m => m.uid === user.uid);
-                        // Check if member exists AND (photo is missing OR photo is different)
-                        if (myMember && (!myMember.photoURL || myMember.photoURL !== latestPhotoURL)) {
-                            console.log("[LeaguePage] Syncing member avatar for:", user.uid);
-
-                            // 1. Update local state immediately so user sees it
-                            myMember.photoURL = latestPhotoURL;
-                            if (latestDisplayName) myMember.displayName = latestDisplayName;
-                            setMembers([...membersList]); // Trigger re-render
-
-                            // 2. Update Firestore background
+                        if (latestPhoto && myMember.photoURL !== latestPhoto) {
+                            // Update Firestore
                             const { updateDoc } = await import("firebase/firestore");
-                            const memberRef = doc(db, "leagues", leagueId as string, "members", user.uid);
-                            updateDoc(memberRef, {
-                                photoURL: latestPhotoURL,
-                                displayName: latestDisplayName || myMember.displayName
-                            }).catch(e => console.error("Error syncing profile to league:", e));
+                            // Assuming member doc ID matches UID (standard convention) or we'd need the doc ID from the snapshot
+                            // Note: We use myMember.uid as ID here.
+                            const memberRef = doc(db, "leagues", leagueId as string, "members", myMember.uid);
+                            await updateDoc(memberRef, {
+                                photoURL: latestPhoto,
+                                displayName: latestName || myMember.displayName
+                            });
                         }
                     }
+                } catch (e) {
+                    console.error("Avatar sync check failed", e);
                 }
-                // -------------------------------------------------------------
-
-                // Fetch bets
-            } catch (error) {
-                console.error("Error loading league:", error);
             }
-        };
 
-        initData();
+            membersList.sort((a, b) => b.points - a.points);
+            setMembers(membersList);
+        });
 
-        // 2. Real-time Listener for BETS
+        // 3. BETS LISTENER (Real-time)
         const betsRef = collection(db, "leagues", leagueId as string, "bets");
-        const unsub = onSnapshot(betsRef, (snapshot) => {
+        const unsubBets = onSnapshot(betsRef, (snapshot) => {
             const betsList = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Bet));
             setBets(betsList);
             refreshMyWagers(betsList);
             setDataLoading(false);
         });
 
-        return () => unsub();
+        return () => {
+            unsubLeague();
+            unsubMembers();
+            unsubBets();
+        };
     }, [user, loading, leagueId, router]);
 
     // Auto-expand and scroll to target bet when coming from dashboard

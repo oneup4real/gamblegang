@@ -797,6 +797,40 @@ export async function startProofing(
     }
 
     await updateDoc(betRef, updateData);
+
+    try {
+        // Fetch bet data for logging context
+        const betSnap = await getDoc(betRef);
+        const betData = betSnap.exists() ? betSnap.data() : null;
+
+        if (betData) {
+            if (verification?.method === "AI_GROUNDING" || verification?.method === "API" || verification?.method === "API_LOOKUP") {
+                const { logAIAutoResolve } = await import("./activity-log-service");
+                await logAIAutoResolve(
+                    leagueId,
+                    betId,
+                    betData.question || "Unknown Bet",
+                    outcome,
+                    verification.source,
+                    verification.confidence
+                );
+            } else {
+                const { logBetStatusChange } = await import("./activity-log-service");
+                await logBetStatusChange(
+                    leagueId,
+                    user.uid,
+                    user.displayName || "Administrator",
+                    betId,
+                    betData.question || "Unknown Bet",
+                    betData.status || "OPEN",
+                    "PROOFING",
+                    user.photoURL || undefined
+                );
+            }
+        }
+    } catch (e) {
+        console.error("Failed to log activity for startProofing:", e);
+    }
 }
 
 export async function confirmVerification(leagueId: string, betId: string, user: User) {
