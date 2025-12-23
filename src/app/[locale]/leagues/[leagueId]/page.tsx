@@ -6,7 +6,8 @@ import { useEffect, useState, useMemo } from "react";
 import { doc, getDoc, collection, getDocs, query, where, onSnapshot } from "firebase/firestore";
 import { db } from "@/lib/firebase/config";
 import { League, LeagueMember, rebuy, LEAGUE_COLOR_SCHEMES, finishLeague } from "@/lib/services/league-service";
-import { getLeagueBets, Bet, Wager, deleteBet } from "@/lib/services/bet-service";
+import { getLeagueBets, Bet, Wager, deleteBet, finalizeBet, startProofing } from "@/lib/services/bet-service";
+import { aiAutoResolveBet } from "@/app/actions/ai-bet-actions";
 import { BetCard } from "@/components/bet-card";
 import { GroupedBetsByTime } from "@/components/grouped-bets";
 import { BetStatusStepper } from "@/components/bet-status-stepper";
@@ -447,6 +448,82 @@ export default function LeaguePage() {
         }
         fetchAllActiveWagers();
     }, [league?.id, bets]); // Re-fetch when bets change
+
+    // --------------------------------------------------------------------------
+    // AUTO-RESOLUTION CHECKER (Lazy execution on page load/update)
+    // --------------------------------------------------------------------------
+    useEffect(() => {
+        if (!user || !league || bets.length === 0) return;
+
+        const isUserOwner = user.uid === league.ownerId;
+
+        const checkBetAutomation = async () => {
+            const now = new Date();
+
+            for (const bet of bets) {
+                // 1. Check Auto-Finalize (Proofing -> Resolved)
+                // This moves a bet from "Proposed Result" to "Payouts Distributed" after the dispute window
+                if (bet.status === "PROOFING" && bet.disputeDeadline) {
+                    const deadline = bet.disputeDeadline.toDate ? bet.disputeDeadline.toDate() : new Date(bet.disputeDeadline);
+                    const isPastDeadline = now >= deadline;
+
+                    // Logic: If deadline passed, AND (I am owner OR bet is set to auto-finalize)
+                    if (isPastDeadline && (isUserOwner || bet.autoFinalize)) {
+                        try {
+                            console.log(`[LeaguePage] Auto-finalizing bet ${bet.id}...`);
+                            await finalizeBet(leagueId, bet.id, user);
+                            console.log(`[LeaguePage] Auto-finalized ${bet.id}`);
+                        } catch (err) {
+                            console.error("[LeaguePage] Auto-finalization failed:", err);
+                        }
+                    }
+                }
+
+                // 2. Check Auto-Confirm (Locked/Open -> Proofing)
+                // This uses AI to find the result and propose it (Proofing phase)
+                if ((bet.status === "LOCKED" || bet.status === "OPEN") && bet.autoConfirm) {
+                    const eventDate = bet.eventDate?.toDate ? bet.eventDate.toDate() : (bet.eventDate ? new Date(bet.eventDate) : null);
+                    if (eventDate) {
+                        const confirmTime = new Date(eventDate.getTime() + (bet.autoConfirmDelay || 0) * 60000);
+                        if (now >= confirmTime) {
+                            try {
+                                console.log(`[LeaguePage] Auto-confirming bet ${bet.id} via AI...`);
+                                // Trigger AI Resolution
+                                // Sanitize bet to avoid serialization issues
+                                const sanitizedBet = {
+                                    ...bet,
+                                    eventDate: eventDate.toISOString(),
+                                    matchDetails: bet.matchDetails ? {
+                                        ...bet.matchDetails,
+                                        date: bet.matchDetails.date && typeof bet.matchDetails.date === 'object' && 'toDate' in bet.matchDetails.date
+                                            ? (bet.matchDetails.date as any).toDate().toISOString()
+                                            : bet.matchDetails.date
+                                    } : undefined
+                                };
+
+                                const result = await aiAutoResolveBet(sanitizedBet);
+                                if (result) {
+                                    let outcome: any;
+                                    if (result.type === "MATCH") outcome = { home: result.home, away: result.away };
+                                    else if (result.type === "CHOICE") outcome = String(result.optionIndex);
+                                    else if (result.type === "RANGE") outcome = result.value;
+
+                                    if (outcome !== undefined) {
+                                        await startProofing(leagueId, bet.id, user, outcome, result.verification);
+                                        console.log(`[LeaguePage] Auto-confirmation started for ${bet.id}`);
+                                    }
+                                }
+                            } catch (err) {
+                                console.error("[LeaguePage] Auto-confirmation failed:", err);
+                            }
+                        }
+                    }
+                }
+            }
+        };
+
+        checkBetAutomation();
+    }, [bets, user, league, leagueId]);
 
     // --------------------------------------------------------------------------
     // DYNAMIC RE-SORTING (Live Leaderboard)

@@ -5,6 +5,7 @@ import * as logger from "firebase-functions/logger";
 import { initializeApp } from "firebase-admin/app";
 import { getFirestore, Timestamp } from "firebase-admin/firestore";
 import { GoogleGenerativeAI } from "@google/generative-ai";
+import { autoFinalizeBets } from "./auto-finalize";
 
 initializeApp();
 const db = getFirestore();
@@ -984,3 +985,5 @@ export const updateLiveScores = onSchedule(
         logger.info(`🔴 Live Score Update Complete: ${updatedCount} updated, ${finishedCount} finished`);
     }
 );
+
+export { autoFinalizeBets };

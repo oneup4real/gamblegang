@@ -157,6 +157,13 @@
     background-image: radial-gradient(hsl(var(--primary) / 0.15) 2px, transparent 2px);
     background-size: 32px 32px;
     background-color: hsl(var(--background));
+
+    /* Mobile Safe Areas & Native Feel */
+    padding-top: env(safe-area-inset-top);
+    padding-bottom: env(safe-area-inset-bottom);
+    padding-left: env(safe-area-inset-left);
+    padding-right: env(safe-area-inset-right);
+    -webkit-tap-highlight-color: transparent;
   }
 }
 

@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">GambleGang</string>
+    <string name="title_activity_main">GambleGang</string>
+    <string name="package_name">com.oneup4real.gamblegang</string>
+    <string name="custom_url_scheme">com.oneup4real.gamblegang</string>
+</resources>
