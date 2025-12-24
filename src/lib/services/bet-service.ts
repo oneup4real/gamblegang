@@ -38,6 +38,7 @@ export interface Bet {
     createdAt: any;
     closesAt: any;
     eventDate?: any; // New field for actual event time
+    eventEndDate?: any; // Optional: For long-running bets (e.g., season MVP, weekly stats)
     totalPool: number;
     wagerCount?: number; // Total number of bets placed
     options?: BetOption[]; // For CHOICE
@@ -123,7 +124,8 @@ export async function createBet(
     matchDetails?: { home: string, away: string },
     autoConfirm?: boolean,
     autoConfirmDelay?: number,
-    choiceStyle?: "VARIOUS" | "MATCH_WINNER" | "MATCH_1X2" // New parameter for CHOICE bets
+    choiceStyle?: "VARIOUS" | "MATCH_WINNER" | "MATCH_1X2", // For CHOICE bets
+    eventEndDate?: Date // Optional: For long-running bets
 ) {
     const betsRef = collection(db, "leagues", leagueId, "bets");
     const newBetRef = doc(betsRef);
@@ -138,6 +140,7 @@ export async function createBet(
         createdAt: serverTimestamp(),
         closesAt: closesAt,
         eventDate: eventDate, // Save eventDate
+        ...(eventEndDate ? { eventEndDate: eventEndDate } : {}), // Optional event end date
         totalPool: 0,
         // searchKey: question.toLowerCase() // Added searchKey as per instruction, but it's not in Bet interface
         autoConfirm: autoConfirm || false,

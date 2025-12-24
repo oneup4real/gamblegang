@@ -7,6 +7,7 @@ import { useAuth } from "@/components/auth-provider";
 import { createBet, BetType, Bet, updateBet } from "@/lib/services/bet-service";
 import { Button } from "@/components/ui/button";
 import { AIProgressOverlay } from "@/components/ai-progress-overlay";
+import { HelpTooltip, LabelWithHelp } from "@/components/ui/help-tooltip";
 import { useTranslations } from "next-intl";
 
 import { LeagueMode } from "@/lib/services/league-service";
@@ -24,6 +25,7 @@ interface CreateBetModalProps {
 export function CreateBetModal({ leagueId, leagueMode, aiAutoConfirmEnabled, isOpen, onClose, onSuccess, betToEdit }: CreateBetModalProps) {
     const t = useTranslations('Bets');
     const tAi = useTranslations('AI');
+    const tHelp = useTranslations('Help');
     const { user } = useAuth();
     const [loading, setLoading] = useState(false);
     const [loadingMessage, setLoadingMessage] = useState("");
@@ -32,6 +34,7 @@ export function CreateBetModal({ leagueId, leagueMode, aiAutoConfirmEnabled, isO
     const [question, setQuestion] = useState("");
     const [type, setType] = useState<BetType>("CHOICE");
     const [eventDateStr, setEventDateStr] = useState("");
+    const [eventEndDateStr, setEventEndDateStr] = useState(""); // Optional event end time
     const [lockBufferMinutes, setLockBufferMinutes] = useState(0); // 0 = At Start
     // Removed autoConfirm/delay config state as it is now league-level
 
@@ -129,6 +132,25 @@ export function CreateBetModal({ leagueId, leagueMode, aiAutoConfirmEnabled, isO
                 setMatchAway(betToEdit.matchDetails.awayTeam);
             }
 
+            // Handle Event End Date if present
+            if (betToEdit.eventEndDate) {
+                let endD: Date;
+                if (typeof betToEdit.eventEndDate.toDate === 'function') {
+                    endD = betToEdit.eventEndDate.toDate();
+                } else if (typeof betToEdit.eventEndDate.seconds === 'number') {
+                    endD = new Date(betToEdit.eventEndDate.seconds * 1000);
+                } else {
+                    endD = new Date(betToEdit.eventEndDate);
+                }
+                if (!isNaN(endD.getTime())) {
+                    const offset = endD.getTimezoneOffset() * 60000;
+                    const localISOEndTime = (new Date(endD.getTime() - offset)).toISOString().slice(0, 16);
+                    setEventEndDateStr(localISOEndTime);
+                }
+            } else {
+                setEventEndDateStr("");
+            }
+
         } else if (isOpen && !betToEdit) {
             // Reset if opening fresh
             setQuestion("");
@@ -140,6 +162,7 @@ export function CreateBetModal({ leagueId, leagueMode, aiAutoConfirmEnabled, isO
             setMatchHome("");
             setMatchAway("");
             setEventDateStr("");
+            setEventEndDateStr(""); // Reset event end date
             setLockBufferMinutes(0);
         }
     }, [isOpen, betToEdit, leagueMode]);
@@ -298,6 +321,7 @@ export function CreateBetModal({ leagueId, leagueMode, aiAutoConfirmEnabled, isO
         try {
             const evDate = new Date(eventDateStr);
             const clDate = new Date(evDate.getTime() - (lockBufferMinutes * 60000));
+            const evEndDate = eventEndDateStr ? new Date(eventEndDateStr) : undefined;
 
             if (betToEdit) {
                 await updateBet(leagueId, betToEdit.id, {
@@ -305,6 +329,7 @@ export function CreateBetModal({ leagueId, leagueMode, aiAutoConfirmEnabled, isO
                     type,
                     closesAt: clDate,
                     eventDate: evDate,
+                    ...(evEndDate ? { eventEndDate: evEndDate } : {}),
                     ...(type === "CHOICE" ? { options: options.filter(o => o.trim() !== "").map((t, i) => ({ id: String(i), text: t, totalWagered: 0, odds: 1 })) } : {}),
                     ...(type === "RANGE" ? { rangeMin: Number(rangeMin), rangeMax: Number(rangeMax), rangeUnit } : {}),
                     ...(type === "MATCH" ? { matchDetails: { homeTeam: matchHome, awayTeam: matchAway, date: evDate.toISOString() } } : {}),
@@ -325,7 +350,8 @@ export function CreateBetModal({ leagueId, leagueMode, aiAutoConfirmEnabled, isO
                     type === "MATCH" ? { home: matchHome, away: matchAway } : undefined,
                     aiAutoConfirmEnabled !== false, // Default true
                     120, // Fixed delay
-                    type === "CHOICE" ? choiceStyle : undefined // Pass choiceStyle for CHOICE bets
+                    type === "CHOICE" ? choiceStyle : undefined, // Pass choiceStyle for CHOICE bets
+                    evEndDate // Pass optional event end date
                 );
             }
             if (onSuccess) onSuccess();
@@ -392,7 +418,11 @@ export function CreateBetModal({ leagueId, leagueMode, aiAutoConfirmEnabled, isO
                                     <form onSubmit={handleSubmit} className="space-y-6">
                                         {/* Question Input */}
                                         <div>
-                                            <label className="text-sm font-black text-black uppercase mb-1 block">{t('question')}</label>
+                                            <LabelWithHelp
+                                                label={t('question')}
+                                                helpText={tHelp('question')}
+                                                required
+                                            />
                                             <input
                                                 type="text"
                                                 required
@@ -405,7 +435,10 @@ export function CreateBetModal({ leagueId, leagueMode, aiAutoConfirmEnabled, isO
 
                                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                             <div>
-                                                <label className="text-sm font-black text-black uppercase mb-1 block">{t('type')}</label>
+                                                <LabelWithHelp
+                                                    label={t('type')}
+                                                    helpText={tHelp('type')}
+                                                />
                                                 {leagueMode === "ZERO_SUM" ? (
                                                     <div className="p-3 bg-blue-50 border-2 border-blue-200 rounded-xl text-blue-900 text-xs font-bold leading-tight">
                                                         {t('onlyZeroSumChoice')}
@@ -428,7 +461,11 @@ export function CreateBetModal({ leagueId, leagueMode, aiAutoConfirmEnabled, isO
                                                 )}
                                             </div>
                                             <div>
-                                                <label className="text-sm font-black text-black uppercase mb-1 block">{t('startTime')}</label>
+                                                <LabelWithHelp
+                                                    label={t('startTime')}
+                                                    helpText={tHelp('startTime')}
+                                                    required
+                                                />
                                                 <input
                                                     type="datetime-local"
                                                     required
@@ -439,9 +476,31 @@ export function CreateBetModal({ leagueId, leagueMode, aiAutoConfirmEnabled, isO
                                             </div>
                                         </div>
 
+                                        {/* Event End Time - Optional for long-running bets */}
+                                        <div>
+                                            <LabelWithHelp
+                                                label={t('eventEndTime')}
+                                                helpText={tHelp('eventEndTime')}
+                                                optional
+                                            />
+                                            <input
+                                                type="datetime-local"
+                                                value={eventEndDateStr}
+                                                onChange={(e) => setEventEndDateStr(e.target.value)}
+                                                className="flex h-12 w-full rounded-xl border-2 border-slate-300 bg-white px-3 py-2 text-black placeholder:text-gray-400 focus:outline-none focus:ring-4 focus:ring-primary/20 transition-all shadow-[2px_2px_0px_0px_rgba(0,0,0,0.2)]"
+                                                min={eventDateStr}
+                                            />
+                                            <p className="text-[10px] text-slate-400 mt-1 font-medium">
+                                                {tHelp('eventEndTime')}
+                                            </p>
+                                        </div>
+
                                         {/* ... Lock Buffer ... */}
                                         <div>
-                                            <label className="text-sm font-black text-black uppercase mb-1 block">{t('lockBetting')}</label>
+                                            <LabelWithHelp
+                                                label={t('lockBetting')}
+                                                helpText={tHelp('lockBetting')}
+                                            />
                                             <div className="relative">
                                                 <select
                                                     value={lockBufferMinutes}

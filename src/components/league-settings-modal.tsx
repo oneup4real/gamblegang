@@ -6,9 +6,11 @@ import { X, Loader2, AlertTriangle, Save, RefreshCw, Trash, Users, Crown, Shield
 import { useAuth } from "@/components/auth-provider";
 import { League, updateLeague, resetLeague, LeagueMember, updateMemberRole, LEAGUE_COLOR_SCHEMES, LeagueColorScheme, LEAGUE_ICONS, backfillPowerUps } from "@/lib/services/league-service";
 import { Button } from "@/components/ui/button";
+import { HelpTooltip } from "@/components/ui/help-tooltip";
 import { LeagueRole, hasPermission } from "@/lib/rbac";
 import { collection, getDocs } from "firebase/firestore";
 import { db } from "@/lib/firebase/config";
+import { useTranslations } from "next-intl";
 
 interface LeagueSettingsModalProps {
     league: League;
@@ -19,6 +21,7 @@ interface LeagueSettingsModalProps {
 
 export function LeagueSettingsModal({ league, isOpen, onClose, onUpdate }: LeagueSettingsModalProps) {
     const { user } = useAuth();
+    const tHelp = useTranslations('Help');
     const [loading, setLoading] = useState(false);
     const [name, setName] = useState(league.name);
     // Match Settings (Standard Mode)
@@ -273,21 +276,30 @@ export function LeagueSettingsModal({ league, isOpen, onClose, onUpdate }: Leagu
                                         </h4>
                                         <div className="grid grid-cols-3 gap-2">
                                             <div className="space-y-1">
-                                                <label className="text-xs font-bold text-gray-500 uppercase">Exact</label>
+                                                <label className="text-xs font-bold text-gray-500 uppercase flex items-center gap-1">
+                                                    Exact
+                                                    <HelpTooltip text={tHelp('points_exact')} position="top" />
+                                                </label>
                                                 <input type="number" min={1} value={exactMult} onChange={(e) => {
                                                     const val = e.target.value;
                                                     setExactMult(val === "" ? "" : Number(val));
                                                 }} className="w-full h-10 px-2 rounded-lg border-2 border-black font-bold text-center" />
                                             </div>
                                             <div className="space-y-1">
-                                                <label className="text-xs font-bold text-gray-500 uppercase">Diff</label>
+                                                <label className="text-xs font-bold text-gray-500 uppercase flex items-center gap-1">
+                                                    Diff
+                                                    <HelpTooltip text={tHelp('points_diff')} position="top" />
+                                                </label>
                                                 <input type="number" min={1} value={diffMult} onChange={(e) => {
                                                     const val = e.target.value;
                                                     setDiffMult(val === "" ? "" : Number(val));
                                                 }} className="w-full h-10 px-2 rounded-lg border-2 border-black font-bold text-center" />
                                             </div>
                                             <div className="space-y-1">
-                                                <label className="text-xs font-bold text-gray-500 uppercase">Winner</label>
+                                                <label className="text-xs font-bold text-gray-500 uppercase flex items-center gap-1">
+                                                    Winner
+                                                    <HelpTooltip text={tHelp('points_winner')} position="top" />
+                                                </label>
                                                 <input type="number" min={1} value={winnerMult} onChange={(e) => {
                                                     const val = e.target.value;
                                                     setWinnerMult(val === "" ? "" : Number(val));
@@ -310,11 +322,17 @@ export function LeagueSettingsModal({ league, isOpen, onClose, onUpdate }: Leagu
 
                                         <div className="grid grid-cols-2 gap-2 pt-2 border-t border-purple-200">
                                             <div className="space-y-1">
-                                                <label className="text-xs font-bold text-gray-500 uppercase">Choice</label>
+                                                <label className="text-xs font-bold text-gray-500 uppercase flex items-center gap-1">
+                                                    Choice
+                                                    <HelpTooltip text={tHelp('points_choice')} position="top" />
+                                                </label>
                                                 <input type="number" min={1} value={choicePoints} onChange={(e) => setChoicePoints(Number(e.target.value))} className="w-full h-10 px-2 rounded-lg border-2 border-black font-bold text-center" />
                                             </div>
                                             <div className="space-y-1">
-                                                <label className="text-xs font-bold text-gray-500 uppercase">Guess</label>
+                                                <label className="text-xs font-bold text-gray-500 uppercase flex items-center gap-1">
+                                                    Guess
+                                                    <HelpTooltip text={tHelp('points_range')} position="top" />
+                                                </label>
                                                 <input type="number" min={1} value={rangePoints} onChange={(e) => setRangePoints(Number(e.target.value))} className="w-full h-10 px-2 rounded-lg border-2 border-black font-bold text-center" />
                                             </div>
                                         </div>

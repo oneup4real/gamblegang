@@ -1153,14 +1153,20 @@ export default function LeaguePage() {
                                                 {/* Win Rate */}
                                                 <div className="flex items-center gap-1.5 bg-white rounded-full px-3 py-1.5 border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
                                                     <span className="text-lg">🎯</span>
-                                                    <span className="font-black text-black">{stats.winRate}%</span>
+                                                    <span className="font-black text-black">{(() => {
+                                                        const results = myMemberProfile?.recentResults || [];
+                                                        const wins = results.filter(r => r === 'W').length;
+                                                        const losses = results.filter(r => r === 'L').length;
+                                                        const total = wins + losses;
+                                                        return total > 0 ? Math.round((wins / total) * 100) : 0;
+                                                    })()}%</span>
                                                 </div>
 
                                                 {/* W/L Record */}
                                                 <div className="flex items-center gap-1 bg-white rounded-full px-3 py-1.5 border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
-                                                    <span className="font-black text-green-600">{stats.wins}W</span>
+                                                    <span className="font-black text-green-600">{myMemberProfile?.recentResults?.filter(r => r === 'W').length || 0}W</span>
                                                     <span className="text-gray-400">/</span>
-                                                    <span className="font-black text-red-500">{stats.losses}L</span>
+                                                    <span className="font-black text-red-500">{myMemberProfile?.recentResults?.filter(r => r === 'L').length || 0}L</span>
                                                 </div>
 
                                                 {/* Streak */}

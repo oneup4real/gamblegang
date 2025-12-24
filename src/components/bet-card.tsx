@@ -1199,91 +1199,104 @@ export function BetCard({ bet, userPoints, userWager, mode, powerUps: powerUpsPr
                     {/* 3. PROOFING / RESOLVED: VERIFICATION SOURCE */}
                     {/* 3. PROOFING / RESOLVED: VERIFICATION SOURCE */}
                     {(bet.status === "PROOFING" || bet.status === "RESOLVED") && (
-                        <div className={`mt-2 rounded-lg p-3 flex items-start gap-3 border ${bet.status === "PROOFING" ? "bg-green-50 border-green-200" : "bg-white border-slate-200"}`}>
-                            {/* Source Icon/Avatar */}
-                            <div className={`w-8 h-8 rounded flex items-center justify-center text-white font-bold text-[10px] shrink-0 ${bet.status === "PROOFING" ? "bg-green-500" : "bg-slate-500"}`}>
-                                {(() => {
-                                    const src = (bet.verification?.source || verificationData?.source || "AI").toUpperCase();
-                                    if (src.includes("API") || src.includes("SPORTSDB")) return "API";
-                                    if (src.includes("AI") && !src.includes("SEARCH")) return "AI";
-                                    if (src.includes("SEARCH") || src.includes("GOOGLE") || src.includes("WEB")) return "WEB";
-                                    return src.substring(0, 3);
-                                })()}
-                            </div>
-                            <div className="flex-1">
-                                <div className="text-xs font-bold uppercase tracking-wide mb-0.5 opacity-70">Verified Result</div>
-                                <div className="font-black text-slate-800 mb-1 text-base">
+                        <div className={`mt-2 rounded-lg p-3 border ${bet.status === "PROOFING" ? "bg-green-50 border-green-200" : "bg-white border-slate-200"}`}>
+                            {/* Main Content Row */}
+                            <div className="flex items-start gap-3">
+                                {/* Source Icon/Avatar */}
+                                <div className={`w-8 h-8 rounded flex items-center justify-center text-white font-bold text-[10px] shrink-0 ${bet.status === "PROOFING" ? "bg-green-500" : "bg-slate-500"}`}>
                                     {(() => {
-                                        // First show the winning outcome (which option won)
-                                        if (typeof bet.winningOutcome === 'object') return `${(bet.winningOutcome as any).home} - ${(bet.winningOutcome as any).away}`;
-                                        if (bet.type === "CHOICE" && bet.options) return bet.options[Number(bet.winningOutcome)]?.text || String(bet.winningOutcome);
-                                        return String(bet.winningOutcome);
+                                        const src = (bet.verification?.source || verificationData?.source || "AI").toUpperCase();
+                                        if (src.includes("API") || src.includes("SPORTSDB")) return "API";
+                                        if (src.includes("AI") && !src.includes("SEARCH")) return "AI";
+                                        if (src.includes("SEARCH") || src.includes("GOOGLE") || src.includes("WEB")) return "WEB";
+                                        return src.substring(0, 3);
                                     })()}
                                 </div>
-
-                                {/* Show the actual numerical value or result string */}
-                                {((bet.verification as any)?.score) && (
-                                    <div className="text-sm font-bold text-slate-600 mb-1">
-                                        Score: {(bet.verification as any).score}
+                                <div className="flex-1 min-w-0">
+                                    <div className="text-xs font-bold uppercase tracking-wide mb-0.5 opacity-70">Verified Result</div>
+                                    <div className="font-black text-slate-800 mb-1 text-base">
+                                        {(() => {
+                                            // First show the winning outcome (which option won)
+                                            if (typeof bet.winningOutcome === 'object') return `${(bet.winningOutcome as any).home} - ${(bet.winningOutcome as any).away}`;
+                                            if (bet.type === "CHOICE" && bet.options) return bet.options[Number(bet.winningOutcome)]?.text || String(bet.winningOutcome);
+                                            return String(bet.winningOutcome);
+                                        })()}
                                     </div>
-                                )}
 
-                                {((bet.verification as any)?.actualValue !== undefined || verificationData?.actualValue !== undefined || (bet.verification as any)?.actualResult || verificationData?.actualResult) && (
-                                    <div className="text-sm font-bold text-emerald-600 mb-1">
-                                        📊 Actual: {(bet.verification as any)?.actualValue ?? verificationData?.actualValue ?? (bet.verification as any)?.actualResult ?? verificationData?.actualResult}
-                                    </div>
-                                )}
-
-                                <div className="text-[10px] font-medium flex items-center gap-1 opacity-60">
-                                    <CheckCircle className="w-3 h-3" />
-                                    Source:
-                                    {(bet.verification?.url || verificationData?.url) ? (
-                                        <a href={bet.verification?.url || verificationData?.url} target="_blank" rel="noopener noreferrer" className="ml-1 hover:underline text-blue-600">
-                                            {bet.verification?.source || verificationData?.source || "Link"}
-                                        </a>
-                                    ) : (
-                                        <span className="ml-1">{bet.verification?.source || verificationData?.source || "Manual Entry"}</span>
+                                    {/* Show the actual numerical value or result string */}
+                                    {((bet.verification as any)?.score) && (
+                                        <div className="text-sm font-bold text-slate-600 mb-1">
+                                            Score: {(bet.verification as any).score}
+                                        </div>
                                     )}
-                                    {(bet.verification?.verifiedAt || verificationData?.verifiedAt) && ` • ${new Date(bet.verification?.verifiedAt || verificationData?.verifiedAt).toLocaleDateString()}`}
+
+                                    {((bet.verification as any)?.actualValue !== undefined || verificationData?.actualValue !== undefined || (bet.verification as any)?.actualResult || verificationData?.actualResult) && (
+                                        <div className="text-sm font-bold text-emerald-600 mb-1">
+                                            📊 Actual: {(bet.verification as any)?.actualValue ?? verificationData?.actualValue ?? (bet.verification as any)?.actualResult ?? verificationData?.actualResult}
+                                        </div>
+                                    )}
+
+                                    <div className="text-[10px] font-medium flex items-center gap-1 opacity-60 flex-wrap">
+                                        <CheckCircle className="w-3 h-3 shrink-0" />
+                                        <span>Source:</span>
+                                        {(bet.verification?.url || verificationData?.url) ? (
+                                            <a href={bet.verification?.url || verificationData?.url} target="_blank" rel="noopener noreferrer" className="hover:underline text-blue-600 truncate max-w-[120px]">
+                                                {bet.verification?.source || verificationData?.source || "Link"}
+                                            </a>
+                                        ) : (
+                                            <span className="truncate">{bet.verification?.source || verificationData?.source || "Manual Entry"}</span>
+                                        )}
+                                        {(bet.verification?.verifiedAt || verificationData?.verifiedAt) && <span className="hidden sm:inline"> • {new Date(bet.verification?.verifiedAt || verificationData?.verifiedAt).toLocaleDateString()}</span>}
+                                    </div>
                                 </div>
+
+                                {/* Dispute Button for PROOFING (desktop only) */}
+                                {bet.status === "PROOFING" && !isOwner && !bet.disputeActive && (
+                                    <button
+                                        onClick={handleDispute}
+                                        className="hidden sm:block text-xs text-red-500 font-bold hover:underline self-center shrink-0"
+                                        disabled={disputeLoading}
+                                    >
+                                        Dispute?
+                                    </button>
+                                )}
                             </div>
 
-                            {/* Dispute Button for PROOFING */}
+                            {/* Mobile Dispute Button - Outside the flex row */}
                             {bet.status === "PROOFING" && !isOwner && !bet.disputeActive && (
                                 <button
                                     onClick={handleDispute}
-                                    className="text-xs text-red-500 font-bold hover:underline self-center"
+                                    className="sm:hidden text-xs text-red-500 font-bold hover:underline mt-2 text-center w-full"
                                     disabled={disputeLoading}
                                 >
-                                    Dispute?
+                                    Dispute Result?
                                 </button>
                             )}
 
-                            {/* Owner: Finalize Now Button */}
-                            {isOwner && bet.status === "PROOFING" && (
-                                <button
-                                    onClick={handleFinalizeNow}
-                                    disabled={loading}
-                                    className="ml-auto text-[10px] bg-emerald-100 text-emerald-700 px-2 py-1 rounded border border-emerald-200 hover:bg-emerald-200 uppercase font-black tracking-wide flex items-center gap-1 transition-colors"
-                                    title="Skip Proofing & Distribute Payouts"
-                                >
-                                    <CheckCircle className="w-3 h-3" />
-                                    Confirm Now
-                                </button>
-                            )}
-
-                            {/* TEMP DEBUG RESET BUTTON */}
+                            {/* Owner Action Buttons Row - Separated for better mobile layout */}
                             {isOwner && (bet.status === "PROOFING" || bet.status === "RESOLVED") && (
-                                <div className="ml-auto flex items-center gap-1">
+                                <div className="flex items-center justify-end gap-2 mt-3 pt-2 border-t border-green-200/50 flex-wrap">
+                                    {/* Confirm Now Button (only for PROOFING) */}
+                                    {bet.status === "PROOFING" && (
+                                        <button
+                                            onClick={handleFinalizeNow}
+                                            disabled={loading}
+                                            className="text-[9px] sm:text-[10px] bg-emerald-100 text-emerald-700 px-1.5 sm:px-2 py-1 rounded border border-emerald-200 hover:bg-emerald-200 uppercase font-black tracking-wide flex items-center gap-0.5 sm:gap-1 transition-colors shrink-0"
+                                            title="Skip Proofing & Distribute Payouts"
+                                        >
+                                            <CheckCircle className="w-3 h-3" />
+                                            <span>Confirm</span>
+                                        </button>
+                                    )}
+
+                                    {/* Reset Button (for both PROOFING and RESOLVED) */}
                                     {isResetConfirmOpen ? (
-                                        <>
-                                            <span className="text-[9px] font-bold text-red-600 uppercase">Confirm Reset?</span>
+                                        <div className="flex items-center gap-1">
+                                            <span className="text-[8px] sm:text-[9px] font-bold text-red-600 uppercase">Reset?</span>
                                             <button
                                                 onClick={async () => {
                                                     try {
                                                         const { doc, updateDoc, deleteField } = await import("firebase/firestore");
-                                                        // Use the existing db instance if possible, or keep getFirestore if strict separation needed.
-                                                        // Using imported db from config is safer for consistency.
                                                         await updateDoc(doc(db, "leagues", bet.leagueId, "bets", bet.id), {
                                                             status: "LOCKED",
                                                             winningOutcome: deleteField(),
@@ -1299,22 +1312,22 @@ export function BetCard({ bet, userPoints, userWager, mode, powerUps: powerUpsPr
                                                         alert("Reset failed: " + e);
                                                     }
                                                 }}
-                                                className="text-[9px] bg-red-600 text-white px-2 py-0.5 rounded uppercase font-black hover:bg-red-700"
+                                                className="text-[8px] sm:text-[9px] bg-red-600 text-white px-1.5 sm:px-2 py-0.5 rounded uppercase font-black hover:bg-red-700"
                                             >
                                                 Yes
                                             </button>
                                             <button
                                                 onClick={() => setIsResetConfirmOpen(false)}
-                                                className="text-[9px] bg-gray-200 text-gray-700 px-2 py-0.5 rounded uppercase font-black hover:bg-gray-300"
+                                                className="text-[8px] sm:text-[9px] bg-gray-200 text-gray-700 px-1.5 sm:px-2 py-0.5 rounded uppercase font-black hover:bg-gray-300"
                                             >
                                                 No
                                             </button>
-                                        </>
+                                        </div>
                                     ) : (
                                         <button
                                             onClick={() => setIsResetConfirmOpen(true)}
-                                            className="scale-75 origin-right text-[9px] bg-red-100 text-red-600 px-1.5 py-0.5 rounded border border-red-200 hover:bg-red-200 uppercase font-black tracking-widest opacity-50 hover:opacity-100 transition-all"
-                                            title="Debug: Reset to LOCKED"
+                                            className="text-[8px] sm:text-[9px] bg-red-100 text-red-600 px-1.5 py-0.5 rounded border border-red-200 hover:bg-red-200 uppercase font-black opacity-60 hover:opacity-100 transition-all shrink-0"
+                                            title="Reset to LOCKED"
                                         >
                                             Reset
                                         </button>

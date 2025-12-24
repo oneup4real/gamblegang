@@ -46,6 +46,7 @@ import { AuthProvider } from "@/components/auth-provider";
 import { NavBar } from "@/components/navbar";
 import { PWAInstallProvider } from "@/hooks/use-pwa-install";
 import { PwaPopup } from "@/components/pwa-popup";
+import { AppShell } from "@/components/app-shell";
 
 export const dynamicParams = false;
 
@@ -81,8 +82,10 @@ export default async function LocaleLayout({
         <NextIntlClientProvider messages={messages}>
           <PWAInstallProvider>
             <AuthProvider>
-              <NavBar />
-              {children}
+              <AppShell>
+                <NavBar />
+                {children}
+              </AppShell>
             </AuthProvider>
             <PwaPopup />
           </PWAInstallProvider>
@@ -91,3 +94,4 @@ export default async function LocaleLayout({
     </html>
   );
 }
+
