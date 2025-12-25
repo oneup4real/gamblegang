@@ -213,7 +213,21 @@
         "typeMatchExact": "Match Prediction (Exact Score)",
         "typeWinnerChoice": "Winner Prediction (Choice)",
         "forecastExact": "Exact Score",
-        "forecastWinner": "Winner"
+        "forecastWinner": "Winner",
+        "customPointSettings": "Custom Point Settings",
+        "customPointsDescription": "Points are automatically taken from league settings. Enable this to override for this bet only.",
+        "customPointsActive": "These settings will override league defaults for this bet only.",
+        "pointsExact": "Exact",
+        "pointsDiff": "Diff",
+        "pointsWinner": "Winner",
+        "pointsChoice": "Choice",
+        "pointsGuess": "Guess",
+        "noDiffForDraws": "No Diff points for Draws",
+        "exactTooltip": "Points for predicting exact score",
+        "diffTooltip": "Points for correct goal difference",
+        "winnerTooltip": "Points for correct winner/tendency",
+        "choiceTooltip": "Points for choice/option bets",
+        "guessTooltip": "Points for range/guess bets"
     },
     "Help": {
         "question": "The main question or title of the bet that players will see.",

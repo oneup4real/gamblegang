@@ -572,10 +572,10 @@ export function CreateBetModal({ leagueId, leagueMode, aiAutoConfirmEnabled, lea
                                                 <div className="flex items-center justify-between">
                                                     <div className="flex-1">
                                                         <h4 className="text-sm font-black uppercase text-purple-800 flex items-center gap-2">
-                                                            🎯 Custom Point Settings
+                                                            🎯 {t('customPointSettings')}
                                                         </h4>
                                                         <p className="text-[10px] font-bold text-purple-600 mt-1">
-                                                            Points are automatically taken from league settings. Enable this to override for this bet only.
+                                                            {t('customPointsDescription')}
                                                         </p>
                                                     </div>
                                                     <div
@@ -596,8 +596,8 @@ export function CreateBetModal({ leagueId, leagueMode, aiAutoConfirmEnabled, lea
                                                                 <div className="grid grid-cols-3 gap-2">
                                                                     <div className="space-y-1">
                                                                         <label className="text-xs font-bold text-gray-500 uppercase flex items-center gap-1">
-                                                                            Exact
-                                                                            <HelpTooltip text="Points for predicting exact score" position="top" />
+                                                                            {t('pointsExact')}
+                                                                            <HelpTooltip text={t('exactTooltip')} position="top" />
                                                                         </label>
                                                                         <input
                                                                             type="number"
@@ -609,8 +609,8 @@ export function CreateBetModal({ leagueId, leagueMode, aiAutoConfirmEnabled, lea
                                                                     </div>
                                                                     <div className="space-y-1">
                                                                         <label className="text-xs font-bold text-gray-500 uppercase flex items-center gap-1">
-                                                                            Diff
-                                                                            <HelpTooltip text="Points for correct goal difference" position="top" />
+                                                                            {t('pointsDiff')}
+                                                                            <HelpTooltip text={t('diffTooltip')} position="top" />
                                                                         </label>
                                                                         <input
                                                                             type="number"
@@ -622,8 +622,8 @@ export function CreateBetModal({ leagueId, leagueMode, aiAutoConfirmEnabled, lea
                                                                     </div>
                                                                     <div className="space-y-1">
                                                                         <label className="text-xs font-bold text-gray-500 uppercase flex items-center gap-1">
-                                                                            Winner
-                                                                            <HelpTooltip text="Points for correct winner/tendency" position="top" />
+                                                                            {t('pointsWinner')}
+                                                                            <HelpTooltip text={t('winnerTooltip')} position="top" />
                                                                         </label>
                                                                         <input
                                                                             type="number"
@@ -643,7 +643,7 @@ export function CreateBetModal({ leagueId, leagueMode, aiAutoConfirmEnabled, lea
                                                                         className="w-4 h-4 rounded border-gray-300 text-purple-600 focus:ring-purple-500"
                                                                     />
                                                                     <label htmlFor="customExcludeDrawDiff" className="text-xs font-bold text-purple-800 uppercase cursor-pointer select-none">
-                                                                        No Diff points for Draws
+                                                                        {t('noDiffForDraws')}
                                                                     </label>
                                                                 </div>
                                                             </>
@@ -653,8 +653,8 @@ export function CreateBetModal({ leagueId, leagueMode, aiAutoConfirmEnabled, lea
                                                         <div className="grid grid-cols-2 gap-2 pt-2 border-t border-purple-200">
                                                             <div className="space-y-1">
                                                                 <label className="text-xs font-bold text-gray-500 uppercase flex items-center gap-1">
-                                                                    Choice
-                                                                    <HelpTooltip text="Points for choice/option bets" position="top" />
+                                                                    {t('pointsChoice')}
+                                                                    <HelpTooltip text={t('choiceTooltip')} position="top" />
                                                                 </label>
                                                                 <input
                                                                     type="number"
@@ -666,8 +666,8 @@ export function CreateBetModal({ leagueId, leagueMode, aiAutoConfirmEnabled, lea
                                                             </div>
                                                             <div className="space-y-1">
                                                                 <label className="text-xs font-bold text-gray-500 uppercase flex items-center gap-1">
-                                                                    Guess
-                                                                    <HelpTooltip text="Points for range/guess bets" position="top" />
+                                                                    {t('pointsGuess')}
+                                                                    <HelpTooltip text={t('guessTooltip')} position="top" />
                                                                 </label>
                                                                 <input
                                                                     type="number"
@@ -680,7 +680,7 @@ export function CreateBetModal({ leagueId, leagueMode, aiAutoConfirmEnabled, lea
                                                         </div>
 
                                                         <p className="text-[10px] font-bold text-purple-600 italic">
-                                                            These settings will override league defaults for this bet only.
+                                                            {t('customPointsActive')}
                                                         </p>
                                                     </div>
                                                 )}

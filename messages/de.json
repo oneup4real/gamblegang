@@ -209,7 +209,21 @@
         "typeMatchExact": "Spielvorhersage (Exaktes Ergebnis)",
         "typeWinnerChoice": "Sieger-Vorhersage (Auswahl)",
         "forecastExact": "Exaktes Ergebnis",
-        "forecastWinner": "Sieger"
+        "forecastWinner": "Sieger",
+        "customPointSettings": "Eigene Punkteeinstellungen",
+        "customPointsDescription": "Punkte werden automatisch aus den Liga-Einstellungen übernommen. Aktiviere dies, um sie nur für diese Wette zu überschreiben.",
+        "customPointsActive": "Diese Einstellungen überschreiben die Liga-Standards nur für diese Wette.",
+        "pointsExact": "Exakt",
+        "pointsDiff": "Diff",
+        "pointsWinner": "Sieger",
+        "pointsChoice": "Auswahl",
+        "pointsGuess": "Schätzen",
+        "noDiffForDraws": "Keine Diff-Punkte bei Unentschieden",
+        "exactTooltip": "Punkte für exakte Ergebnisvorhersage",
+        "diffTooltip": "Punkte für korrekte Tordifferenz",
+        "winnerTooltip": "Punkte für korrekten Sieger/Tendenz",
+        "choiceTooltip": "Punkte für Auswahl-/Optionswetten",
+        "guessTooltip": "Punkte für Bereichs-/Schätzwetten"
     },
     "Help": {
         "question": "Die Hauptfrage oder der Titel der Wette, die Spieler sehen werden.",
