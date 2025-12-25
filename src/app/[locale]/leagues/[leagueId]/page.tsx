@@ -639,13 +639,31 @@ export default function LeaguePage() {
 
             } else {
                 // ARCADE: Fixed points (No Wager Amount)
+                // Calculate Max Potential based on bet or league settings
+                // Use bet-level settings if defined, otherwise fall back to league settings
+                const settings = bet.arcadePointSettings || league.matchSettings || { exact: 3, diff: 2, winner: 1, choice: 1, range: 1 };
+
+                // For MATCH type, max potential is the 'exact' score points (highest tier)
+                // For CHOICE type, max potential is 'choice' points
+                // For RANGE type, max potential is 'range' points
+                let basePoints: number;
+                if (bet.type === "MATCH") {
+                    basePoints = settings.exact || 3; // Max for exact score prediction
+                } else if (bet.type === "CHOICE") {
+                    basePoints = settings.choice || 1;
+                } else if (bet.type === "RANGE") {
+                    basePoints = settings.range || 1;
+                } else {
+                    basePoints = 1;
+                }
+
                 let multiplier = 1;
                 if (wager.powerUp === 'x2') multiplier = 2;
                 if (wager.powerUp === 'x3') multiplier = 3;
                 if (wager.powerUp === 'x4') multiplier = 4;
 
                 displayedOdds = multiplier > 1 ? `${multiplier}x` : "-";
-                const potentialPts = 1 * multiplier;
+                const potentialPts = basePoints * multiplier;
                 displayedReturn = `${potentialPts} ${tBets('pts')}`;
                 returnColor = "text-green-600";
             }
@@ -1570,6 +1588,7 @@ export default function LeaguePage() {
                                 leagueId={leagueId}
                                 leagueMode={league.mode}
                                 aiAutoConfirmEnabled={league.aiAutoConfirmEnabled}
+                                leagueMatchSettings={league.matchSettings}
                                 isOpen={isBetModalOpen}
                                 onClose={() => {
                                     setIsBetModalOpen(false);

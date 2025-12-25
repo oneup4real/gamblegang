@@ -16,13 +16,21 @@ interface CreateBetModalProps {
     leagueId: string;
     leagueMode?: LeagueMode; // Add leagueMode
     aiAutoConfirmEnabled?: boolean; // New prop
+    leagueMatchSettings?: { // League-level arcade point settings (for defaults)
+        exact: number;
+        diff: number;
+        winner: number;
+        choice?: number;
+        range?: number;
+        excludeDrawDiff?: boolean;
+    };
     isOpen: boolean;
     onClose: () => void;
     onSuccess?: () => void;
     betToEdit?: any;
 }
 
-export function CreateBetModal({ leagueId, leagueMode, aiAutoConfirmEnabled, isOpen, onClose, onSuccess, betToEdit }: CreateBetModalProps) {
+export function CreateBetModal({ leagueId, leagueMode, aiAutoConfirmEnabled, leagueMatchSettings, isOpen, onClose, onSuccess, betToEdit }: CreateBetModalProps) {
     const t = useTranslations('Bets');
     const tAi = useTranslations('AI');
     const tHelp = useTranslations('Help');
@@ -38,6 +46,14 @@ export function CreateBetModal({ leagueId, leagueMode, aiAutoConfirmEnabled, isO
     const [lockBufferMinutes, setLockBufferMinutes] = useState(0); // 0 = At Start
     // Removed autoConfirm/delay config state as it is now league-level
 
+    // Per-bet Arcade Point Settings (Optional Override)
+    const [useCustomPoints, setUseCustomPoints] = useState(false);
+    const [customExactPts, setCustomExactPts] = useState(leagueMatchSettings?.exact || 3);
+    const [customDiffPts, setCustomDiffPts] = useState(leagueMatchSettings?.diff || 2);
+    const [customWinnerPts, setCustomWinnerPts] = useState(leagueMatchSettings?.winner || 1);
+    const [customChoicePts, setCustomChoicePts] = useState(leagueMatchSettings?.choice || 1);
+    const [customRangePts, setCustomRangePts] = useState(leagueMatchSettings?.range || 1);
+    const [customExcludeDrawDiff, setCustomExcludeDrawDiff] = useState(leagueMatchSettings?.excludeDrawDiff || false);
 
     // Choice Logic
     const [options, setOptions] = useState<string[]>(["", ""]);
@@ -151,6 +167,19 @@ export function CreateBetModal({ leagueId, leagueMode, aiAutoConfirmEnabled, isO
                 setEventEndDateStr("");
             }
 
+            // Handle Arcade Point Settings (if editing)
+            if (betToEdit.arcadePointSettings) {
+                setUseCustomPoints(true);
+                setCustomExactPts(betToEdit.arcadePointSettings.exact ?? leagueMatchSettings?.exact ?? 3);
+                setCustomDiffPts(betToEdit.arcadePointSettings.diff ?? leagueMatchSettings?.diff ?? 2);
+                setCustomWinnerPts(betToEdit.arcadePointSettings.winner ?? leagueMatchSettings?.winner ?? 1);
+                setCustomChoicePts(betToEdit.arcadePointSettings.choice ?? leagueMatchSettings?.choice ?? 1);
+                setCustomRangePts(betToEdit.arcadePointSettings.range ?? leagueMatchSettings?.range ?? 1);
+                setCustomExcludeDrawDiff(betToEdit.arcadePointSettings.excludeDrawDiff ?? leagueMatchSettings?.excludeDrawDiff ?? false);
+            } else {
+                setUseCustomPoints(false);
+            }
+
         } else if (isOpen && !betToEdit) {
             // Reset if opening fresh
             setQuestion("");
@@ -164,8 +193,17 @@ export function CreateBetModal({ leagueId, leagueMode, aiAutoConfirmEnabled, isO
             setEventDateStr("");
             setEventEndDateStr(""); // Reset event end date
             setLockBufferMinutes(0);
+            // Reset custom points to league defaults
+            setUseCustomPoints(false);
+            setCustomExactPts(leagueMatchSettings?.exact || 3);
+            setCustomDiffPts(leagueMatchSettings?.diff || 2);
+            setCustomWinnerPts(leagueMatchSettings?.winner || 1);
+            setCustomChoicePts(leagueMatchSettings?.choice || 1);
+            setCustomRangePts(leagueMatchSettings?.range || 1);
+            setCustomExcludeDrawDiff(leagueMatchSettings?.excludeDrawDiff || false);
         }
-    }, [isOpen, betToEdit, leagueMode]);
+    }, [isOpen, betToEdit, leagueMode, leagueMatchSettings]);
+
 
     // Check if bet has existing wagers (prevents editing options)
     const hasWagers = betToEdit && betToEdit.wagerCount && betToEdit.wagerCount > 0;
@@ -323,6 +361,16 @@ export function CreateBetModal({ leagueId, leagueMode, aiAutoConfirmEnabled, isO
             const clDate = new Date(evDate.getTime() - (lockBufferMinutes * 60000));
             const evEndDate = eventEndDateStr ? new Date(eventEndDateStr) : undefined;
 
+            // Build arcade point settings object (only if custom points enabled in arcade mode)
+            const arcadeSettings = (leagueMode === "STANDARD" && useCustomPoints) ? {
+                exact: customExactPts,
+                diff: customDiffPts,
+                winner: customWinnerPts,
+                choice: customChoicePts,
+                range: customRangePts,
+                excludeDrawDiff: customExcludeDrawDiff
+            } : undefined;
+
             if (betToEdit) {
                 await updateBet(leagueId, betToEdit.id, {
                     question,
@@ -334,7 +382,9 @@ export function CreateBetModal({ leagueId, leagueMode, aiAutoConfirmEnabled, isO
                     ...(type === "RANGE" ? { rangeMin: Number(rangeMin), rangeMax: Number(rangeMax), rangeUnit } : {}),
                     ...(type === "MATCH" ? { matchDetails: { homeTeam: matchHome, awayTeam: matchAway, date: evDate.toISOString() } } : {}),
                     autoConfirm: aiAutoConfirmEnabled !== false, // Default true if undefined
-                    autoConfirmDelay: 120
+                    autoConfirmDelay: 120,
+                    // Include or clear arcade point settings based on toggle
+                    ...(arcadeSettings ? { arcadePointSettings: arcadeSettings } : { arcadePointSettings: undefined })
                 });
                 alert("Draft Updated!");
             } else {
@@ -351,7 +401,8 @@ export function CreateBetModal({ leagueId, leagueMode, aiAutoConfirmEnabled, isO
                     aiAutoConfirmEnabled !== false, // Default true
                     120, // Fixed delay
                     type === "CHOICE" ? choiceStyle : undefined, // Pass choiceStyle for CHOICE bets
-                    evEndDate // Pass optional event end date
+                    evEndDate, // Pass optional event end date
+                    arcadeSettings // Pass arcade point settings (undefined if not using custom)
                 );
             }
             if (onSuccess) onSuccess();
@@ -512,11 +563,129 @@ export function CreateBetModal({ leagueId, leagueMode, aiAutoConfirmEnabled, isO
                                                     <option value={60}>{t('lock1Hour')}</option>
                                                     <option value={1440}>{t('lock24Hours')}</option>
                                                 </select>
-                                                <div className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2">
-                                                    <svg className="h-4 w-4 fill-black" viewBox="0 0 20 20"><path d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" /></svg>
-                                                </div>
                                             </div>
                                         </div>
+
+                                        {/* Arcade Point Settings (Optional Override) - Only for STANDARD mode */}
+                                        {leagueMode === "STANDARD" && (
+                                            <div className="space-y-3 p-4 bg-purple-50 border-2 border-purple-200 rounded-xl">
+                                                <div className="flex items-center justify-between">
+                                                    <div className="flex-1">
+                                                        <h4 className="text-sm font-black uppercase text-purple-800 flex items-center gap-2">
+                                                            🎯 Custom Point Settings
+                                                        </h4>
+                                                        <p className="text-[10px] font-bold text-purple-600 mt-1">
+                                                            Points are automatically taken from league settings. Enable this to override for this bet only.
+                                                        </p>
+                                                    </div>
+                                                    <div
+                                                        onClick={() => setUseCustomPoints(!useCustomPoints)}
+                                                        className={`relative h-7 w-12 cursor-pointer rounded-full border-2 border-black transition-colors shrink-0 ml-3 ${useCustomPoints ? "bg-purple-500" : "bg-gray-200"}`}
+                                                    >
+                                                        <div
+                                                            className={`absolute top-[2px] h-5 w-5 rounded-full border-2 border-black bg-white shadow-sm transition-all ${useCustomPoints ? "translate-x-[22px]" : "translate-x-[2px]"}`}
+                                                        />
+                                                    </div>
+                                                </div>
+
+                                                {useCustomPoints && (
+                                                    <div className="space-y-3 pt-3 border-t border-purple-200">
+                                                        {/* Match Score Points */}
+                                                        {(type === "MATCH" || !type || type === "CHOICE") && (
+                                                            <>
+                                                                <div className="grid grid-cols-3 gap-2">
+                                                                    <div className="space-y-1">
+                                                                        <label className="text-xs font-bold text-gray-500 uppercase flex items-center gap-1">
+                                                                            Exact
+                                                                            <HelpTooltip text="Points for predicting exact score" position="top" />
+                                                                        </label>
+                                                                        <input
+                                                                            type="number"
+                                                                            min={0}
+                                                                            value={customExactPts}
+                                                                            onChange={(e) => setCustomExactPts(Number(e.target.value))}
+                                                                            className="w-full h-10 px-2 rounded-lg border-2 border-black font-bold text-center"
+                                                                        />
+                                                                    </div>
+                                                                    <div className="space-y-1">
+                                                                        <label className="text-xs font-bold text-gray-500 uppercase flex items-center gap-1">
+                                                                            Diff
+                                                                            <HelpTooltip text="Points for correct goal difference" position="top" />
+                                                                        </label>
+                                                                        <input
+                                                                            type="number"
+                                                                            min={0}
+                                                                            value={customDiffPts}
+                                                                            onChange={(e) => setCustomDiffPts(Number(e.target.value))}
+                                                                            className="w-full h-10 px-2 rounded-lg border-2 border-black font-bold text-center"
+                                                                        />
+                                                                    </div>
+                                                                    <div className="space-y-1">
+                                                                        <label className="text-xs font-bold text-gray-500 uppercase flex items-center gap-1">
+                                                                            Winner
+                                                                            <HelpTooltip text="Points for correct winner/tendency" position="top" />
+                                                                        </label>
+                                                                        <input
+                                                                            type="number"
+                                                                            min={0}
+                                                                            value={customWinnerPts}
+                                                                            onChange={(e) => setCustomWinnerPts(Number(e.target.value))}
+                                                                            className="w-full h-10 px-2 rounded-lg border-2 border-black font-bold text-center"
+                                                                        />
+                                                                    </div>
+                                                                </div>
+                                                                <div className="flex items-center gap-2">
+                                                                    <input
+                                                                        type="checkbox"
+                                                                        id="customExcludeDrawDiff"
+                                                                        checked={customExcludeDrawDiff}
+                                                                        onChange={e => setCustomExcludeDrawDiff(e.target.checked)}
+                                                                        className="w-4 h-4 rounded border-gray-300 text-purple-600 focus:ring-purple-500"
+                                                                    />
+                                                                    <label htmlFor="customExcludeDrawDiff" className="text-xs font-bold text-purple-800 uppercase cursor-pointer select-none">
+                                                                        No Diff points for Draws
+                                                                    </label>
+                                                                </div>
+                                                            </>
+                                                        )}
+
+                                                        {/* Choice & Range Points */}
+                                                        <div className="grid grid-cols-2 gap-2 pt-2 border-t border-purple-200">
+                                                            <div className="space-y-1">
+                                                                <label className="text-xs font-bold text-gray-500 uppercase flex items-center gap-1">
+                                                                    Choice
+                                                                    <HelpTooltip text="Points for choice/option bets" position="top" />
+                                                                </label>
+                                                                <input
+                                                                    type="number"
+                                                                    min={0}
+                                                                    value={customChoicePts}
+                                                                    onChange={(e) => setCustomChoicePts(Number(e.target.value))}
+                                                                    className="w-full h-10 px-2 rounded-lg border-2 border-black font-bold text-center"
+                                                                />
+                                                            </div>
+                                                            <div className="space-y-1">
+                                                                <label className="text-xs font-bold text-gray-500 uppercase flex items-center gap-1">
+                                                                    Guess
+                                                                    <HelpTooltip text="Points for range/guess bets" position="top" />
+                                                                </label>
+                                                                <input
+                                                                    type="number"
+                                                                    min={0}
+                                                                    value={customRangePts}
+                                                                    onChange={(e) => setCustomRangePts(Number(e.target.value))}
+                                                                    className="w-full h-10 px-2 rounded-lg border-2 border-black font-bold text-center"
+                                                                />
+                                                            </div>
+                                                        </div>
+
+                                                        <p className="text-[10px] font-bold text-purple-600 italic">
+                                                            These settings will override league defaults for this bet only.
+                                                        </p>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        )}
 
                                         {/* Auto-Confirm Settings Removed (Now League Level) */}
                                         {type === "CHOICE" && (

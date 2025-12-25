@@ -97,6 +97,17 @@ export interface Bet {
         matchStatus: "NOT_STARTED" | "LIVE" | "HALFTIME" | "FINISHED" | "POSTPONED";
         lastUpdated: any; // Timestamp
     };
+
+    // Per-bet Arcade Point Settings (Optional override for league settings)
+    // If set, these values override the league's matchSettings for this specific bet
+    arcadePointSettings?: {
+        exact: number;   // Points for exact score prediction
+        diff: number;    // Points for correct goal difference
+        winner: number;  // Points for correct winner/tendency
+        choice?: number; // Points for choice bets (if applicable)
+        range?: number;  // Points for range bets (if applicable)
+        excludeDrawDiff?: boolean; // If true, draws do not award 'diff' points
+    };
 }
 
 export interface Wager {
@@ -125,7 +136,15 @@ export async function createBet(
     autoConfirm?: boolean,
     autoConfirmDelay?: number,
     choiceStyle?: "VARIOUS" | "MATCH_WINNER" | "MATCH_1X2", // For CHOICE bets
-    eventEndDate?: Date // Optional: For long-running bets
+    eventEndDate?: Date, // Optional: For long-running bets
+    arcadePointSettings?: { // Optional per-bet arcade point settings (overrides league defaults)
+        exact: number;
+        diff: number;
+        winner: number;
+        choice?: number;
+        range?: number;
+        excludeDrawDiff?: boolean;
+    }
 ) {
     const betsRef = collection(db, "leagues", leagueId, "bets");
     const newBetRef = doc(betsRef);
@@ -144,7 +163,9 @@ export async function createBet(
         totalPool: 0,
         // searchKey: question.toLowerCase() // Added searchKey as per instruction, but it's not in Bet interface
         autoConfirm: autoConfirm || false,
-        autoConfirmDelay: autoConfirmDelay || 0
+        autoConfirmDelay: autoConfirmDelay || 0,
+        // Per-bet arcade point settings (only include if provided)
+        ...(arcadePointSettings ? { arcadePointSettings } : {})
     };
 
     if (type === "CHOICE" && options) {
@@ -614,9 +635,8 @@ export async function resolveBet(
 
         // ARCADE MODE LOGIC
         if (league && league.mode === "STANDARD") {
-            const settings = league.matchSettings || { exact: 3, diff: 2, winner: 1, choice: 1, range: 1 };
-
-
+            // Use bet-level arcadePointSettings if defined, otherwise fall back to league's matchSettings
+            const settings = bet.arcadePointSettings || league.matchSettings || { exact: 3, diff: 2, winner: 1, choice: 1, range: 1 };
 
             // Power Up Multiplier
             let powerUpMult = 1;

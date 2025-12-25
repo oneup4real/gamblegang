@@ -605,9 +605,23 @@ export function BetCard({ bet, userPoints, userWager, mode, powerUps: powerUpsPr
                 }
             } else {
                 // STANDARD/ARCADE MODE
-                // Calculate Max Potential (Exact Score = 3pts, Others = 1pt)
-                // This reflects the 3-tier system: Exact(3) > Diff(2) > Winner(1)
-                let basePoints = (bet.type === "MATCH") ? 3 : 1;
+                // Calculate Max Potential based on bet-level settings (or defaults)
+                // Use bet.arcadePointSettings if defined, otherwise use sensible defaults
+                const settings = bet.arcadePointSettings || { exact: 3, diff: 2, winner: 1, choice: 1, range: 1 };
+
+                // For MATCH type, max potential is 'exact' (highest tier)
+                // For CHOICE type, max potential is 'choice' points
+                // For RANGE type, max potential is 'range' points
+                let basePoints: number;
+                if (bet.type === "MATCH") {
+                    basePoints = settings.exact || 3;
+                } else if (bet.type === "CHOICE") {
+                    basePoints = settings.choice || 1;
+                } else if (bet.type === "RANGE") {
+                    basePoints = settings.range || 1;
+                } else {
+                    basePoints = 1;
+                }
 
                 let mult = 1;
                 if (userWager.powerUp === 'x2') mult = 2;
