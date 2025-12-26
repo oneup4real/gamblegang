@@ -13,7 +13,7 @@ import { GroupedBetsByTime } from "@/components/grouped-bets";
 import { BetStatusStepper } from "@/components/bet-status-stepper";
 import { format } from "date-fns";
 import { LeagueChat } from "@/components/league-chat";
-import { ArrowLeft, Crown, User as UserIcon, Settings, Play, Flag, Archive, Coins, AlertOctagon, CheckCircle2, XCircle, Trash2, Pencil, QrCode, Gamepad2, Gavel, TrendingUp, Target, Award, Activity, ExternalLink, ChevronDown, ChevronUp, Ticket as TicketIcon, Timer, Trophy, Megaphone, MessageSquare } from "lucide-react";
+import { ArrowLeft, Crown, User as UserIcon, Settings, Play, Flag, Archive, Coins, AlertOctagon, CheckCircle2, XCircle, Trash2, Pencil, QrCode, Gamepad2, Gavel, TrendingUp, Target, Award, Activity, ExternalLink, ChevronDown, ChevronUp, Ticket as TicketIcon, Timer, Trophy, Megaphone, MessageSquare, Sparkles, Zap } from "lucide-react";
 import QRCode from "react-qr-code";
 
 import Link from "next/link";
@@ -711,6 +711,16 @@ function LeaguePageV1() {
                                     {tBets('status_' + bet.status)}
                                 </span>
                                 <span className="text-xs text-gray-600 font-bold">{bet.type}</span>
+                                {(bet.dataSource === "AI" || bet.verification?.method === "AI_GROUNDING") && (
+                                    <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-purple-100 text-purple-700 font-bold flex items-center gap-1 border border-purple-200">
+                                        <Sparkles className="w-3 h-3" /> AI
+                                    </span>
+                                )}
+                                {(bet.dataSource === "API" || bet.verification?.method === "API" || bet.verification?.method === "API_LOOKUP" || bet.verification?.source === "TheSportsDB") && (
+                                    <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700 font-bold flex items-center gap-1 border border-amber-200">
+                                        <Zap className="w-3 h-3" /> API
+                                    </span>
+                                )}
                             </div>
                         )}
                     </div>

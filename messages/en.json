@@ -369,7 +369,8 @@
                 "cardFeatures": "Live features include:",
                 "feature1": "Real-time match scores",
                 "feature2": "Live points calculator",
-                "feature3": "Live leaderboard updates"
+                "feature3": "Live leaderboard updates",
+                "note": "Note: Live updates are only available for bets created via API Mode (TheSportsDB)."
             },
             "p8": {
                 "title": "Bet Lifecycle",
@@ -485,7 +486,8 @@
                 "apiTitle": "API Mode (TheSportsDB)",
                 "apiText": "Real sports results fetched automatically. Works with major football leagues, NBA, NHL, etc.",
                 "aiTitle": "AI Mode (Gemini)",
-                "aiText": "AI searches the web for results. Works with any event including non-sports."
+                "aiText": "AI searches the web for results. Works with any event including non-sports.",
+                "note": "Pro Tip: Use API Mode to enable 'Live Ticket' features. AI and Manual bets do not support real-time score updates during the game."
             },
             "c8": {
                 "title": "Activity Log & Analytics",

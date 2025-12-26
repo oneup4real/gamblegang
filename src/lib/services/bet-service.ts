@@ -162,7 +162,8 @@ export async function createBet(
         choice?: number;
         range?: number;
         excludeDrawDiff?: boolean;
-    }
+    },
+    dataSource?: "API" | "AI" // Optional: Source of the bet data
 ) {
     const betsRef = collection(db, "leagues", leagueId, "bets");
     const newBetRef = doc(betsRef);
@@ -183,7 +184,8 @@ export async function createBet(
         autoConfirm: autoConfirm || false,
         autoConfirmDelay: autoConfirmDelay || 0,
         // Per-bet arcade point settings (only include if provided)
-        ...(arcadePointSettings ? { arcadePointSettings } : {})
+        ...(arcadePointSettings ? { arcadePointSettings } : {}),
+        ...(dataSource ? { dataSource } : {})
     };
 
     if (type === "CHOICE" && options) {

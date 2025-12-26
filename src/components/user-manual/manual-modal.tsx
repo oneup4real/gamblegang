@@ -391,6 +391,9 @@ export function ManualModal({ isOpen, onClose }: ManualModalProps) {
                             </div>
                         </div>
                     </div>
+                    <p className="text-xs text-center text-gray-500 italic mt-2">
+                        {t('player.p7.note')}
+                    </p>
                 </div>
             ),
             animation: <LiveScoreAnimation />,
@@ -904,6 +907,9 @@ export function ManualModal({ isOpen, onClose }: ManualModalProps) {
                             </p>
                         </div>
                     </div>
+                    <p className="text-xs text-gray-500 italic">
+                        {t('creator.c7.note')}
+                    </p>
                 </div>
             ),
             animation: <AiBetStatsAnimation />,

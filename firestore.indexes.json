@@ -72,7 +72,7 @@
         },
         {
             "collectionGroup": "notifications",
-            "queryScope": "COLLECTION",
+            "queryScope": "COLLECTION_GROUP",
             "fields": [
                 {
                     "fieldPath": "userId",
@@ -86,7 +86,7 @@
         },
         {
             "collectionGroup": "notifications",
-            "queryScope": "COLLECTION",
+            "queryScope": "COLLECTION_GROUP",
             "fields": [
                 {
                     "fieldPath": "read",

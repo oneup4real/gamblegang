@@ -286,7 +286,10 @@ export function CreateBetModal({ leagueId, leagueMode, aiAutoConfirmEnabled, lea
                     aiAutoConfirmEnabled !== false, // Default true
                     120, // Fixed delay
                     // Map bulkOutcomeType to choiceStyle for CHOICE bets
-                    finalType === "CHOICE" ? (bulkOutcomeType === "WINNER" ? "MATCH_WINNER" : "MATCH_1X2") : undefined
+                    finalType === "CHOICE" ? (bulkOutcomeType === "WINNER" ? "MATCH_WINNER" : "MATCH_1X2") : undefined,
+                    undefined, // eventEndDate
+                    undefined, // arcadeSettings (bulk doesn't support custom points yet)
+                    "AI" // dataSource
                 );
                 successCount++;
                 setProgress(Math.round(((i + 1) / total) * 100));

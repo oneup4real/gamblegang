@@ -111,22 +111,23 @@ Sport/Topic: ${topic}
 Timeframe: ${timeframe}
 Bet Type: ${type}
 
-CRITICAL: You MUST search for and verify these are REAL, SCHEDULED matches from official sources (ESPN, NBA.com, official league sites, etc.).
+CRITICAL: You MUST specifically verify the **Time Zone** of the match start time.
+- Schedules often show "Local Time" or "ET" or "CET" without explicit warning.
+- You MUST identify the Time Zone (e.g., GMT, ET, CET, PT) from the source.
+- Convert the start time accurately to **UTC** (ISO 8601) for the "date" field.
+- If you are unsure, search specifically for "${topic} schedule time zone" or "official ${topic} start time".
 
-DO NOT make up or invent any matches. ONLY return games that you can verify are actually scheduled.
+Recommended Sources:
+- Official League Sites (FIFA, NBA, NFL, etc.) - usually reliable.
+- "Live Score" or "Flashscore" type sites - usually show precise timestamps and status.
+- Major broadcasters (ESPN, BBC, Sky).
 
 Instructions:
-1. Search for "${topic} schedule ${timeframe}" on Google
-2. Find official match schedules from reliable sports sources
-3. Verify each game is confirmed and scheduled
-4. Include accurate dates and times
-5. Return matches based on the user's timeframe request: "${timeframe}"
-
-Return ONLY matches you can VERIFY exist.
-
-${type === 'MATCH' ? 'For MATCH type, generate Match Prediction bets (Exact Score predictions).' : ''}
-${type === 'CHOICE' && outcomeType === 'WINNER' ? 'For CHOICE type, generate 2-way bets with options: [HomeTeam, AwayTeam]' : ''}
-${type === 'CHOICE' && outcomeType !== 'WINNER' ? 'For CHOICE type, generate 1x2 bets with options: [HomeTeam, Draw, AwayTeam]' : ''}
+1. Search for "${topic} schedule ${timeframe}" on Google.
+2. Find official match schedules.
+3. Verify each game is confirmed.
+4. **Identify the Time Zone** and convert to UTC ISO8601.
+5. Return matches based on "${timeframe}".
 
 Return ONLY a valid JSON array in this EXACT format:
 [
@@ -135,10 +136,10 @@ Return ONLY a valid JSON array in this EXACT format:
         "type": "${type}",
         "matchHome": "Full Home Team Name",
         "matchAway": "Full Away Team Name",
-        "date": "ISO8601 Date String with time (e.g. 2024-12-20T19:00:00.000Z)",
+        "date": "2024-12-25T19:00:00.000Z", // MUST BE ACCURATE UTC ISO8601
         "verified": true,
         ${type === 'CHOICE' ? '"options": ["HomeTeam", "AwayTeam"' + (outcomeType !== 'WINNER' ? ', "Draw"' : '') + '],' : ''}
-        "source": "Where you found this (e.g. ESPN, NBA.com)"
+        "source": "Where you found this (especially the Time Zone info)"
     }
 ]
 

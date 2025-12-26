@@ -365,7 +365,8 @@
                 "cardFeatures": "Live Features beinhalten:",
                 "feature1": "Echtzeit Spielergebnisse",
                 "feature2": "Live Punkterechner",
-                "feature3": "Live Ranglisten-Updates"
+                "feature3": "Live Ranglisten-Updates",
+                "note": "Hinweis: Live-Updates sind nur für Wetten aus dem API-Modus (TheSportsDB) verfügbar."
             },
             "p8": {
                 "title": "Wett-Ablauf",
@@ -481,7 +482,8 @@
                 "apiTitle": "API Modus (TheSportsDB)",
                 "apiText": "Echte Sportdaten automatisch abgerufen. Funktioniert mit großen Ligen (Bundesliga, NBA, etc).",
                 "aiTitle": "KI Modus (Gemini)",
-                "aiText": "KI sucht im Netz nach Ergebnissen. Funktioniert mit jedem Event, auch Nicht-Sport."
+                "aiText": "KI sucht im Netz nach Ergebnissen. Funktioniert mit jedem Event, auch Nicht-Sport.",
+                "note": "Pro-Tipp: Nutze den API-Modus für 'Live-Ticket'-Features. KI- und manuelle Wetten unterstützen keine Echtzeit-Scores."
             },
             "c8": {
                 "title": "Activity Log & Analytics",
