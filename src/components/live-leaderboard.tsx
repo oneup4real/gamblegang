@@ -19,12 +19,9 @@ interface PositionChangeBadgeProps {
 }
 
 export function PositionChangeBadge({ change, compact = false }: PositionChangeBadgeProps) {
+    // Don't show anything if no position change - avoids confusing "- 0" display
     if (change === 0) {
-        return (
-            <div className={`flex items-center gap-0.5 text-gray-400 ${compact ? 'text-[10px]' : 'text-xs'}`}>
-                <Minus className={compact ? "h-3 w-3" : "h-3.5 w-3.5"} />
-            </div>
-        );
+        return null;
     }
 
     if (change > 0) {

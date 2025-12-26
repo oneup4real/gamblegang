@@ -47,6 +47,7 @@ import { NavBar } from "@/components/navbar";
 import { PWAInstallProvider } from "@/hooks/use-pwa-install";
 import { PwaPopup } from "@/components/pwa-popup";
 import { AppShell } from "@/components/app-shell";
+import { UIVersionProvider } from "@/components/ui-version-context";
 
 export const dynamicParams = false;
 
@@ -82,10 +83,12 @@ export default async function LocaleLayout({
         <NextIntlClientProvider messages={messages}>
           <PWAInstallProvider>
             <AuthProvider>
-              <AppShell>
-                <NavBar />
-                {children}
-              </AppShell>
+              <UIVersionProvider>
+                <AppShell>
+                  <NavBar />
+                  {children}
+                </AppShell>
+              </UIVersionProvider>
             </AuthProvider>
             <PwaPopup />
           </PWAInstallProvider>

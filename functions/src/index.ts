@@ -551,20 +551,32 @@ export const autoResolveBets = onSchedule(
             if (betDataSource === "API") {
                 const hoursSinceStart = (now - eventDate.getTime()) / (1000 * 60 * 60);
 
-                // API mode:
+                // API mode STRICT checks:
                 // 1. If Live Score says FINISHED -> Resolve immediately
                 // 2. If > 5 hours since start (missed live window) -> Attempt force resolution
+                // 3. If no liveScore data exists, require at least 4 hours (most games finish by then)
+                const hasLiveData = !!bet.liveScore;
                 const isFinished = bet.liveScore?.matchStatus === "FINISHED";
                 const isStale = hoursSinceStart > 5;
+                const isLikelyFinished = !hasLiveData && hoursSinceStart > 4; // Fallback if live updates missed
 
-                if (!isFinished && !isStale) {
-                    logger.info(`Skipping API Bet ${doc.id} - Game not finished yet and within 5h window (Status: ${bet.liveScore?.matchStatus || "NO_DATA"})`);
+                // CRITICAL: If game is in progress (LIVE, HALFTIME, etc), NEVER proceed
+                const isInProgress = bet.liveScore?.matchStatus === "LIVE" ||
+                    bet.liveScore?.matchStatus === "HALFTIME";
+
+                if (isInProgress) {
+                    logger.info(`⛔ Skipping API Bet ${doc.id} - Game still IN PROGRESS (Status: ${bet.liveScore?.matchStatus})`);
                     continue;
                 }
-                logger.info(`✅ API Bet ${doc.id} - Ready for resolution (Finished: ${isFinished}, Stale: ${isStale})`);
+
+                if (!isFinished && !isStale && !isLikelyFinished) {
+                    logger.info(`Skipping API Bet ${doc.id} - Game not finished yet (Status: ${bet.liveScore?.matchStatus || "NO_DATA"}, Hours: ${hoursSinceStart.toFixed(1)}h)`);
+                    continue;
+                }
+                logger.info(`✅ API Bet ${doc.id} - Ready for resolution (Finished: ${isFinished}, Stale: ${isStale}, LikelyFinished: ${isLikelyFinished})`);
             } else {
                 // AI mode: Use traditional delay buffer
-                const delayMinutes = bet.autoConfirmDelay || 120;
+                const delayMinutes = bet.autoConfirmDelay || 180;
                 const delayMs = delayMinutes * 60 * 1000;
                 const resolveTime = eventDate.getTime() + delayMs;
 
@@ -685,12 +697,31 @@ export const autoResolveBets = onSchedule(
                 }
 
                 // Use AI if dataSource is AI or if API mode failed
+                // CRITICAL: For API bets, only fall back to AI if match is FINISHED, STALE, or delay buffer passed
+                // This prevents AI from resolving in-progress games with partial scores
                 if (!result) {
-                    logger.info(`🤖 [AI Mode] Using AI resolution for bet ${doc.id}`);
-                    if (bet.type === "MATCH") {
-                        result = await resolveMatchWithAI(bet, apiKey);
+                    const hoursSinceStart = (Date.now() - eventDate.getTime()) / (1000 * 60 * 60);
+                    const delayMinutes = bet.autoConfirmDelay || 180; // Default 3 hours
+                    const delayHours = delayMinutes / 60;
+                    const isDelayPassed = hoursSinceStart >= delayHours;
+
+                    const shouldUseAI =
+                        betDataSource !== "API" || // Always use AI for non-API bets
+                        bet.liveScore?.matchStatus === "FINISHED" || // API match is done
+                        (isDelayPassed && hoursSinceStart > 5); // Stale fallback (both delay and 5h must pass)
+
+                    if (shouldUseAI) {
+                        logger.info(`🤖 [AI Mode] Using AI resolution for bet ${doc.id} (Delay: ${delayMinutes}m, Hours: ${hoursSinceStart.toFixed(1)}h)`);
+                        if (bet.type === "MATCH") {
+                            result = await resolveMatchWithAI(bet, apiKey);
+                        } else {
+                            result = await resolveGenericWithAI(bet, apiKey);
+                        }
                     } else {
-                        result = await resolveGenericWithAI(bet, apiKey);
+                        const skipReason = betDataSource === "API" && !bet.sportsDbEventId
+                            ? "Missing SportsDB Event ID"
+                            : `Match not ready (Status: ${bet.liveScore?.matchStatus || "UNKNOWN"}, Hours: ${hoursSinceStart.toFixed(1)}h < 12h, Start: ${eventDate.toISOString()})`;
+                        logger.warn(`⛔ [API Mode] Skipping AI fallback for bet ${doc.id} - ${skipReason}`);
                     }
                 }
 
@@ -788,28 +819,120 @@ export const lockBets = onSchedule("every 1 minutes", async () => {
 // ============================================
 
 /**
- * Get live score for an event by ID from TheSportsDB
+ * Cache for livescore data by league ID to reduce API calls
  */
-async function getLiveScoreByEventId(eventId: string): Promise<{
+const liveScoreCache: Map<string, { data: any[]; timestamp: number }> = new Map();
+const CACHE_TTL_MS = 60000; // 1 minute cache
+
+/**
+ * Fetch livescore feed for a league (with caching)
+ */
+async function getLiveScoreFeed(leagueId: string): Promise<any[]> {
+    const cached = liveScoreCache.get(leagueId);
+    if (cached && Date.now() - cached.timestamp < CACHE_TTL_MS) {
+        return cached.data;
+    }
+
+    try {
+        // V2: /livescore/{leagueId} - Returns all live/recent games for that league
+        const data = await sportsDbV2Fetch(`/livescore/${leagueId}`);
+        const livescores = data.livescore || [];
+
+        liveScoreCache.set(leagueId, { data: livescores, timestamp: Date.now() });
+        logger.info(`📡 [Livescore] Fetched ${livescores.length} live games for league ${leagueId}`);
+
+        return livescores;
+    } catch (error) {
+        logger.error(`Error fetching livescore feed for league ${leagueId}:`, error);
+        return [];
+    }
+}
+
+/**
+ * Get live score for an event by ID from TheSportsDB
+ * Uses the /livescore endpoint for real-time data, falls back to /lookup/event for finished games
+ */
+async function getLiveScoreByEventId(eventId: string, sportsDbLeagueId?: string): Promise<{
     found: boolean;
     homeScore?: number;
     awayScore?: number;
     matchTime?: string;
     matchStatus?: "NOT_STARTED" | "LIVE" | "HALFTIME" | "FINISHED" | "POSTPONED";
 }> {
-    try {
-        // V2: /lookup/event/{id}
-        const data = await sportsDbV2Fetch(`/lookup/event/${eventId}`);
+    const parseScore = (val: any) => {
+        if (val === null || val === undefined || val === "") return undefined;
+        return parseInt(String(val));
+    };
 
-        // DEBUG: Log the full response to debug V2 migration issues
-        logger.info(`🔍 [API V2] Lookup for ${eventId} returned keys: ${Object.keys(data).join(', ')}`);
-        logger.info(`🔍 [API V2] Raw Response: ${JSON.stringify(data).substring(0, 500)}`);
+    // Helper to determine match status from API status string
+    const parseMatchStatus = (status: string): "NOT_STARTED" | "LIVE" | "HALFTIME" | "FINISHED" | "POSTPONED" => {
+        const s = status.toLowerCase();
+
+        // FINISHED
+        if (s.includes("ft") || s.includes("finished") || s.includes("final") || s.includes("aet")) {
+            return "FINISHED";
+        }
+        // HALFTIME / Break
+        if (s.includes("ht") || s.includes("halftime") || s.includes("half time") || s === "bt" || s.includes("break")) {
+            return "HALFTIME";
+        }
+        // LIVE (various formats)
+        if (
+            s.includes("live") ||
+            s.includes("'") ||
+            /^\d+$/.test(s) ||           // "35" (minute)
+            /\d+h/.test(s) ||            // "1H", "2H"
+            /\d+(st|nd|rd|th)/.test(s) || // "1st", "2nd" quarter
+            s.includes("q") ||           // "Q1", "4th Q"
+            s.includes("period") ||
+            s.includes("inning")
+        ) {
+            return "LIVE";
+        }
+        // POSTPONED
+        if (s.includes("postponed") || s.includes("cancelled") || s.includes("abandoned")) {
+            return "POSTPONED";
+        }
+        // NOT STARTED
+        if (s.match(/^\d{1,2}:\d{2}$/) || s === "ns" || s.includes("not started")) {
+            return "NOT_STARTED";
+        }
+
+        return "NOT_STARTED";
+    };
+
+    try {
+        // 1. PRIORITY: Try livescore endpoint if we have the league ID
+        if (sportsDbLeagueId) {
+            const livescores = await getLiveScoreFeed(sportsDbLeagueId);
+            const liveEvent = livescores.find((e: any) => String(e.idEvent) === String(eventId));
+
+            if (liveEvent) {
+                const homeScore = parseScore(liveEvent.intHomeScore);
+                const awayScore = parseScore(liveEvent.intAwayScore);
+                const matchStatus = parseMatchStatus(liveEvent.strStatus || "");
+
+                // If we have scores from livescore, use them (this is real-time data!)
+                if (homeScore !== undefined || awayScore !== undefined || matchStatus !== "NOT_STARTED") {
+                    logger.info(`✅ [Livescore] Found ${liveEvent.strHomeTeam} vs ${liveEvent.strAwayTeam}: ${homeScore ?? 0} - ${awayScore ?? 0} (${liveEvent.strStatus})`);
+                    return {
+                        found: true,
+                        homeScore: homeScore ?? 0,
+                        awayScore: awayScore ?? 0,
+                        matchTime: liveEvent.strProgress || liveEvent.strStatus || "",
+                        matchStatus: matchStatus === "NOT_STARTED" && (homeScore !== undefined || awayScore !== undefined) ? "LIVE" : matchStatus
+                    };
+                }
+            }
+        }
+
+        // 2. FALLBACK: Use /lookup/event for historical data or if livescore didn't have it
+        const data = await sportsDbV2Fetch(`/lookup/event/${eventId}`);
 
         let event: any = null;
         if (data.events && Array.isArray(data.events) && data.events.length > 0) {
             event = data.events[0];
         } else if (data.lookup && Array.isArray(data.lookup) && data.lookup.length > 0) {
-            // V2 Format often returns "lookup" array
             event = data.lookup[0];
         } else if (data.event) {
             event = data.event;
@@ -822,51 +945,13 @@ async function getLiveScoreByEventId(eventId: string): Promise<{
             return { found: false };
         }
 
-        // Parse scores (Handle V1 'intHomeScore' and V2 'homeScore'/'intHomeScore')
-        const parseScore = (val: any) => {
-            if (val === null || val === undefined || val === "") return undefined;
-            return parseInt(String(val));
-        };
-
         const homeScore = parseScore(event.intHomeScore) ?? parseScore(event.homeScore) ?? parseScore(event.strHomeScore);
         const awayScore = parseScore(event.intAwayScore) ?? parseScore(event.awayScore) ?? parseScore(event.strAwayScore);
+        const matchStatus = parseMatchStatus(event.strStatus || "");
 
-        // Determine match status
-        let matchStatus: "NOT_STARTED" | "LIVE" | "HALFTIME" | "FINISHED" | "POSTPONED" = "NOT_STARTED";
-        const status = String(event.strStatus || event.status || "").toLowerCase();
-
-        // 1. FINISHED
-        if (status.includes("ft") || status.includes("finished") || status.includes("final") || status.includes("aet")) {
-            matchStatus = "FINISHED";
-        }
-        // 2. HALFTIME
-        else if (status.includes("ht") || status.includes("halftime") || status.includes("half time") || status.includes("break")) {
-            matchStatus = "HALFTIME";
-        }
-        // 3. LIVE (Expanded Logic)
-        else if (
-            status.includes("live") ||
-            status.includes("'") ||
-            /^\d+$/.test(status) ||           // "35"
-            /\d+h/.test(status) ||            // "1H", "2H"
-            /\d+(st|nd|rd|th)/.test(status) || // "1st", "2nd"
-            status.includes("q") ||           // "Q1", "4th Q"
-            status.includes("period") ||
-            status.includes("inning")
-        ) {
-            matchStatus = "LIVE";
-        }
-        // 4. POSTPONED
-        else if (status.includes("postponed") || status.includes("cancelled") || status.includes("abandoned")) {
-            matchStatus = "POSTPONED";
-        }
-        // 5. NOT STARTED (Explicit)
-        else if (status.match(/^\d{1,2}:\d{2}$/) || status === "ns" || status.includes("not started")) {
-            matchStatus = "NOT_STARTED";
-        }
-        // 6. FALLBACK: Scores exist -> Assume LIVE (Safer than FINISHED)
-        else if (homeScore !== undefined && awayScore !== undefined) {
-            matchStatus = "LIVE";
+        // If lookup has valid scores, use them
+        if (homeScore !== undefined || awayScore !== undefined) {
+            logger.info(`📖 [Lookup] Found ${event.strHomeTeam} vs ${event.strAwayTeam}: ${homeScore} - ${awayScore} (${event.strStatus})`);
         }
 
         return {
@@ -874,7 +959,7 @@ async function getLiveScoreByEventId(eventId: string): Promise<{
             homeScore,
             awayScore,
             matchTime: event.strProgress || event.strStatus || "",
-            matchStatus
+            matchStatus: matchStatus === "NOT_STARTED" && homeScore !== undefined && awayScore !== undefined ? "LIVE" : matchStatus
         };
 
     } catch (error) {
@@ -945,7 +1030,8 @@ export const updateLiveScores = onSchedule(
                 }
 
                 try {
-                    const liveScore = await getLiveScoreByEventId(eventId);
+                    // Pass sportsDbLeagueId to enable real-time livescore endpoint
+                    const liveScore = await getLiveScoreByEventId(eventId, bet.sportsDbLeagueId);
 
                     if (liveScore.found) {
                         // Update the bet with live score

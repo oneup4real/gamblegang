@@ -382,7 +382,7 @@ export function CreateBetModal({ leagueId, leagueMode, aiAutoConfirmEnabled, lea
                     ...(type === "RANGE" ? { rangeMin: Number(rangeMin), rangeMax: Number(rangeMax), rangeUnit } : {}),
                     ...(type === "MATCH" ? { matchDetails: { homeTeam: matchHome, awayTeam: matchAway, date: evDate.toISOString() } } : {}),
                     autoConfirm: aiAutoConfirmEnabled !== false, // Default true if undefined
-                    autoConfirmDelay: 120,
+                    autoConfirmDelay: 180,
                     // Include or clear arcade point settings based on toggle
                     ...(arcadeSettings ? { arcadePointSettings: arcadeSettings } : { arcadePointSettings: undefined })
                 });

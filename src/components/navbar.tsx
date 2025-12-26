@@ -7,6 +7,7 @@ import { HelpCircle, ShieldAlert } from "lucide-react";
 import { ManualModal } from "@/components/user-manual/manual-modal";
 import { UserSettingsModal } from "@/components/user-settings-modal";
 import { NotificationBell } from "@/components/notification-bell";
+import { UIVersionToggleCompact } from "@/components/ui-version-toggle";
 import { doc, getDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase/config";
 
@@ -71,6 +72,8 @@ export function NavBar() {
                         >
                             <HelpCircle className="w-6 h-6 text-black" />
                         </button>
+
+                        <UIVersionToggleCompact />
 
                         <NotificationBell />
 

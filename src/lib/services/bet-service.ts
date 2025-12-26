@@ -123,6 +123,24 @@ export interface Wager {
     powerUp?: PowerUpType; // Arcade mode multiplier
 }
 
+// Helper to format selection for activity log
+function formatSelection(selection: string | number | { home: number, away: number }, bet?: Bet): string {
+    if (typeof selection === 'object' && 'home' in selection && 'away' in selection) {
+        // Match score prediction - show as "2-1"
+        return `${selection.home}-${selection.away}`;
+    }
+    if (typeof selection === 'string' && bet?.options) {
+        // Choice bet - get the actual option text
+        const optIndex = Number(selection);
+        const option = bet.options[optIndex];
+        if (option?.text) {
+            return option.text;
+        }
+    }
+    // Default: just convert to string
+    return String(selection);
+}
+
 export async function createBet(
     leagueId: string,
     user: User,
@@ -190,6 +208,16 @@ export async function createBet(
             homeTeam: matchDetails.home,
             awayTeam: matchDetails.away,
             date: eventDate.toISOString() // Use eventDate for match date
+        };
+    }
+
+    // Also set matchDetails for CHOICE bets with match-based styles (MATCH_WINNER, MATCH_1X2)
+    // This enables live score calculations to correctly identify home vs away team
+    if (type === "CHOICE" && matchDetails && (choiceStyle === "MATCH_WINNER" || choiceStyle === "MATCH_1X2")) {
+        betData.matchDetails = {
+            homeTeam: matchDetails.home,
+            awayTeam: matchDetails.away,
+            date: eventDate.toISOString()
         };
     }
 
@@ -337,9 +365,13 @@ export async function placeWager(
     });
 
     // Log activity outside transaction (fire and forget)
-    // Note: We need bet question for logging, fetch it or pass it in
-    // For now, use a generic message
-    logWagerPlaced(leagueId, user, betId, "Bet", amount, String(selection)).catch(console.error);
+    // Fetch bet to get question and format selection properly
+    getDoc(doc(db, "leagues", leagueId, "bets", betId)).then(betSnap => {
+        const bet = betSnap.exists() ? betSnap.data() as Bet : undefined;
+        const formattedSelection = formatSelection(selection, bet);
+        const betQuestion = bet?.question || "Bet";
+        logWagerPlaced(leagueId, user, betId, betQuestion, amount, formattedSelection).catch(console.error);
+    }).catch(console.error);
 }
 
 export async function editWager(
@@ -481,7 +513,13 @@ export async function editWager(
         transaction.update(wagerRef, wagerUpdates);
     });
 
-    logWagerPlaced(leagueId, user, betId, "Bet Update", newAmount, String(newSelection)).catch(console.error);
+    // Log the wager update with properly formatted selection
+    getDoc(doc(db, "leagues", leagueId, "bets", betId)).then(betSnap => {
+        const bet = betSnap.exists() ? betSnap.data() as Bet : undefined;
+        const formattedSelection = formatSelection(newSelection, bet);
+        const betQuestion = bet?.question || "Bet Update";
+        logWagerPlaced(leagueId, user, betId, betQuestion, newAmount, formattedSelection).catch(console.error);
+    }).catch(console.error);
 }
 
 export function calculateOdds(totalPool: number, optionPool: number): string {

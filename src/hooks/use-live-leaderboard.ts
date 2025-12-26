@@ -99,17 +99,24 @@ function calculateWinStatus(
         const selectionIndex = parseInt(wager.selection);
         const selectedOption = (bet.options[selectionIndex]?.text || "").toLowerCase();
 
+        // Determine home/away team names from matchDetails OR options
+        const homeTeam = bet.matchDetails?.homeTeam?.toLowerCase() ||
+            bet.options[0]?.text?.toLowerCase() || "home";
+        const awayTeam = bet.matchDetails?.awayTeam?.toLowerCase() ||
+            bet.options[1]?.text?.toLowerCase() || "away";
+
         let currentWinner: string = "";
-        if (homeScore > awayScore && bet.matchDetails?.homeTeam) {
-            currentWinner = bet.matchDetails.homeTeam.toLowerCase();
-        } else if (awayScore > homeScore && bet.matchDetails?.awayTeam) {
-            currentWinner = bet.matchDetails.awayTeam.toLowerCase();
+        if (homeScore > awayScore) {
+            currentWinner = homeTeam;
+        } else if (awayScore > homeScore) {
+            currentWinner = awayTeam;
         } else {
             currentWinner = "draw";
         }
 
         // Check if selection matches
         if (selectedOption.includes(currentWinner) ||
+            currentWinner.includes(selectedOption) ||
             (currentWinner === "draw" && selectedOption.includes("draw"))) {
             return "WINNING";
         }
@@ -128,6 +135,33 @@ function calculateWinStatus(
  * Calculate potential payout for a wager
  */
 function calculatePotentialPayout(bet: Bet, wager: Wager): number {
+    // ARCADE MODE (STANDARD): Fixed points based on bet type + power-up multiplier
+    // In Arcade mode, wager.amount is 0, so we use arcadePointSettings
+    if (!wager.amount || wager.amount === 0) {
+        // Get base points from arcadePointSettings or defaults
+        const settings = bet.arcadePointSettings || { exact: 3, diff: 2, winner: 1, choice: 1, range: 1 };
+
+        let basePoints = 1;
+        if (bet.type === "CHOICE") {
+            basePoints = settings.choice || 1;
+        } else if (bet.type === "MATCH") {
+            // For MATCH type, winning could be exact, diff, or winner
+            // Use the highest (exact) for potential calculation
+            basePoints = settings.exact || 3;
+        } else if (bet.type === "RANGE") {
+            basePoints = settings.range || 1;
+        }
+
+        // Apply power-up multiplier
+        let multiplier = 1;
+        if (wager.powerUp === 'x2') multiplier = 2;
+        if (wager.powerUp === 'x3') multiplier = 3;
+        if (wager.powerUp === 'x4') multiplier = 4;
+
+        return basePoints * multiplier;
+    }
+
+    // ZERO_SUM MODE: Pool-based payout
     if (bet.type === "CHOICE" && bet.options && bet.totalPool) {
         const selectionIndex = typeof wager.selection === "string"
             ? parseInt(wager.selection)

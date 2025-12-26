@@ -21,8 +21,23 @@ import {
 } from "@/components/dashboard";
 import { subDays } from "date-fns";
 import { LiveBetsSection } from "@/components/live-bets-section";
+import { useUIVersion } from "@/components/ui-version-context";
+import { DashboardPageV2 } from "@/components/v2/dashboard-page-v2";
+import { LoadingOverlay } from "@/components/loading-overlay";
 
 export default function DashboardPage() {
+    const { isV2 } = useUIVersion();
+
+    // If user has V2 enabled, render the new dashboard
+    if (isV2) {
+        return <DashboardPageV2 />;
+    }
+
+    // Original V1 Dashboard
+    return <DashboardPageV1 />;
+}
+
+function DashboardPageV1() {
     const t = useTranslations('Dashboard');
     const { user, loading } = useAuth();
     const router = useRouter();
@@ -146,11 +161,7 @@ export default function DashboardPage() {
     };
 
     if (loading || !user) {
-        return (
-            <div className="flex h-screen items-center justify-center">
-                <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
-            </div>
-        );
+        return <LoadingOverlay message="Preparing your dashboard..." />;
     }
 
     // Calculate aggregated stats

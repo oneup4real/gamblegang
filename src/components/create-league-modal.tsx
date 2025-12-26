@@ -155,7 +155,7 @@ export function CreateLeagueModal({ isOpen, onClose }: CreateLeagueModalProps) {
                         undefined,
                         matchDetails, // Pass matchDetails for both MATCH and CHOICE
                         true, // autoConfirm
-                        120,  // autoConfirmDelay
+                        180,  // autoConfirmDelay
                         // Pass choiceStyle for CHOICE bets based on aiOutcomeType
                         finalType === "CHOICE" ? (aiOutcomeType === "WINNER" ? "MATCH_WINNER" : "MATCH_1X2") : undefined
                     );

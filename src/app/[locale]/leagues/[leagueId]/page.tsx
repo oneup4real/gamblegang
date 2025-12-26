@@ -24,11 +24,25 @@ import { motion } from "framer-motion";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { useTranslations } from "next-intl";
 import { hasPermission } from "@/lib/rbac";
-import { ActivityLog } from "@/components/activity-log";
+import { ActivityTabContent } from "@/components/activity-tab-content";
 import { useLiveLeaderboard } from "@/hooks/use-live-leaderboard";
 import { LiveLeaderboardRow, LiveIndicator, PositionChangeBadge, LiveDeltaBadge, LiveStatusDot } from "@/components/live-leaderboard";
+import { useUIVersion } from "@/components/ui-version-context";
+import { LeaguePageV2 } from "@/components/v2/league-page-v2";
 
 export default function LeaguePage() {
+    const { isV2 } = useUIVersion();
+
+    // If user has V2 enabled, render the new league page
+    if (isV2) {
+        return <LeaguePageV2 />;
+    }
+
+    // Original V1 League Page
+    return <LeaguePageV1 />;
+}
+
+function LeaguePageV1() {
     const tBets = useTranslations('Bets');
     const t = useTranslations('League');
     const { user, loading } = useAuth();
@@ -1021,7 +1035,7 @@ export default function LeaguePage() {
                     {viewMode === "chat" ? (
                         <LeagueChat leagueId={leagueId} currentUser={user!} members={members} />
                     ) : viewMode === "activity" ? (
-                        <ActivityLog
+                        <ActivityTabContent
                             leagueId={leagueId}
                             isAdmin={user?.uid === league?.ownerId || members.find(m => m.uid === user?.uid)?.role === 'ADMIN'}
                         />

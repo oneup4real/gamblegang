@@ -91,18 +91,25 @@ function calculateWinStatus(
         const selectionIndex = parseInt(wager.selection);
         const selectedOption = bet.options[selectionIndex]?.text?.toLowerCase() || "";
 
+        // Determine home/away team names from matchDetails OR options
+        const homeTeam = bet.matchDetails?.homeTeam?.toLowerCase() ||
+            bet.options[0]?.text?.toLowerCase() || "home";
+        const awayTeam = bet.matchDetails?.awayTeam?.toLowerCase() ||
+            bet.options[1]?.text?.toLowerCase() || "away";
+
         // Determine current winner
         let currentWinner: string = "";
         if (homeScore > awayScore) {
-            currentWinner = bet.matchDetails?.homeTeam?.toLowerCase() || "home";
+            currentWinner = homeTeam;
         } else if (awayScore > homeScore) {
-            currentWinner = bet.matchDetails?.awayTeam?.toLowerCase() || "away";
+            currentWinner = awayTeam;
         } else {
             currentWinner = "draw";
         }
 
         // Check if selection matches current state
         if (selectedOption.includes(currentWinner) ||
+            currentWinner.includes(selectedOption) ||
             (currentWinner === "draw" && selectedOption.includes("draw"))) {
             return "WINNING";
         }
@@ -204,12 +211,10 @@ export function useLiveBets(userId: string, leagueId?: string): UseLiveBetsRetur
                     const bet = betDataMap.get(betId);
 
                     // Filter: Must be loaded AND LOCKED
-                    // Also include bets that are technically OPEN but have liveScore (rare edge case)
                     if (!bet || bet.status !== "LOCKED") return;
 
-                    // Filter out games that haven't started yet (User request)
-                    // They will appear in the "Pending" tab instead
-                    if (!bet.liveScore || bet.liveScore.matchStatus === "NOT_STARTED") return;
+                    // Note: We now include ALL locked bets, even without live scores
+                    // This ensures bets appear while waiting for game to start
 
                     const wagers = wagersByBetId.get(betId) || [];
 

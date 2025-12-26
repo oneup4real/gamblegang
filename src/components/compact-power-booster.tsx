@@ -83,43 +83,37 @@ export function CompactPowerBooster({ powerUps, selectedPowerUp, onSelect }: Com
                 )}
             </button>
 
-            {/* Radial Power-Up Menu */}
+            {/* Horizontal Power-Up Menu (expands to right to avoid cutoff) */}
             {isOpen && (
-                <div className="absolute z-50">
-                    {/* X2 - Top Left (badge on left side) */}
+                <div className="absolute left-14 top-1/2 -translate-y-1/2 z-50 flex gap-2">
+                    {/* X2 */}
                     <PowerUpButton
                         type="x2"
                         count={powerUps.x2}
                         config={POWER_UP_CONFIG.x2}
                         isSelected={selectedPowerUp === 'x2'}
                         onClick={() => handleSelectPowerUp('x2')}
-                        position="-top-14 -left-8"
                         delay="0ms"
-                        badgePosition="left"
                     />
 
-                    {/* X3 - Top (badge on right side - default) */}
+                    {/* X3 */}
                     <PowerUpButton
                         type="x3"
                         count={powerUps.x3}
                         config={POWER_UP_CONFIG.x3}
                         isSelected={selectedPowerUp === 'x3'}
                         onClick={() => handleSelectPowerUp('x3')}
-                        position="-top-16 left-2"
                         delay="50ms"
-                        badgePosition="right"
                     />
 
-                    {/* X4 - Top Right (badge on right side) */}
+                    {/* X4 */}
                     <PowerUpButton
                         type="x4"
                         count={powerUps.x4}
                         config={POWER_UP_CONFIG.x4}
                         isSelected={selectedPowerUp === 'x4'}
                         onClick={() => handleSelectPowerUp('x4')}
-                        position="-top-14 left-12"
                         delay="100ms"
-                        badgePosition="right"
                     />
                 </div>
             )}
@@ -138,7 +132,7 @@ interface PowerUpButtonProps {
     config: typeof POWER_UP_CONFIG.x2;
     isSelected: boolean;
     onClick: () => void;
-    position: string;
+    position?: string; // Optional - for radial layout
     delay: string;
     badgePosition?: 'left' | 'right';
 }
@@ -153,7 +147,7 @@ function PowerUpButton({ type, count, config, isSelected, onClick, position, del
             onClick={onClick}
             disabled={isDisabled}
             className={`
-                absolute ${position} w-14 h-14 rounded-xl border-2 border-black 
+                ${position ? `absolute ${position}` : 'relative'} w-12 h-12 rounded-xl border-2 border-black 
                 shadow-[2px_2px_0px_0px_rgba(0,0,0,0.8)] 
                 flex flex-col items-center justify-center gap-0
                 transition-all duration-150
@@ -167,8 +161,8 @@ function PowerUpButton({ type, count, config, isSelected, onClick, position, del
             `}
             style={{ animationDelay: delay }}
         >
-            <span className="text-2xl leading-none">{config.emoji}</span>
-            <span className="text-xs font-black leading-none text-white drop-shadow-[1px_1px_0_rgba(0,0,0,0.5)]">{config.label}</span>
+            <span className="text-xl leading-none">{config.emoji}</span>
+            <span className="text-[10px] font-black leading-none text-white drop-shadow-[1px_1px_0_rgba(0,0,0,0.5)]">{config.label}</span>
 
             {/* Count Badge */}
             <span className={`

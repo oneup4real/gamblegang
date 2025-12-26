@@ -157,38 +157,10 @@ export function BetCard({ bet, userPoints, userWager, mode, powerUps: powerUpsPr
                 }
             }
 
-            // 2. Check Auto-Confirm (Locked/Open -> Proofing)
-            if ((bet.status === "LOCKED" || bet.status === "OPEN") && bet.autoConfirm) {
-                const eventDate = bet.eventDate?.toDate ? bet.eventDate.toDate() : (bet.eventDate ? new Date(bet.eventDate) : null);
-                if (!eventDate) return;
-
-                const confirmTime = new Date(eventDate.getTime() + (bet.autoConfirmDelay || 0) * 60000);
-                if (new Date() >= confirmTime) {
-                    try {
-                        console.log("Auto-confirming bet via AI:", bet.id);
-                        // Trigger AI Resolution
-                        const result = await aiAutoResolveBet(bet);
-                        if (result) {
-                            // Extract outcome
-                            let outcome: any;
-                            if (result.type === "MATCH") {
-                                outcome = { home: result.home, away: result.away };
-                            } else if (result.type === "CHOICE") {
-                                outcome = String(result.optionIndex);
-                            } else if (result.type === "RANGE") {
-                                outcome = result.value;
-                            }
-
-                            if (outcome !== undefined) {
-                                await startProofing(bet.leagueId, bet.id, user, outcome, result.verification);
-                                console.log("Bet auto-confirmed successfully");
-                            }
-                        }
-                    } catch (err) {
-                        console.error("Auto-confirmation failed:", err);
-                    }
-                }
-            }
+            // 2. Check Auto-Confirm (Logic moved to Cloud Function autoResolveBets)
+            /* 
+               Checking for auto-confirm is now handled server-side to prevent double-resolutions.
+            */
         };
 
         checkAutomation();
@@ -428,6 +400,33 @@ export function BetCard({ bet, userPoints, userWager, mode, powerUps: powerUpsPr
         } catch (error: any) {
             console.error(error);
             alert(error.message || "Failed to finalize bet");
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleResetBet = async () => {
+        if (!confirm("Reset this bet back to LOCKED status? All verification data will be removed and the result will need to be resolved again.")) return;
+        setLoading(true);
+        try {
+            const { doc, updateDoc, deleteField } = await import("firebase/firestore");
+            await updateDoc(doc(db, "leagues", bet.leagueId, "bets", bet.id), {
+                status: "LOCKED",
+                // Clear all verification-related fields
+                winningOutcome: deleteField(),
+                verification: deleteField(),
+                disputeDeadline: deleteField(),
+                disputeActive: false,
+                resolvedAt: deleteField(),
+                resolvedBy: deleteField(),
+                // Also clear live score data so it can be re-fetched
+                liveScore: deleteField(),
+            });
+            alert("Bet reset to LOCKED status. Verification data cleared.");
+            setIsResetConfirmOpen(false);
+        } catch (e: any) {
+            console.error(e);
+            alert("Reset failed: " + e.message);
         } finally {
             setLoading(false);
         }
@@ -1121,233 +1120,193 @@ export function BetCard({ bet, userPoints, userWager, mode, powerUps: powerUpsPr
                         </div>
                     )}
 
-                    {/* 2. LOCKED STATE (ADMIN CONTROLS) */}
-                    {(bet.status === "LOCKED" || (bet.status === "OPEN" && isExpired)) && isOwner && (
-                        <div className="bg-slate-50 border-2 border-slate-200 rounded-lg p-3 space-y-2 mt-2">
-                            <div className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-1">Owner Controls</div>
-                            <button
-                                onClick={handleAIResolve}
-                                disabled={aiResolving}
-                                className="w-full flex items-center justify-between p-2 bg-white border border-slate-200 rounded shadow-sm hover:border-purple-400 hover:shadow-md transition text-left group"
-                            >
-                                <div className="flex items-center gap-2">
-                                    <div className="w-6 h-6 rounded bg-purple-500 text-white flex items-center justify-center"><BrainCircuit className="w-3 h-3" /></div>
-                                    <span className="font-bold text-slate-700 text-sm group-hover:text-purple-600">Auto-Resolve with AI</span>
+                    {/* 2. LOCKED STATE (ADMIN CONTROLS) - Only show when ready for resolution */}
+                    {(bet.status === "LOCKED" || (bet.status === "OPEN" && isExpired)) && isOwner && (() => {
+                        // For API bets: Only show controls when game is FINISHED
+                        if (bet.dataSource === "API") {
+                            const isGameFinished = bet.liveScore?.matchStatus === "FINISHED";
+                            if (!isGameFinished) return false;
+                        } else {
+                            // For AI bets: Only show controls after autoConfirmDelay has passed
+                            const eventTime = bet.eventDate?.seconds
+                                ? bet.eventDate.seconds * 1000
+                                : new Date(bet.eventDate).getTime();
+                            const delayMinutes = bet.autoConfirmDelay || 180;
+                            const resolveTime = eventTime + (delayMinutes * 60 * 1000);
+                            if (Date.now() < resolveTime) return false;
+                        }
+                        return true;
+                    })() && (
+                            <div className="bg-slate-50 border-2 border-slate-200 rounded-lg p-3 space-y-2 mt-2">
+                                <div className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-1">Owner Controls</div>
+                                <button
+                                    onClick={handleAIResolve}
+                                    disabled={aiResolving}
+                                    className="w-full flex items-center justify-between p-2 bg-white border border-slate-200 rounded shadow-sm hover:border-purple-400 hover:shadow-md transition text-left group"
+                                >
+                                    <div className="flex items-center gap-2">
+                                        <div className="w-6 h-6 rounded bg-purple-500 text-white flex items-center justify-center"><BrainCircuit className="w-3 h-3" /></div>
+                                        <span className="font-bold text-slate-700 text-sm group-hover:text-purple-600">Auto-Resolve with AI</span>
+                                    </div>
+                                    {aiResolving ? <Loader2 className="w-4 h-4 animate-spin text-purple-500" /> : <span className="text-xs text-purple-500 font-bold">Fastest</span>}
+                                </button>
+                                <button
+                                    onClick={() => {/* Toggle manual entry mode if we had a dedicated state, for now we can just show the resolution fields below or open a modal. Let's assume manual inputs are always visible for owner in locked state just like before but styled better */ }}
+                                    className="w-full flex items-center justify-between p-2 bg-white border border-slate-200 rounded shadow-sm hover:border-blue-400 hover:shadow-md transition text-left group"
+                                >
+                                    <div className="flex items-center gap-2">
+                                        <div className="w-6 h-6 rounded bg-blue-500 text-white flex items-center justify-center"><Gavel className="w-3 h-3" /></div>
+                                        <span className="font-bold text-slate-700 text-sm group-hover:text-blue-600">Manual Entry</span>
+                                    </div>
+                                </button>
+
+                                {/* Manual Entry Inputs (Visible for Owner) */}
+                                <div className="pt-2 border-t border-slate-200 mt-2">
+                                    {/* Simple selector for Choice */}
+                                    {(bet.type === "CHOICE" && bet.options) && (
+                                        <div className="space-y-2">
+                                            <div className="text-xs font-bold text-slate-400">Winning Option ({winningOption}):</div>
+                                            <select
+                                                value={winningOption}
+                                                onChange={e => setWinningOption(e.target.value)}
+                                                className="w-full p-2 text-sm font-bold border-2 border-slate-200 rounded mb-2"
+                                            >
+                                                <option value="">Select Winner...</option>
+                                                {bet.options.map((o, i) => <option key={i} value={String(i)}>{o.text}</option>)}
+                                            </select>
+                                        </div>
+                                    )}
+
+                                    {/* Match Inputs for Owner */}
+                                    {bet.type === "MATCH" && (
+                                        <div className="flex items-center gap-2 mb-2 justify-center">
+                                            <input
+                                                placeholder="Home"
+                                                type="number"
+                                                value={resHome}
+                                                onChange={(e) => setResHome(Number(e.target.value))}
+                                                className="w-16 p-1 text-center border-2 rounded font-bold"
+                                            />
+                                            <span>-</span>
+                                            <input
+                                                placeholder="Away"
+                                                type="number"
+                                                value={resAway}
+                                                onChange={(e) => setResAway(Number(e.target.value))}
+                                                className="w-16 p-1 text-center border-2 rounded font-bold"
+                                            />
+                                        </div>
+                                    )}
+
+                                    {/* Range Inputs for Owner */}
+                                    {bet.type === "RANGE" && (
+                                        <div className="mb-2">
+                                            <input
+                                                placeholder="Correct Value"
+                                                type="number"
+                                                value={winningRange}
+                                                onChange={(e) => setWinningRange(Number(e.target.value))}
+                                                className="w-full p-2 text-center border-2 rounded font-bold"
+                                            />
+                                        </div>
+                                    )}
+
+                                    {/* Confirm Button - Enabled if any result data is present */}
+                                    {(winningOption !== "" || winningRange !== "" || (resHome !== "" && resAway !== "")) && (
+                                        <div className="animate-in fade-in slide-in-from-top-1 duration-300">
+                                            {aiHighlighted && <div className="text-xs text-center text-purple-600 font-bold mb-1">AI Recommendation Filled Below</div>}
+                                            <Button onClick={handleResolve} disabled={loading} className={`w-full font-bold h-9 text-xs shadow-md ${aiHighlighted ? 'bg-purple-600 hover:bg-purple-700' : 'bg-slate-900 hover:bg-slate-800'} text-white transition-all`}>
+                                                {aiHighlighted ? "Confirm AI Result" : "Confirm Result"}
+                                            </Button>
+                                        </div>
+                                    )}
                                 </div>
-                                {aiResolving ? <Loader2 className="w-4 h-4 animate-spin text-purple-500" /> : <span className="text-xs text-purple-500 font-bold">Fastest</span>}
-                            </button>
-                            <button
-                                onClick={() => {/* Toggle manual entry mode if we had a dedicated state, for now we can just show the resolution fields below or open a modal. Let's assume manual inputs are always visible for owner in locked state just like before but styled better */ }}
-                                className="w-full flex items-center justify-between p-2 bg-white border border-slate-200 rounded shadow-sm hover:border-blue-400 hover:shadow-md transition text-left group"
-                            >
-                                <div className="flex items-center gap-2">
-                                    <div className="w-6 h-6 rounded bg-blue-500 text-white flex items-center justify-center"><Gavel className="w-3 h-3" /></div>
-                                    <span className="font-bold text-slate-700 text-sm group-hover:text-blue-600">Manual Entry</span>
-                                </div>
-                            </button>
-
-                            {/* Manual Entry Inputs (Visible for Owner) */}
-                            <div className="pt-2 border-t border-slate-200 mt-2">
-                                {/* Simple selector for Choice */}
-                                {(bet.type === "CHOICE" && bet.options) && (
-                                    <div className="space-y-2">
-                                        <div className="text-xs font-bold text-slate-400">Winning Option ({winningOption}):</div>
-                                        <select
-                                            value={winningOption}
-                                            onChange={e => setWinningOption(e.target.value)}
-                                            className="w-full p-2 text-sm font-bold border-2 border-slate-200 rounded mb-2"
-                                        >
-                                            <option value="">Select Winner...</option>
-                                            {bet.options.map((o, i) => <option key={i} value={String(i)}>{o.text}</option>)}
-                                        </select>
-                                    </div>
-                                )}
-
-                                {/* Match Inputs for Owner */}
-                                {bet.type === "MATCH" && (
-                                    <div className="flex items-center gap-2 mb-2 justify-center">
-                                        <input
-                                            placeholder="Home"
-                                            type="number"
-                                            value={resHome}
-                                            onChange={(e) => setResHome(Number(e.target.value))}
-                                            className="w-16 p-1 text-center border-2 rounded font-bold"
-                                        />
-                                        <span>-</span>
-                                        <input
-                                            placeholder="Away"
-                                            type="number"
-                                            value={resAway}
-                                            onChange={(e) => setResAway(Number(e.target.value))}
-                                            className="w-16 p-1 text-center border-2 rounded font-bold"
-                                        />
-                                    </div>
-                                )}
-
-                                {/* Range Inputs for Owner */}
-                                {bet.type === "RANGE" && (
-                                    <div className="mb-2">
-                                        <input
-                                            placeholder="Correct Value"
-                                            type="number"
-                                            value={winningRange}
-                                            onChange={(e) => setWinningRange(Number(e.target.value))}
-                                            className="w-full p-2 text-center border-2 rounded font-bold"
-                                        />
-                                    </div>
-                                )}
-
-                                {/* Confirm Button - Enabled if any result data is present */}
-                                {(winningOption !== "" || winningRange !== "" || (resHome !== "" && resAway !== "")) && (
-                                    <div className="animate-in fade-in slide-in-from-top-1 duration-300">
-                                        {aiHighlighted && <div className="text-xs text-center text-purple-600 font-bold mb-1">AI Recommendation Filled Below</div>}
-                                        <Button onClick={handleResolve} disabled={loading} className={`w-full font-bold h-9 text-xs shadow-md ${aiHighlighted ? 'bg-purple-600 hover:bg-purple-700' : 'bg-slate-900 hover:bg-slate-800'} text-white transition-all`}>
-                                            {aiHighlighted ? "Confirm AI Result" : "Confirm Result"}
-                                        </Button>
-                                    </div>
-                                )}
                             </div>
-                        </div>
-                    )}
+                        )}
 
                     {/* 3. PROOFING / RESOLVED: VERIFICATION SOURCE */}
                     {/* 3. PROOFING / RESOLVED: VERIFICATION SOURCE */}
                     {(bet.status === "PROOFING" || bet.status === "RESOLVED") && (
-                        <div className={`mt-2 rounded-lg p-3 border ${bet.status === "PROOFING" ? "bg-green-50 border-green-200" : "bg-white border-slate-200"}`}>
-                            {/* Main Content Row */}
-                            <div className="flex items-start gap-3">
-                                {/* Source Icon/Avatar */}
-                                <div className={`w-8 h-8 rounded flex items-center justify-center text-white font-bold text-[10px] shrink-0 ${bet.status === "PROOFING" ? "bg-green-500" : "bg-slate-500"}`}>
+                        <div className={`mt-2 rounded-lg p-2 border ${bet.status === "PROOFING" ? "bg-green-50 border-green-200" : "bg-white border-slate-200"}`}>
+                            {/* Compact Single-Line Verification */}
+                            <div className="flex items-center gap-2 flex-wrap">
+                                {/* Small Source Badge */}
+                                <div className={`w-6 h-6 rounded flex items-center justify-center text-white font-bold text-[8px] shrink-0 ${bet.status === "PROOFING" ? "bg-green-500" : "bg-slate-400"}`}>
                                     {(() => {
                                         const src = (bet.verification?.source || verificationData?.source || "AI").toUpperCase();
                                         if (src.includes("API") || src.includes("SPORTSDB")) return "API";
                                         if (src.includes("AI") && !src.includes("SEARCH")) return "AI";
                                         if (src.includes("SEARCH") || src.includes("GOOGLE") || src.includes("WEB")) return "WEB";
-                                        return src.substring(0, 3);
+                                        return src.substring(0, 2);
                                     })()}
                                 </div>
+
+                                {/* Winner Text + Score */}
                                 <div className="flex-1 min-w-0">
-                                    <div className="text-xs font-bold uppercase tracking-wide mb-0.5 opacity-70">Verified Result</div>
-                                    <div className="font-black text-slate-800 mb-1 text-base">
+                                    <span className="font-black text-slate-800 text-sm truncate block">
                                         {(() => {
-                                            // First show the winning outcome (which option won)
                                             if (typeof bet.winningOutcome === 'object') return `${(bet.winningOutcome as any).home} - ${(bet.winningOutcome as any).away}`;
                                             if (bet.type === "CHOICE" && bet.options) return bet.options[Number(bet.winningOutcome)]?.text || String(bet.winningOutcome);
                                             return String(bet.winningOutcome);
                                         })()}
-                                    </div>
-
-                                    {/* Show the actual numerical value or result string */}
-                                    {((bet.verification as any)?.score) && (
-                                        <div className="text-sm font-bold text-slate-600 mb-1">
-                                            Score: {(bet.verification as any).score}
-                                        </div>
+                                    </span>
+                                    {/* Show score if available */}
+                                    {((bet.verification as any)?.score || (bet.verification as any)?.actualResult) && (
+                                        <span className="text-[10px] text-emerald-600 font-bold ml-1">
+                                            ({(bet.verification as any)?.score || (bet.verification as any)?.actualResult})
+                                        </span>
                                     )}
-
-                                    {((bet.verification as any)?.actualValue !== undefined || verificationData?.actualValue !== undefined || (bet.verification as any)?.actualResult || verificationData?.actualResult) && (
-                                        <div className="text-sm font-bold text-emerald-600 mb-1">
-                                            📊 Actual: {(bet.verification as any)?.actualValue ?? verificationData?.actualValue ?? (bet.verification as any)?.actualResult ?? verificationData?.actualResult}
-                                        </div>
-                                    )}
-
-                                    <div className="text-[10px] font-medium flex items-center gap-1 opacity-60 flex-wrap">
-                                        <CheckCircle className="w-3 h-3 shrink-0" />
-                                        <span>Source:</span>
-                                        {(bet.verification?.url || verificationData?.url) ? (
-                                            <a href={bet.verification?.url || verificationData?.url} target="_blank" rel="noopener noreferrer" className="hover:underline text-blue-600 truncate max-w-[120px]">
-                                                {bet.verification?.source || verificationData?.source || "Link"}
-                                            </a>
-                                        ) : (
-                                            <span className="truncate">{bet.verification?.source || verificationData?.source || "Manual Entry"}</span>
-                                        )}
-                                        {(bet.verification?.verifiedAt || verificationData?.verifiedAt) && <span className="hidden sm:inline"> • {new Date(bet.verification?.verifiedAt || verificationData?.verifiedAt).toLocaleDateString()}</span>}
-                                    </div>
                                 </div>
 
-                                {/* Dispute Button for PROOFING (desktop only) */}
+                                {/* Source Link - Compact */}
+                                <div className="flex items-center gap-1 text-[9px] text-gray-400 shrink-0">
+                                    <CheckCircle className="w-3 h-3 text-green-500" />
+                                    {(bet.verification?.url || verificationData?.url) ? (
+                                        <a href={bet.verification?.url || verificationData?.url} target="_blank" rel="noopener noreferrer" className="hover:underline text-blue-500 font-medium">
+                                            {bet.verification?.source?.split('.')[0] || "Source"}
+                                        </a>
+                                    ) : (
+                                        <span className="font-medium">{bet.verification?.source?.split('.')[0] || "Verified"}</span>
+                                    )}
+                                </div>
+
+                                {/* Dispute Button (PROOFING only, non-owners) */}
                                 {bet.status === "PROOFING" && !isOwner && !bet.disputeActive && (
                                     <button
                                         onClick={handleDispute}
-                                        className="hidden sm:block text-xs text-red-500 font-bold hover:underline self-center shrink-0"
+                                        className="text-[9px] text-red-500 font-bold hover:underline shrink-0"
                                         disabled={disputeLoading}
                                     >
                                         Dispute?
                                     </button>
                                 )}
-                            </div>
 
-                            {/* Mobile Dispute Button - Outside the flex row */}
-                            {bet.status === "PROOFING" && !isOwner && !bet.disputeActive && (
-                                <button
-                                    onClick={handleDispute}
-                                    className="sm:hidden text-xs text-red-500 font-bold hover:underline mt-2 text-center w-full"
-                                    disabled={disputeLoading}
-                                >
-                                    Dispute Result?
-                                </button>
-                            )}
-
-                            {/* Owner Action Buttons Row - Separated for better mobile layout */}
-                            {isOwner && (bet.status === "PROOFING" || bet.status === "RESOLVED") && (
-                                <div className="flex items-center justify-end gap-2 mt-3 pt-2 border-t border-green-200/50 flex-wrap">
-                                    {/* Confirm Now Button (only for PROOFING) */}
-                                    {bet.status === "PROOFING" && (
+                                {/* Owner Inline Actions: Confirm + Reset */}
+                                {isOwner && (
+                                    <div className="flex items-center gap-1 shrink-0">
+                                        {/* Confirm (PROOFING only) */}
+                                        {bet.status === "PROOFING" && (
+                                            <button
+                                                onClick={handleFinalizeNow}
+                                                disabled={loading}
+                                                className="text-[8px] bg-emerald-500 text-white px-1.5 py-0.5 rounded uppercase font-black hover:bg-emerald-600 flex items-center gap-0.5"
+                                                title="Finalize Now"
+                                            >
+                                                <CheckCircle className="w-2.5 h-2.5" />
+                                            </button>
+                                        )}
+                                        {/* Reset - Uses confirm dialog like Finalize */}
                                         <button
-                                            onClick={handleFinalizeNow}
+                                            onClick={handleResetBet}
                                             disabled={loading}
-                                            className="text-[9px] sm:text-[10px] bg-emerald-100 text-emerald-700 px-1.5 sm:px-2 py-1 rounded border border-emerald-200 hover:bg-emerald-200 uppercase font-black tracking-wide flex items-center gap-0.5 sm:gap-1 transition-colors shrink-0"
-                                            title="Skip Proofing & Distribute Payouts"
-                                        >
-                                            <CheckCircle className="w-3 h-3" />
-                                            <span>Confirm</span>
-                                        </button>
-                                    )}
-
-                                    {/* Reset Button (for both PROOFING and RESOLVED) */}
-                                    {isResetConfirmOpen ? (
-                                        <div className="flex items-center gap-1">
-                                            <span className="text-[8px] sm:text-[9px] font-bold text-red-600 uppercase">Reset?</span>
-                                            <button
-                                                onClick={async () => {
-                                                    try {
-                                                        const { doc, updateDoc, deleteField } = await import("firebase/firestore");
-                                                        await updateDoc(doc(db, "leagues", bet.leagueId, "bets", bet.id), {
-                                                            status: "LOCKED",
-                                                            winningOutcome: deleteField(),
-                                                            verification: deleteField(),
-                                                            disputeDeadline: deleteField(),
-                                                            disputeActive: false,
-                                                            resolvedAt: deleteField(),
-                                                            resolvedBy: deleteField()
-                                                        });
-                                                        alert("Reset successful!");
-                                                        setIsResetConfirmOpen(false);
-                                                    } catch (e) {
-                                                        alert("Reset failed: " + e);
-                                                    }
-                                                }}
-                                                className="text-[8px] sm:text-[9px] bg-red-600 text-white px-1.5 sm:px-2 py-0.5 rounded uppercase font-black hover:bg-red-700"
-                                            >
-                                                Yes
-                                            </button>
-                                            <button
-                                                onClick={() => setIsResetConfirmOpen(false)}
-                                                className="text-[8px] sm:text-[9px] bg-gray-200 text-gray-700 px-1.5 sm:px-2 py-0.5 rounded uppercase font-black hover:bg-gray-300"
-                                            >
-                                                No
-                                            </button>
-                                        </div>
-                                    ) : (
-                                        <button
-                                            onClick={() => setIsResetConfirmOpen(true)}
-                                            className="text-[8px] sm:text-[9px] bg-red-100 text-red-600 px-1.5 py-0.5 rounded border border-red-200 hover:bg-red-200 uppercase font-black opacity-60 hover:opacity-100 transition-all shrink-0"
+                                            className="text-[8px] bg-red-100 text-red-600 px-1.5 py-0.5 rounded border border-red-200 hover:bg-red-200 uppercase font-black opacity-60 hover:opacity-100 disabled:opacity-30"
                                             title="Reset to LOCKED"
                                         >
-                                            Reset
+                                            ↺
                                         </button>
-                                    )}
-                                </div>
-                            )}
+                                    </div>
+                                )}
+                            </div>
                         </div>
                     )}
                 </div>
