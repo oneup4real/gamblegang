@@ -286,41 +286,216 @@
         "title": "Spielanleitung",
         "close": "Schließen",
         "backToMenu": "Zurück zum Menü",
-        "stepCounter": "Schritt {current} von {total}",
-        "prev": "Zurück",
         "next": "Weiter",
+        "prev": "Zurück",
         "finish": "Beenden",
-        "showMore": "Mehr Infos anzeigen",
-        "showLess": "Weniger anzeigen",
-        "admin": {
-            "menuTitle": "Liga erstellen",
-            "menuDesc": "Für Admins & Owner. Lerne wie man Ligen managt.",
-            "slide1Title": "Liga Commander",
-            "slide1Subtitle": "Erstellen & Herrschen",
-            "slide1Text": "Starte deine eigene Wettliga in Sekunden. Gib ihr einen Namen, wähle den Modus und lade deine Freunde (oder Feinde) ein.",
-            "slide2Title": "KI Wett-Magier",
-            "slide2Subtitle": "Keine manuelle Eingabe nötig",
-            "slide2Text": "Tippe einfach ein, worauf du wetten willst (z.B. 'Champions League Finale') und unsere KI generiert Titel, Quoten und Details für dich.",
-            "slide2Details": "Unsere KI scannt echte Spielpläne und erstellt Wetten mit einem Klick. Sie übernimmt die langweilige Dateneingabe, damit du dich auf den Spaß konzentrieren kannst.",
-            "slide3Title": "Lifecycle Management",
-            "slide3Subtitle": "Du bist der Schiedsrichter",
-            "slide3Text": "Du kontrollierst den Ablauf. Wetten öffnen automatisch. Nach dem Spiel gibst du das Ergebnis ein. Bei Protesten leitest du die Abstimmung.",
-            "slide3Details": "Der Admin hat die Macht, Ergebnisse zu korrigieren. Aber Vorsicht: Die Community kann Ergebnisse anfechten!"
+        "home": {
+            "welcome": "Willkommen bei GambleGang! Wähle deinen Weg:",
+            "playerTitle": "Spieler-Guide",
+            "playerDesc": "Lerne wie man wettet, Punkte sammelt, Power-Ups nutzt und die Rangliste erklimmt.",
+            "playerTopics": "{count} Themen",
+            "creatorTitle": "Creator-Guide",
+            "creatorDesc": "Lerne Ligen zu erstellen, Wetten mit KI zu generieren, Regeln zu konfigurieren und Mitglieder zu verwalten.",
+            "creatorTopics": "{count} Themen",
+            "startLearning": "Starten",
+            "quickTipsTitle": "💡 Schnelle Tipps",
+            "quickTips1": "Nutze den ? Button in der Navbar jederzeit",
+            "quickTips2": "Fahre über ℹ️ Icons für Erklärungen",
+            "quickTips3": "Prüfe das Aktivitätsprotokoll für Liga-Events"
         },
         "player": {
-            "menuTitle": "Mitspielen",
-            "menuDesc": "Für Spieler. Lerne wie man wettet und gewinnt.",
-            "slide1Title": "Tritt der Gang bei",
-            "slide1Subtitle": "Komm ins Spiel",
-            "slide1Text": "Nutze einen Einladungs-Code oder QR-Code um einer Liga beizutreten. Du erhältst Startpunkte zum Wetten.",
-            "slide2Title": "Wett-Ablauf",
-            "slide2Subtitle": "Vom Einsatz bis zur Auszahlung",
-            "slide2Text": "Platziere deinen Einsatz wenn OFFEN. Sobald GESPERRT, warte auf das Spiel. Nach dem Spiel gibt es eine 12h PRÜFUNG (Proofing), bevor du ausgezahlt wirst.",
-            "slide2Details": "Proofing ist ein 12-Stunden Sicherheitsfenster nach Ergebniseingabe. Jeder Spieler kann das Ergebnis anfechten (Dispute), falls es falsch ist. Kein Einspruch = Automatische Auszahlung.",
-            "slide3Title": "Kenne deinen Modus",
-            "slide3Subtitle": "Punkte vs Echte Quoten",
-            "slide3Text": "Im ARCADE-Modus spielst du um Punkte, die sich anhäufen - wer die meisten Punkte hat, gewinnt. Im NULLSUMMENSPIEL funktioniert es wie echtes Wetten mit dynamischen Quoten basierend auf dem Pot.",
-            "slide3Details": "Nullsummenspiel hat zwei Modi: SUDDEN DEATH (feste Startpunkte, 0 Punkte = Game Over) und UNBEGRENZT (unbegrenztes Nachkaufen, keine Eliminierung). Arcade dreht sich um das Sammeln von Punkten durch korrekte Vorhersagen mit festen Auszahlungen."
+            "p1": {
+                "title": "Willkommen bei GambleGang! 🎮",
+                "subtitle": "Deine soziale Wettliga",
+                "text": "GambleGang ist der Ort, wo du und deine Freunde gegeneinander antreten: Sagt Spielergebnisse voraus und erklimmt gemeinsam die Rangliste.",
+                "note": "Kein echtes Geld - nur Ruhm und Ehre!"
+            },
+            "p2": {
+                "title": "Zwei Spielweisen",
+                "subtitle": "Kenne deinen Liga-Modus",
+                "text": "Bevor du beitrittst, prüfe den Modus! Es gibt zwei komplett unterschiedliche Arten zu spielen:",
+                "arcadeTitle": "ARCADE",
+                "arcadeText": "Spiele um Punkte. Highscore gewinnt. Feste Belohnungen.",
+                "zeroSumTitle": "NULLSUMMENSPIEL",
+                "zeroSumText": "Wett-Simulation. Dynamische Quoten. Pot wird geteilt.",
+                "note": "(Dein Liga-Admin wählt den Modus)"
+            },
+            "p3": {
+                "title": "Modus A: Arcade",
+                "subtitle": "Der strategische Sammler",
+                "badge": "Nur Arcade Modus",
+                "text": "Sammle Punkte für jede korrekte Vorhersage. Die Belohnungen sind fest:",
+                "exact": "Exaktes Ergebnis",
+                "diff": "Tordifferenz",
+                "winner": "Gewinner"
+            },
+            "p4": {
+                "title": "Arcade Power-Ups",
+                "subtitle": "Booste deinen Score",
+                "badge": "Nur Arcade Modus",
+                "text": "Arcade-Spieler erhalten einen begrenzten Vorrat an Power-Ups. Nutze sie, um deine Punkte bei deinen sichersten Wetten zu vervielfachen!",
+                "double": "Doppelt",
+                "triple": "Dreifach",
+                "quadruple": "Vierfach",
+                "note": "⚠️ Strategie-Tipp: Verschwende keinen x4 Boost für eine Risiko-Wette!"
+            },
+            "p5": {
+                "title": "Modus B: Nullsummenspiel",
+                "subtitle": "Die knallharte Simulation",
+                "badge": "Nur Nullsummenspiel",
+                "text": "Dies ist eine echte Wettsimulation. Es werden keine magischen Punkte aus dem Nichts erschaffen.",
+                "cardTitle": "Dynamische Quoten",
+                "cardText": "Quoten basieren darauf, wie alle wetten (Parimutuel). Wenn alle auf den Favoriten setzen, ist die Auszahlung niedrig. Gewinnst du auf den Außenseiter, nimmst du den Pot!"
+            },
+            "p6": {
+                "title": "Nullsummen Varianten",
+                "subtitle": "Sudden Death oder Unbegrenzt?",
+                "badge": "Nur Nullsummenspiel",
+                "text": "Prüfe, welche Variante deine Liga nutzt:",
+                "suddenDeathTitle": "SUDDEN DEATH",
+                "suddenDeathText": "Start mit festen Chips. Bei 0 bist du raus. Survival of the fittest.",
+                "uncappedTitle": "UNBEGRENZT (UNCAPPED)",
+                "uncappedText": "Chips leer? Kauf einfach nach. Der Pot wächst unendlich."
+            },
+            "p7": {
+                "title": "Live Action",
+                "subtitle": "Verfolge Ergebnisse in Echtzeit",
+                "badge": "Alle Modi",
+                "text": "Sobald der Anpfiff erfolgt, erwacht die App zum Leben:",
+                "cardFeatures": "Live Features beinhalten:",
+                "feature1": "Echtzeit Spielergebnisse",
+                "feature2": "Live Punkterechner",
+                "feature3": "Live Ranglisten-Updates"
+            },
+            "p8": {
+                "title": "Wett-Ablauf",
+                "subtitle": "Von Offen bis Auszahlung",
+                "badge": "Alle Modi",
+                "step1": "OFFEN - Wette platzieren bevor Zeit abläuft",
+                "step2": "GESPERRT - Spiel läuft",
+                "step3": "PRÜFUNG - Verifizierung (1h - 24h)",
+                "step4": "BEENDET - Auszahlung & Statistik-Update"
+            },
+            "p9": {
+                "title": "Anfechtungen (Disputes)",
+                "subtitle": "Community Justizsystem",
+                "badge": "Fair Play Schutz",
+                "text": "Denkst du ein Ergebnis ist falsch? Du kannst es während der Prüfphase anfechten (Dispute)!",
+                "cardTitle": "Liga-Abstimmung",
+                "cardText": "Sobald angefochten, stimmen alle Mitglieder ab. Wenn >50% zustimmen, dass das Ergebnis falsch ist, wird die Wette UNGÜLTIG.",
+                "note": "🚫 Ungültige Wetten werden storniert und alle Einsätze zurückgezahlt."
+            },
+            "p10": {
+                "title": "Analytics & Audit",
+                "subtitle": "Transparenz ist alles",
+                "badge": "Für Alle Verfügbar",
+                "text": "Prüfe deine Performance-Statistiken und verifiziere jedes einzelne Wettermgebnis.",
+                "item1Title": "Analytics",
+                "item1Text": "Sieh dir deine Gewinnrate, Profit-Trends und Head-to-Head Statistiken an.",
+                "item2Title": "Wett-Audit",
+                "item2Text": "Öffne jede beendete Wette um genau zu sehen, wer worauf gewettet hat und wie die Punkte verteilt wurden.",
+                "note": "Volle Transparenz: Die Mathematik ist jederzeit für dich einsehbar."
+            }
+        },
+        "creator": {
+            "c1": {
+                "title": "Erstelle deine Liga",
+                "subtitle": "Sei der Commissioner",
+                "text": "Bereit deine eigene Wettliga zu leiten? Als Creator kontrollierst du alles:",
+                "item1": "Wetten erstellen",
+                "item2": "Mitglieder verwalten",
+                "item3": "Regeln konfigurieren",
+                "item4": "Ergebnisse auflösen"
+            },
+            "c2": {
+                "title": "KI Wett-Magier",
+                "subtitle": "Wetten automatisch generieren",
+                "text": "Keine Lust Wetten manuell zu erstellen? Nutze unseren KI Wizard!",
+                "cardTitle": "Sag der KI einfach:",
+                "item1": "📌 \"Bundesliga dieses Wochenende\"",
+                "item2": "📌 \"Champions League nächsten Dienstag\"",
+                "item3": "📌 \"NBA Spiele heute Nacht\"",
+                "note": "Die KI holt echte Spielpläne und erstellt Wetten mit korrekten Teams, Daten und Zeiten."
+            },
+            "c3": {
+                "title": "Wähle deinen Pfad",
+                "subtitle": "Arcade vs Nullsummenspiel",
+                "text": "Deine erste Entscheidung als Creator: Welche Erfahrung willst du bieten?",
+                "arcadeTitle": "🎮 Arcade Modus",
+                "arcadeText": "Spaßig & locker. Punkte, Power-Ups und eigene Regeln. Ideal für Freunde, die um den Highscore kämpfen.",
+                "zeroSumTitle": "💰 Nullsummen Modus",
+                "zeroSumText": "Hardcore Simulation. Echte Quoten, Chip-Ökonomie und Insolvenz-Risiko. Für Strategen."
+            },
+            "c4": {
+                "badge": "Nur Arcade",
+                "title": "Scoring Konfigurieren",
+                "subtitle": "Punkte anpassen",
+                "text": "Setze deine eigenen Regeln für die Liga oder pro Wette:",
+                "exact": "Exaktes Ergebnis",
+                "diff": "Tordifferenz",
+                "winner": "Korrekter Sieger",
+                "note": "⚙️ Option: Deaktiviere \"Diff\" Punkte bei Unentschieden für mehr Risiko"
+            },
+            "c5": {
+                "badge": "Nur Arcade",
+                "title": "Power-Up Inventar",
+                "subtitle": "Kontrolliere die Booster",
+                "text": "Konfiguriere wie viele Power-Ups jeder Spieler erhält:",
+                "boost2": "x2 Booster",
+                "boost3": "x3 Booster",
+                "boost4": "x4 Booster",
+                "note": "Knappheit erzeugt Strategie! Spieler müssen weise wählen wann sie boosten."
+            },
+            "zs1": {
+                "badge": "Nur Nullsumme",
+                "title": "Nullsummen Mechanik",
+                "subtitle": "Keine Punkte, nur Chips",
+                "text": "Im Nullsummen Modus ist das Scoring deaktiviert. Die Ökonomie läuft von selbst:",
+                "item1Title": "Parimutuel Wetten",
+                "item1Text": "Quoten werden dynamisch berechnet, basierend auf den Einsätzen aller Spieler.",
+                "item2Title": "Winner Takes All",
+                "item2Text": "Gewinner teilen sich die Chips der Verlierer. Die Bank nimmt nichts.",
+                "note": "Das System übernimmt die gesamte Mathematik automatisch."
+            },
+            "zs2": {
+                "badge": "Nur Nullsumme",
+                "title": "Eliminierungs-Regeln",
+                "subtitle": "Definiere die Einsätze",
+                "text": "Entscheide wie deine Liga mit Bankrott umgeht:",
+                "sdTitle": "☠️ Sudden Death",
+                "sdText": "Hardcore. Wenn ein Spieler 0 Chips hat, fliegt er permanent aus der Liga.",
+                "ucTitle": "🔄 Uncapped (Unbegrenzt)",
+                "ucText": "Vergebend. Spieler können nachkaufen oder ins Minus gehen. Unendliche Varianz."
+            },
+            "c6": {
+                "title": "Prüfungsfenster (Dispute)",
+                "subtitle": "Faire Ergebnis-Verifikation",
+                "text": "Nach Ergebniseingabe gibt es eine Prüfphase, in der Spieler falsche Ergebnisse anfechten können.",
+                "cardTitle": "Was passiert bei Anfechtung?",
+                "cardText": "Admins prüfen den Fall. Wenn berechtigt, wird korrigiert. Wenn nicht, bleibt es bestehen."
+            },
+            "c7": {
+                "title": "Auto-Resolution",
+                "subtitle": "Automatische Auswertung",
+                "text": "Aktiviere Auto-Resolution damit das System Wetten automatisch beendet:",
+                "apiTitle": "API Modus (TheSportsDB)",
+                "apiText": "Echte Sportdaten automatisch abgerufen. Funktioniert mit großen Ligen (Bundesliga, NBA, etc).",
+                "aiTitle": "KI Modus (Gemini)",
+                "aiText": "KI sucht im Netz nach Ergebnissen. Funktioniert mit jedem Event, auch Nicht-Sport."
+            },
+            "c8": {
+                "title": "Activity Log & Analytics",
+                "subtitle": "Tracke alles",
+                "text": "Als Admin hast du volle Sicht auf die Liga-Aktivität:",
+                "actLogTitle": "Aktivitätsprotokoll",
+                "actLogText": "Alle Einsätze, Ergebnisse, Anfechtungen",
+                "analyticsTitle": "Analytics",
+                "analyticsText": "Gewinn-Charts, ROI Trends, Rankings über Zeit",
+                "leaderboardTitle": "Rangliste",
+                "leaderboardText": "Live Standings mit Punkteänderungen",
+                "betAuditTitle": "Wett-Audit",
+                "betAuditText": "Details zu Einsätzen & Punkteverteilung"
+            }
         }
     },
     "Activity": {

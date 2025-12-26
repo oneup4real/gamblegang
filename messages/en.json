@@ -290,41 +290,216 @@
         "title": "How to Play",
         "close": "Close",
         "backToMenu": "Back to Menu",
-        "stepCounter": "Step {current} of {total}",
-        "prev": "Prev",
         "next": "Next",
+        "prev": "Previous",
         "finish": "Finish",
-        "showMore": "Show More Details",
-        "showLess": "Show Less",
-        "admin": {
-            "menuTitle": "Create a League",
-            "menuDesc": "For Admins & Owners. Learn how to manage bets and run the show.",
-            "slide1Title": "League Commander",
-            "slide1Subtitle": "Create & Rule",
-            "slide1Text": "Start your own betting league in seconds. Give it a name, choose the mode, and invite your friends (or enemies).",
-            "slide2Title": "AI Bet Wizard",
-            "slide2Subtitle": "No manual entry needed",
-            "slide2Text": "Just type what you want to bet on (e.g., 'Champions League Final') and our AI will generate the title, odds, and details for you.",
-            "slide2Details": "Our AI scans real schedules to create bets in one click. It handles the boring data entry so you can focus on the fun.",
-            "slide3Title": "Manage Lifecycle",
-            "slide3Subtitle": "You are the Referee",
-            "slide3Text": "You control the flow. Bets open automatically. After the game, you resolve the result. If players dispute, you handle the voting.",
-            "slide3Details": "The Admin has the power to correct results. But beware: The community can dispute results if they disagree!"
+        "home": {
+            "welcome": "Welcome to GambleGang! Choose what you want to learn:",
+            "playerTitle": "Player Guide",
+            "playerDesc": "Learn how to place bets, earn points, use power-ups, and climb the leaderboard.",
+            "playerTopics": "{count} topics",
+            "creatorTitle": "Creator Guide",
+            "creatorDesc": "Learn to create leagues, generate bets with AI, configure rules, and manage members.",
+            "creatorTopics": "{count} topics",
+            "startLearning": "Start learning",
+            "quickTipsTitle": "💡 Quick Tips",
+            "quickTips1": "Use the ? button in the navbar anytime",
+            "quickTips2": "Hover over ℹ️ icons for tooltips",
+            "quickTips3": "Check the Activity Log to see league events"
         },
         "player": {
-            "menuTitle": "Start Playing",
-            "menuDesc": "For Players. Learn how to bet, understand modes, and win points.",
-            "slide1Title": "Join the Gang",
-            "slide1Subtitle": "Get in the game",
-            "slide1Text": "Use an invite code or QR code to join a league. You get starting points to wager.",
-            "slide2Title": "Betting Flow",
-            "slide2Subtitle": "From Open to Payout",
-            "slide2Text": "Place your wager when OPEN. Once LOCKED, wait for the game. After the game, there's a 12h PROOFING period before you get paid.",
-            "slide2Details": "Proofing is a 12-hour safety window after a result is entered. Any player can dispute the result if they believe it's wrong. No dispute = Automatic Payout.",
-            "slide3Title": "Know Your Mode",
-            "slide3Subtitle": "Points vs Real Odds",
-            "slide3Text": "In ARCADE, you play for points that accumulate - whoever has the most points wins. In ZERO SUM, it's real-world betting with dynamic odds based on the pot.",
-            "slide3Details": "Zero Sum has two modes: SUDDEN DEATH (fixed starting points, 0 pts = game over) and UNCAPPED (unlimited rebuy, no elimination). Arcade is about accumulating points through correct predictions with fixed payouts."
+            "p1": {
+                "title": "Welcome to GambleGang! 🎮",
+                "subtitle": "Your social prediction league",
+                "text": "GambleGang is where you and your friends compete by predicting match scores, picking winners, and climbing the leaderboard together.",
+                "note": "No real money - just bragging rights!"
+            },
+            "p2": {
+                "title": "Two Ways to Play",
+                "subtitle": "Know your league mode",
+                "text": "Before you join, check the league mode! There are two completely different ways to play:",
+                "arcadeTitle": "ARCADE",
+                "arcadeText": "Play for points. High score wins. Fixed rewards.",
+                "zeroSumTitle": "ZERO SUM",
+                "zeroSumText": "Betting sim. Dynamic odds. Pot split.",
+                "note": "(Your league admin chooses the mode)"
+            },
+            "p3": {
+                "title": "Mode A: Arcade",
+                "subtitle": "The strategic accumulator",
+                "badge": "Arcade Mode Only",
+                "text": "Earn points for every correct prediction. The awards are fixed:",
+                "exact": "Exact Score",
+                "diff": "Goal Diff",
+                "winner": "Winner"
+            },
+            "p4": {
+                "title": "Arcade Power-Ups",
+                "subtitle": "Boost your score",
+                "badge": "Arcade Mode Only",
+                "text": "Arcade players get a limited supply of Power-Ups. Use them to multiply your points on your most confident bets!",
+                "double": "Double",
+                "triple": "Triple",
+                "quadruple": "Quadruple",
+                "note": "⚠️ Strategy Tip: Don't waste a x4 boost on a risky bet!"
+            },
+            "p5": {
+                "title": "Mode B: Zero Sum",
+                "subtitle": "The cutthroat simulator",
+                "badge": "Zero Sum Only",
+                "text": "This is a real betting simulation. There are no magical points created out of thin air.",
+                "cardTitle": "Dynamic Odds",
+                "cardText": "The odds are calculated based on how everyone bets (Parimutuel betting). If everyone bets on the favorite, the payout is low. If you win on the underdog, you take the pot!"
+            },
+            "p6": {
+                "title": "Zero Sum Variants",
+                "subtitle": "Sudden Death or Uncapped?",
+                "badge": "Zero Sum Only",
+                "text": "Check which variant your league is using:",
+                "suddenDeathTitle": "SUDDEN DEATH",
+                "suddenDeathText": "You start with fixed chips. If you hit 0, you're eliminated. Survival of the fittest.",
+                "uncappedTitle": "UNCAPPED",
+                "uncappedText": "Run out of chips? Just re-buy more. The pot grows indefinitely."
+            },
+            "p7": {
+                "title": "Live Action",
+                "subtitle": "Watch scores update in real-time",
+                "badge": "All Modes",
+                "text": "Once kick-off starts, the app comes alive:",
+                "cardFeatures": "Live features include:",
+                "feature1": "Real-time match scores",
+                "feature2": "Live points calculator",
+                "feature3": "Live leaderboard updates"
+            },
+            "p8": {
+                "title": "Bet Lifecycle",
+                "subtitle": "From open to payout",
+                "badge": "All Modes",
+                "step1": "OPEN - Place bets before lock time",
+                "step2": "LOCKED - Game in progress",
+                "step3": "PROOFING - Verification (1h - 24h)",
+                "step4": "RESOLVED - Payouts & Stats update"
+            },
+            "p9": {
+                "title": "Disputes & Voting",
+                "subtitle": "Community justice system",
+                "badge": "Fair Play Protection",
+                "text": "Think a result is wrong? You can Dispute it during the proofing window!",
+                "cardTitle": "League Voting",
+                "cardText": "Once disputed, all members can vote. If >50% agree the result is wrong, the bet becomes INVALID.",
+                "note": "🚫 Invalid bets are cancelled and all wagers are returned to players."
+            },
+            "p10": {
+                "title": "Analytics & Audit",
+                "subtitle": "Transparency is key",
+                "badge": "Available to All",
+                "text": "Check your performance stats and verify every single bet result.",
+                "item1Title": "Analytics",
+                "item1Text": "See your win rate, profit trends, and head-to-head stats.",
+                "item2Title": "Bet Audit",
+                "item2Text": "Open any resolved bet to see exactly who voted for what and how the points were distributed.",
+                "note": "Full transparency: The math is always open for you to check."
+            }
+        },
+        "creator": {
+            "c1": {
+                "title": "Create Your League",
+                "subtitle": "Be the commissioner",
+                "text": "Ready to run your own betting league? As a creator, you control everything:",
+                "item1": "Create bets",
+                "item2": "Manage members",
+                "item3": "Configure rules",
+                "item4": "Resolve results"
+            },
+            "c2": {
+                "title": "AI Bet Wizard",
+                "subtitle": "Auto-generate bets instantly",
+                "text": "Don't want to create bets manually? Use our AI Wizard!",
+                "cardTitle": "Just tell the AI:",
+                "item1": "📌 \"Premier League this weekend\"",
+                "item2": "📌 \"Champions League next Tuesday\"",
+                "item3": "📌 \"NBA games tonight\"",
+                "note": "The AI fetches real schedules and creates bets with correct teams, dates, and lock times."
+            },
+            "c3": {
+                "title": "Choose Your Path",
+                "subtitle": "Arcade vs Zero Sum",
+                "text": "Your first decision as a creator: What kind of experience do you want?",
+                "arcadeTitle": "🎮 Arcade Mode",
+                "arcadeText": "Casual fun. Points, power-ups, and custom scoring rules. Best for friends competing for a high score.",
+                "zeroSumTitle": "💰 Zero Sum Mode",
+                "zeroSumText": "Hardcore simulation. Real odds, chip economy, and bankruptcy risks. For serious strategists."
+            },
+            "c4": {
+                "badge": "Arcade Only",
+                "title": "Configure Scoring",
+                "subtitle": "Customize point values",
+                "text": "Set your own scoring rules for the entire league, or customize per bet:",
+                "exact": "Exact Score",
+                "diff": "Goal Difference",
+                "winner": "Correct Winner",
+                "note": "⚙️ Option: Disable \"Diff\" points for draws to encourage riskier predictions"
+            },
+            "c5": {
+                "badge": "Arcade Only",
+                "title": "Power-Up Inventory",
+                "subtitle": "Control the boosters",
+                "text": "Configure how many power-ups each player gets:",
+                "boost2": "x2 Boosters",
+                "boost3": "x3 Boosters",
+                "boost4": "x4 Boosters",
+                "note": "Scarcity creates strategy! Players must choose when to use their boosters wisely."
+            },
+            "zs1": {
+                "badge": "Zero Sum Only",
+                "title": "Zero Sum Mechanics",
+                "subtitle": "No points, just chips",
+                "text": "In Zero Sum, custom scoring is disabled. The economy runs itself:",
+                "item1Title": "Parimutuel Betting",
+                "item1Text": "Odds are calculated dynamically based on how everyone bets.",
+                "item2Title": "Winner Takes All",
+                "item2Text": "Winners split the losers' chips. The house takes nothing.",
+                "note": "The system handles all the math automatically."
+            },
+            "zs2": {
+                "badge": "Zero Sum Only",
+                "title": "Elimination Rules",
+                "subtitle": "Define the stakes",
+                "text": "Choose how your league handles bankruptcy:",
+                "sdTitle": "☠️ Sudden Death",
+                "sdText": "Hardcore. If a player hits 0 chips, they are eliminated from the league permanently.",
+                "ucTitle": "🔄 Uncapped",
+                "ucText": "Forgiving. Players can re-buy or go into negative debt to keep playing. Infinite variance."
+            },
+            "c6": {
+                "title": "Dispute Window",
+                "subtitle": "Fair result verification",
+                "text": "After a result is entered, there's a proofing period where players can dispute if they think it's wrong.",
+                "cardTitle": "What happens if disputed?",
+                "cardText": "Admins review the dispute. If valid, result is corrected. If not, original stands."
+            },
+            "c7": {
+                "title": "Auto-Resolution",
+                "subtitle": "Hands-free result entry",
+                "text": "Enable Auto-Resolution to let the system resolve bets automatically:",
+                "apiTitle": "API Mode (TheSportsDB)",
+                "apiText": "Real sports results fetched automatically. Works with major football leagues, NBA, NHL, etc.",
+                "aiTitle": "AI Mode (Gemini)",
+                "aiText": "AI searches the web for results. Works with any event including non-sports."
+            },
+            "c8": {
+                "title": "Activity Log & Analytics",
+                "subtitle": "Track everything",
+                "text": "As an admin, you have full visibility into league activity:",
+                "actLogTitle": "Activity Log",
+                "actLogText": "All wagers, resolutions, disputes",
+                "analyticsTitle": "Analytics",
+                "analyticsText": "Profit charts, ROI trends, rankings over time",
+                "leaderboardTitle": "Leaderboard",
+                "leaderboardText": "Live standings with point changes",
+                "betAuditTitle": "Bet Audit",
+                "betAuditText": "See who bet on what & point distribution"
+            }
         }
     },
     "Activity": {
