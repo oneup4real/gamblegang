@@ -14,6 +14,7 @@ export interface ActivityItem {
     timestamp: Date;
     leagueId?: string;
     leagueName?: string;
+    leagueColor?: string;
     betId?: string;
 }
 
@@ -110,7 +111,13 @@ export function ActivityFeed({ items, maxItems = 10 }: ActivityFeedProps) {
                                                         {formatDistanceToNow(item.timestamp, { addSuffix: true })}
                                                     </span>
                                                     {item.leagueName && (
-                                                        <span className="text-xs bg-gray-100 px-1.5 py-0.5 rounded font-medium">
+                                                        <span
+                                                            className="text-[9px] px-1 py-0.5 rounded font-bold text-white truncate max-w-[80px] inline-block"
+                                                            style={{
+                                                                backgroundColor: item.leagueColor || '#6b7280'
+                                                            }}
+                                                            title={item.leagueName}
+                                                        >
                                                             {item.leagueName}
                                                         </span>
                                                     )}

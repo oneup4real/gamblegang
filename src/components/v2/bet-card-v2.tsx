@@ -11,12 +11,14 @@ import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
     Clock, Check, X, AlertTriangle, Lock, Play, Eye,
-    ChevronDown, Timer, Trophy, Flame, Shield,
+    ChevronDown, ChevronUp, Timer, Trophy, Flame, Shield,
     ThumbsUp, ThumbsDown, Sparkles, Zap, Target,
     CheckCircle2, XCircle, AlertCircle, Hourglass,
-    Pencil, Calendar
+    Pencil, Calendar, Users, TrendingUp, TrendingDown,
+    Loader2, BrainCircuit, Gavel, ExternalLink
 } from "lucide-react";
-import { Bet, Wager, placeWager, editWager } from "@/lib/services/bet-service";
+import { Bet, Wager, placeWager, editWager, startProofing } from "@/lib/services/bet-service";
+import { aiAutoResolveBet } from "@/app/actions/ai-bet-actions";
 import { League, PowerUpType, PowerUpInventory } from "@/lib/services/league-service";
 import { TeamLogo } from "@/components/team-logo";
 import { CompactPowerBooster } from "@/components/compact-power-booster";
@@ -64,12 +66,21 @@ const STATUS_CONFIG = {
     },
     RESOLVED: {
         label: "Resolved",
-        color: "bg-slate-500",
-        lightBg: "bg-slate-50",
-        border: "border-slate-200",
-        textColor: "text-slate-700",
+        color: "bg-emerald-500",
+        lightBg: "bg-emerald-50",
+        border: "border-emerald-200",
+        textColor: "text-emerald-700",
         icon: <Check className="w-3 h-3" />,
-        pulseColor: "bg-slate-400"
+        pulseColor: "bg-emerald-400"
+    },
+    RESOLVED_LOSS: {
+        label: "Resolved",
+        color: "bg-gray-400",
+        lightBg: "bg-gray-50",
+        border: "border-gray-200",
+        textColor: "text-gray-500",
+        icon: <X className="w-3 h-3" />,
+        pulseColor: "bg-gray-300"
     },
     INVALID: {
         label: "Invalid",
@@ -107,6 +118,7 @@ interface BetCardV2Props {
     bet: Bet;
     userPoints: number;
     userWager?: Wager;
+    allWagers?: Wager[];  // All wagers for this bet from all players
     mode: "ZERO_SUM" | "STANDARD";
     powerUps?: PowerUpInventory;
     onEdit?: (bet: Bet) => void;
@@ -122,6 +134,7 @@ export function BetCardV2({
     bet,
     userPoints,
     userWager,
+    allWagers = [],
     mode,
     powerUps,
     onEdit,
@@ -131,6 +144,7 @@ export function BetCardV2({
 }: BetCardV2Props) {
     const { user } = useAuth();
     const [isExpanded, setIsExpanded] = useState(initialExpanded);
+    const [showWagersSection, setShowWagersSection] = useState(false);
     const [selectedOption, setSelectedOption] = useState<string>("");
     const [matchHome, setMatchHome] = useState<number | "">("");
     const [matchAway, setMatchAway] = useState<number | "">("");
@@ -138,6 +152,14 @@ export function BetCardV2({
     const [selectedPowerUp, setSelectedPowerUp] = useState<PowerUpType | undefined>();
     const [loading, setLoading] = useState(false);
     const [isEditing, setIsEditing] = useState(false);
+
+    // Owner resolution state
+    const [showOwnerControls, setShowOwnerControls] = useState(false);
+    const [aiResolving, setAiResolving] = useState(false);
+    const [resHome, setResHome] = useState<number | "">("");
+    const [resAway, setResAway] = useState<number | "">("");
+    const [winningOption, setWinningOption] = useState<string>("");
+    const [winningRange, setWinningRange] = useState<number | "">();
 
     const config = STATUS_CONFIG[bet.status] || STATUS_CONFIG.OPEN;
 
@@ -218,13 +240,16 @@ export function BetCardV2({
         }
     };
 
-    // Get card styling based on status
+    // Get card styling based on status - V1 style: green for wins, grey for losses
     const getCardStyle = () => {
         if (bet.status === "RESOLVED" && wagerResult === "WON") {
-            return "border-emerald-400 bg-gradient-to-r from-emerald-50 to-white";
+            return "border-emerald-400 bg-gradient-to-br from-emerald-100 via-emerald-50 to-white shadow-emerald-100";
         }
         if (bet.status === "RESOLVED" && wagerResult === "LOST") {
-            return "border-red-200 bg-gradient-to-r from-red-50/50 to-white opacity-80";
+            return "border-gray-300 bg-gradient-to-br from-gray-100 via-gray-50 to-white opacity-75";
+        }
+        if (bet.status === "RESOLVED" && !userWager) {
+            return "border-gray-200 bg-gray-50 opacity-60";
         }
         if (bet.status === "PROOFING" || bet.status === "DISPUTED") {
             return "border-blue-300 bg-gradient-to-r from-blue-50/50 to-white";
@@ -233,6 +258,29 @@ export function BetCardV2({
             return "border-amber-200 bg-gradient-to-r from-amber-50/30 to-white";
         }
         return "border-black bg-white";
+    };
+
+    // Get data source display info
+    const getDataSourceLabel = () => {
+        if (!bet.dataSource) return null;
+        if (bet.dataSource === "API") {
+            return { label: "📡 SportsDB", bg: "bg-purple-100", text: "text-purple-700", border: "border-purple-200" };
+        }
+        return { label: "🤖 AI Verified", bg: "bg-orange-100", text: "text-orange-700", border: "border-orange-200" };
+    };
+
+    // Format any wager's selection for display
+    const formatWagerSelection = (wager: Wager): string => {
+        if (bet.type === "CHOICE" && bet.options) {
+            const idx = Number(wager.selection);
+            return bet.options[idx]?.text || String(wager.selection);
+        } else if (bet.type === "MATCH" && typeof wager.selection === "object") {
+            const s = wager.selection as { home: number; away: number };
+            return `${s.home} - ${s.away}`;
+        } else if (bet.type === "RANGE") {
+            return `${wager.selection} ${bet.rangeUnit || ""}`;
+        }
+        return String(wager.selection);
     };
 
     // Handle placing/editing wager
@@ -328,6 +376,122 @@ export function BetCardV2({
     };
 
     const liveCalc = getLivePointsCalculation();
+
+    // Handle AI auto-resolution
+    const handleAIResolve = async () => {
+        if (!user || !isOwnerOverride) return;
+        setAiResolving(true);
+        try {
+            const sanitizedBet = {
+                ...bet,
+                eventDate: bet.eventDate?.toDate?.()
+                    ? bet.eventDate.toDate().toISOString()
+                    : bet.eventDate,
+                matchDetails: bet.matchDetails ? {
+                    ...bet.matchDetails,
+                    date: bet.matchDetails.date && typeof bet.matchDetails.date === 'object' && 'toDate' in bet.matchDetails.date
+                        ? (bet.matchDetails.date as any).toDate().toISOString()
+                        : bet.matchDetails.date
+                } : undefined
+            };
+
+            const result = await aiAutoResolveBet(sanitizedBet);
+            if (result) {
+                let outcome: any;
+                if (result.type === "MATCH") {
+                    outcome = { home: result.home, away: result.away };
+                    setResHome(result.home || 0);
+                    setResAway(result.away || 0);
+                } else if (result.type === "CHOICE") {
+                    outcome = String(result.optionIndex);
+                    setWinningOption(String(result.optionIndex));
+                } else if (result.type === "RANGE") {
+                    outcome = result.value;
+                    setWinningRange(result.value);
+                }
+
+                // Immediately start proofing with AI result
+                if (outcome !== undefined) {
+                    await startProofing(bet.leagueId, bet.id, user, outcome, result.verification);
+                    alert("Result submitted! Players now have time to dispute.");
+                    if (onWagerSuccess) onWagerSuccess();
+                }
+            } else {
+                alert("AI could not determine the result. Please enter manually.");
+            }
+        } catch (error: any) {
+            console.error("AI resolution failed:", error);
+            alert(error.message || "AI resolution failed");
+        } finally {
+            setAiResolving(false);
+        }
+    };
+
+    // Handle manual resolution
+    const handleManualResolve = async () => {
+        if (!user || !isOwnerOverride) return;
+
+        let outcome: string | number | { home: number; away: number };
+
+        if (bet.type === "MATCH") {
+            if (resHome === "" || resAway === "") return alert("Please enter both scores");
+            outcome = { home: Number(resHome), away: Number(resAway) };
+        } else if (bet.type === "CHOICE") {
+            if (winningOption === "") return alert("Please select a winning option");
+            outcome = winningOption;
+        } else if (bet.type === "RANGE") {
+            if (winningRange === undefined || winningRange === "") return alert("Please enter a value");
+            outcome = Number(winningRange);
+        } else {
+            return alert("Invalid bet type");
+        }
+
+        if (!confirm("Submit this result? Players will have time to dispute before payouts.")) return;
+
+        setLoading(true);
+        try {
+            const verification = {
+                verified: true,
+                source: "Manual Entry",
+                verifiedAt: new Date().toISOString(),
+                method: "MANUAL" as const
+            };
+
+            await startProofing(bet.leagueId, bet.id, user, outcome, verification);
+            alert("Result submitted! Players now have time to dispute.");
+            setShowOwnerControls(false);
+            if (onWagerSuccess) onWagerSuccess();
+        } catch (error: any) {
+            console.error("Manual resolution failed:", error);
+            alert(error.message || "Failed to submit result");
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    // Check if game is ready for resolution
+    const isReadyForResolution = (): boolean => {
+        if (bet.dataSource === "API") {
+            return bet.liveScore?.matchStatus === "FINISHED";
+        } else {
+            // For AI bets: check if 2.5h (150 min) after event start OR eventEndDate passed
+            const eventEnd = bet.eventEndDate?.seconds
+                ? bet.eventEndDate.seconds * 1000
+                : bet.eventEndDate?.toDate?.()?.getTime();
+
+            if (eventEnd && Date.now() >= eventEnd) return true;
+
+            const eventStart = bet.eventDate?.seconds
+                ? bet.eventDate.seconds * 1000
+                : bet.eventDate?.toDate?.()?.getTime();
+
+            if (eventStart) {
+                const resolveTime = eventStart + (150 * 60 * 1000); // 2.5 hours
+                return Date.now() >= resolveTime;
+            }
+        }
+        return false;
+    };
 
     return (
         <motion.div
@@ -434,18 +598,27 @@ export function BetCardV2({
                         </span>
                     )}
 
-                    {/* RESOLVED: Result badge */}
+                    {/* RESOLVED: Result badge + Data Source */}
                     {bet.status === "RESOLVED" && (
-                        <span className={`flex items-center gap-1 text-xs font-bold px-2 py-0.5 rounded-full border ${wagerResult === "WON" ? "text-emerald-700 bg-emerald-50 border-emerald-200" :
-                            wagerResult === "LOST" ? "text-red-600 bg-red-50 border-red-200" :
-                                wagerResult === "PUSH" ? "text-yellow-700 bg-yellow-50 border-yellow-200" :
-                                    "text-gray-600 bg-gray-50 border-gray-200"
-                            }`}>
-                            {wagerResult === "WON" && <><Trophy className="w-3 h-3" /> +{userWager?.payout || 0}</>}
-                            {wagerResult === "LOST" && <><XCircle className="w-3 h-3" /> Lost</>}
-                            {wagerResult === "PUSH" && <><AlertCircle className="w-3 h-3" /> Push</>}
-                            {!wagerResult && <><Check className="w-3 h-3" /> Done</>}
-                        </span>
+                        <>
+                            {/* Data Source Badge */}
+                            {bet.dataSource && (
+                                <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded border ${bet.dataSource === "API" ? "bg-purple-50 text-purple-600 border-purple-200" : "bg-orange-50 text-orange-600 border-orange-200"}`}>
+                                    {bet.dataSource === "API" ? "📡" : "🤖"}
+                                </span>
+                            )}
+                            {/* Result Badge */}
+                            <span className={`flex items-center gap-1 text-xs font-black px-2.5 py-1 rounded-full border-2 ${wagerResult === "WON" ? "text-white bg-gradient-to-r from-emerald-500 to-green-500 border-emerald-600 shadow-sm" :
+                                wagerResult === "LOST" ? "text-gray-500 bg-gray-100 border-gray-300" :
+                                    wagerResult === "PUSH" ? "text-yellow-700 bg-yellow-50 border-yellow-300" :
+                                        "text-gray-500 bg-gray-50 border-gray-200"
+                                }`}>
+                                {wagerResult === "WON" && <><Trophy className="w-3.5 h-3.5" /> +{userWager?.payout || 0}</>}
+                                {wagerResult === "LOST" && <><XCircle className="w-3 h-3" /> -{userWager?.amount || 0}</>}
+                                {wagerResult === "PUSH" && <><AlertCircle className="w-3 h-3" /> Push</>}
+                                {!wagerResult && <><Check className="w-3 h-3" /> Done</>}
+                            </span>
+                        </>
                     )}
 
                     <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${isExpanded ? "rotate-180" : ""}`} />
@@ -483,114 +656,148 @@ export function BetCardV2({
                                         {bet.dataSource === "API" ? "📡 API" : "🤖 AI"}
                                     </span>
                                 )}
+                                {/* Hide edit button for resolved/proofing bets */}
+                                {(isOwnerOverride || onEdit) && onEdit && bet.status !== "RESOLVED" && bet.status !== "PROOFING" && (
+                                    <button
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            onEdit(bet);
+                                        }}
+                                        className="p-1.5 hover:bg-black/10 rounded-full transition-colors ml-auto"
+                                        title="Edit Bet"
+                                    >
+                                        <Pencil className="w-4 h-4 text-gray-500" />
+                                    </button>
+                                )}
                             </div>
 
-                            {/* Team Matchup Visual */}
-                            {(homeTeam || awayTeam) && bet.choiceStyle !== "VARIOUS" && (
-                                <div className="flex items-center justify-between py-3 px-4 bg-gray-50 rounded-xl border border-gray-200">
-                                    {/* Home Team */}
-                                    <div className="text-center flex-1">
-                                        <button
-                                            onClick={() => {
-                                                if (bet.status === "OPEN" && !isExpired && (!userWager || isEditing)) {
-                                                    const idx = bet.options?.findIndex(o => o.text.toLowerCase().includes(homeTeam?.toLowerCase() || ""));
-                                                    if (idx !== undefined && idx >= 0) setSelectedOption(String(idx));
-                                                }
-                                            }}
-                                            disabled={bet.status !== "OPEN" || isExpired || (!!userWager && !isEditing)}
-                                            className={`p-1 rounded-full border-4 transition-all mx-auto ${selectedOption !== "" && bet.options?.[Number(selectedOption)]?.text.toLowerCase().includes(homeTeam?.toLowerCase() || "")
-                                                ? "border-blue-500 bg-blue-50 scale-110"
-                                                : "border-transparent hover:bg-slate-50"
-                                                }`}
-                                        >
-                                            <TeamLogo teamName={homeTeam || ""} size={48} className="drop-shadow-sm" />
-                                        </button>
-                                        <span className="text-xs font-bold mt-1 block truncate max-w-[80px] mx-auto">{homeTeam}</span>
-                                        {mode === "ZERO_SUM" && bet.type === "CHOICE" && bet.options && (() => {
-                                            const idx = bet.options.findIndex(o => o.text.toLowerCase().includes(homeTeam?.toLowerCase() || ""));
-                                            if (idx === -1) return null;
-                                            const opt = bet.options[idx];
-                                            const odds = opt.totalWagered > 0 && bet.totalPool > 0 ? (bet.totalPool / opt.totalWagered).toFixed(2) : "2.00";
-                                            return <span className="text-[10px] font-bold text-emerald-600">@{odds}x</span>;
-                                        })()}
-                                    </div>
+                            {/* Team Matchup Visual - Hide for MATCH bets when input fields are shown */}
+                            {(homeTeam || awayTeam) && bet.choiceStyle !== "VARIOUS" &&
+                                !(bet.type === "MATCH" && bet.status === "OPEN" && !isExpired && (!userWager || isEditing)) && (
+                                    <div className="flex items-center justify-between py-3 px-4 bg-gray-50 rounded-xl border border-gray-200">
+                                        {/* Home Team */}
+                                        <div className="text-center flex-1">
+                                            <button
+                                                onClick={() => {
+                                                    if (bet.status === "OPEN" && !isExpired && (!userWager || isEditing)) {
+                                                        const idx = bet.options?.findIndex(o => o.text.toLowerCase().includes(homeTeam?.toLowerCase() || ""));
+                                                        if (idx !== undefined && idx >= 0) setSelectedOption(String(idx));
+                                                    }
+                                                }}
+                                                disabled={bet.status !== "OPEN" || isExpired || (!!userWager && !isEditing)}
+                                                className={`p-1 rounded-full border-4 transition-all mx-auto ${selectedOption !== "" && bet.options?.[Number(selectedOption)]?.text.toLowerCase().includes(homeTeam?.toLowerCase() || "")
+                                                    ? "border-blue-500 bg-blue-50 scale-110"
+                                                    : "border-transparent hover:bg-slate-50"
+                                                    }`}
+                                            >
+                                                <TeamLogo teamName={homeTeam || ""} size={48} className="drop-shadow-sm" />
+                                            </button>
+                                            <span className="text-xs font-bold mt-1 block truncate max-w-[80px] mx-auto">{homeTeam}</span>
+                                            {mode === "ZERO_SUM" && bet.type === "CHOICE" && bet.options && (() => {
+                                                const idx = bet.options.findIndex(o => o.text.toLowerCase().includes(homeTeam?.toLowerCase() || ""));
+                                                if (idx === -1) return null;
+                                                const opt = bet.options[idx];
+                                                const odds = opt.totalWagered > 0 && bet.totalPool > 0 ? (bet.totalPool / opt.totalWagered).toFixed(2) : "2.00";
+                                                return <span className="text-[10px] font-bold text-emerald-600">@{odds}x</span>;
+                                            })()}
+                                        </div>
 
-                                    {/* VS + Draw */}
-                                    <div className="flex flex-col items-center px-2">
-                                        <span className="text-xl font-black text-gray-300">VS</span>
-                                        {bet.type === "CHOICE" && bet.options && (() => {
-                                            const drawIdx = bet.options.findIndex(o => {
-                                                const t = o.text.toLowerCase();
-                                                return t === "draw" || t === "tie" || t === "x" || t === "unentschieden";
-                                            });
-                                            if (drawIdx === -1) return null;
-                                            const canBet = bet.status === "OPEN" && !isExpired && (!userWager || isEditing);
-                                            const isSelected = selectedOption === String(drawIdx);
-                                            return (
-                                                <button
-                                                    onClick={() => canBet && setSelectedOption(String(drawIdx))}
-                                                    disabled={!canBet}
-                                                    className={`mt-1 px-3 py-0.5 text-[10px] font-black uppercase rounded border-2 transition-all ${isSelected ? "bg-slate-600 text-white border-slate-800" : "bg-white text-slate-400 border-slate-200"
-                                                        }`}
-                                                >
-                                                    Draw
-                                                </button>
-                                            );
-                                        })()}
-                                    </div>
+                                        {/* VS + Draw */}
+                                        <div className="flex flex-col items-center px-2">
+                                            <span className="text-xl font-black text-gray-300">VS</span>
+                                            {bet.type === "CHOICE" && bet.options && (() => {
+                                                const drawIdx = bet.options.findIndex(o => {
+                                                    const t = o.text.toLowerCase();
+                                                    return t === "draw" || t === "tie" || t === "x" || t === "unentschieden";
+                                                });
+                                                if (drawIdx === -1) return null;
+                                                const canBet = bet.status === "OPEN" && !isExpired && (!userWager || isEditing);
+                                                const isSelected = selectedOption === String(drawIdx);
+                                                return (
+                                                    <button
+                                                        onClick={() => canBet && setSelectedOption(String(drawIdx))}
+                                                        disabled={!canBet}
+                                                        className={`mt-1 px-3 py-0.5 text-[10px] font-black uppercase rounded border-2 transition-all ${isSelected ? "bg-slate-600 text-white border-slate-800" : "bg-white text-slate-400 border-slate-200"
+                                                            }`}
+                                                    >
+                                                        Draw
+                                                    </button>
+                                                );
+                                            })()}
+                                        </div>
 
-                                    {/* Away Team */}
-                                    <div className="text-center flex-1">
-                                        <button
-                                            onClick={() => {
-                                                if (bet.status === "OPEN" && !isExpired && (!userWager || isEditing)) {
-                                                    const idx = bet.options?.findIndex(o => o.text.toLowerCase().includes(awayTeam?.toLowerCase() || ""));
-                                                    if (idx !== undefined && idx >= 0) setSelectedOption(String(idx));
-                                                }
-                                            }}
-                                            disabled={bet.status !== "OPEN" || isExpired || (!!userWager && !isEditing)}
-                                            className={`p-1 rounded-full border-4 transition-all mx-auto ${selectedOption !== "" && bet.options?.[Number(selectedOption)]?.text.toLowerCase().includes(awayTeam?.toLowerCase() || "")
-                                                ? "border-blue-500 bg-blue-50 scale-110"
-                                                : "border-transparent hover:bg-slate-50"
-                                                }`}
-                                        >
-                                            <TeamLogo teamName={awayTeam || ""} size={48} className="drop-shadow-sm" />
-                                        </button>
-                                        <span className="text-xs font-bold mt-1 block truncate max-w-[80px] mx-auto">{awayTeam}</span>
-                                        {mode === "ZERO_SUM" && bet.type === "CHOICE" && bet.options && (() => {
-                                            const idx = bet.options.findIndex(o => o.text.toLowerCase().includes(awayTeam?.toLowerCase() || ""));
-                                            if (idx === -1) return null;
-                                            const opt = bet.options[idx];
-                                            const odds = opt.totalWagered > 0 && bet.totalPool > 0 ? (bet.totalPool / opt.totalWagered).toFixed(2) : "2.00";
-                                            return <span className="text-[10px] font-bold text-emerald-600">@{odds}x</span>;
-                                        })()}
+                                        {/* Away Team */}
+                                        <div className="text-center flex-1">
+                                            <button
+                                                onClick={() => {
+                                                    if (bet.status === "OPEN" && !isExpired && (!userWager || isEditing)) {
+                                                        const idx = bet.options?.findIndex(o => o.text.toLowerCase().includes(awayTeam?.toLowerCase() || ""));
+                                                        if (idx !== undefined && idx >= 0) setSelectedOption(String(idx));
+                                                    }
+                                                }}
+                                                disabled={bet.status !== "OPEN" || isExpired || (!!userWager && !isEditing)}
+                                                className={`p-1 rounded-full border-4 transition-all mx-auto ${selectedOption !== "" && bet.options?.[Number(selectedOption)]?.text.toLowerCase().includes(awayTeam?.toLowerCase() || "")
+                                                    ? "border-blue-500 bg-blue-50 scale-110"
+                                                    : "border-transparent hover:bg-slate-50"
+                                                    }`}
+                                            >
+                                                <TeamLogo teamName={awayTeam || ""} size={48} className="drop-shadow-sm" />
+                                            </button>
+                                            <span className="text-xs font-bold mt-1 block truncate max-w-[80px] mx-auto">{awayTeam}</span>
+                                            {mode === "ZERO_SUM" && bet.type === "CHOICE" && bet.options && (() => {
+                                                const idx = bet.options.findIndex(o => o.text.toLowerCase().includes(awayTeam?.toLowerCase() || ""));
+                                                if (idx === -1) return null;
+                                                const opt = bet.options[idx];
+                                                const odds = opt.totalWagered > 0 && bet.totalPool > 0 ? (bet.totalPool / opt.totalWagered).toFixed(2) : "2.00";
+                                                return <span className="text-[10px] font-bold text-emerald-600">@{odds}x</span>;
+                                            })()}
+                                        </div>
                                     </div>
-                                </div>
-                            )}
+                                )}
 
-                            {/* MATCH type score inputs */}
+                            {/* MATCH type score inputs - V1 Style Layout */}
                             {bet.type === "MATCH" && bet.status === "OPEN" && !isExpired && (!userWager || isEditing) && (
-                                <div className="flex items-center justify-center gap-4">
-                                    <div className="text-center">
-                                        <p className="text-xs font-bold text-gray-500 mb-1">{homeTeam || "Home"}</p>
-                                        <input
-                                            type="number"
-                                            value={matchHome}
-                                            onChange={e => setMatchHome(e.target.value === "" ? "" : Number(e.target.value))}
-                                            className="w-16 h-12 text-center text-xl font-black bg-white border-2 border-black rounded-lg focus:border-blue-500 outline-none"
-                                            placeholder="-"
-                                        />
+                                <div className="bg-gray-50 rounded-xl border border-gray-200 p-4">
+                                    {/* Team Name Headers */}
+                                    <div className="flex items-center justify-between mb-3">
+                                        <span className="text-xs font-black text-slate-500 uppercase tracking-wider truncate max-w-[45%]">
+                                            {homeTeam || "Home"}
+                                        </span>
+                                        <span className="text-xs font-black text-slate-500 uppercase tracking-wider truncate max-w-[45%] text-right">
+                                            {awayTeam || "Away"}
+                                        </span>
                                     </div>
-                                    <span className="text-2xl font-black text-gray-300">:</span>
-                                    <div className="text-center">
-                                        <p className="text-xs font-bold text-gray-500 mb-1">{awayTeam || "Away"}</p>
-                                        <input
-                                            type="number"
-                                            value={matchAway}
-                                            onChange={e => setMatchAway(e.target.value === "" ? "" : Number(e.target.value))}
-                                            className="w-16 h-12 text-center text-xl font-black bg-white border-2 border-black rounded-lg focus:border-blue-500 outline-none"
-                                            placeholder="-"
-                                        />
+
+                                    {/* Logo + Input Row */}
+                                    <div className="flex items-center justify-center gap-3">
+                                        {/* Home: Logo LEFT, Input RIGHT */}
+                                        <div className="flex items-center gap-2">
+                                            <TeamLogo teamName={homeTeam || ""} size={48} className="shrink-0" />
+                                            <input
+                                                type="number"
+                                                value={matchHome}
+                                                onChange={e => setMatchHome(e.target.value === "" ? "" : Number(e.target.value))}
+                                                onClick={(e) => e.stopPropagation()}
+                                                className="w-14 h-14 text-center text-2xl font-black bg-white border-2 border-gray-300 rounded-xl focus:border-blue-500 outline-none shadow-sm"
+                                                placeholder="-"
+                                            />
+                                        </div>
+
+                                        {/* VS */}
+                                        <span className="text-lg font-bold text-gray-400 px-1">vs</span>
+
+                                        {/* Away: Input LEFT, Logo RIGHT */}
+                                        <div className="flex items-center gap-2">
+                                            <input
+                                                type="number"
+                                                value={matchAway}
+                                                onChange={e => setMatchAway(e.target.value === "" ? "" : Number(e.target.value))}
+                                                onClick={(e) => e.stopPropagation()}
+                                                className="w-14 h-14 text-center text-2xl font-black bg-white border-2 border-gray-300 rounded-xl focus:border-blue-500 outline-none shadow-sm"
+                                                placeholder="-"
+                                            />
+                                            <TeamLogo teamName={awayTeam || ""} size={48} className="shrink-0" />
+                                        </div>
                                     </div>
                                 </div>
                             )}
@@ -618,46 +825,70 @@ export function BetCardV2({
                                 </div>
                             )}
 
-                            {/* Power-ups (Arcade mode) */}
-                            {mode === "STANDARD" && bet.status === "OPEN" && !isExpired && (!userWager || isEditing) && powerUps && (
-                                <CompactPowerBooster
-                                    powerUps={powerUps}
-                                    selectedPowerUp={selectedPowerUp}
-                                    onSelect={setSelectedPowerUp}
-                                />
-                            )}
-
                             {/* Wager amount (Zero-Sum) */}
                             {mode === "ZERO_SUM" && bet.status === "OPEN" && !isExpired && (!userWager || isEditing) && (
-                                <div className="flex items-center gap-2 flex-wrap">
+                                <div className="space-y-2">
                                     <span className="text-xs font-bold text-gray-500">Wager:</span>
-                                    {[50, 100, 250, 500].map(amt => (
-                                        <button
-                                            key={amt}
-                                            onClick={() => setWagerAmount(amt)}
-                                            disabled={amt > userPoints}
-                                            className={`px-3 py-1.5 rounded-lg font-bold text-sm border-2 transition-all ${wagerAmount === amt
-                                                ? "bg-blue-500 text-white border-blue-600"
-                                                : amt > userPoints
-                                                    ? "bg-gray-100 text-gray-400 border-gray-200"
-                                                    : "bg-white border-black hover:bg-gray-50"
-                                                }`}
-                                        >
-                                            {amt}
-                                        </button>
-                                    ))}
+                                    <div className="flex items-center gap-2 flex-wrap">
+                                        {[50, 100, 250, 500].map(amt => (
+                                            <button
+                                                key={amt}
+                                                onClick={() => setWagerAmount(amt)}
+                                                disabled={amt > userPoints}
+                                                className={`px-3 py-1.5 rounded-lg font-bold text-sm border-2 transition-all ${wagerAmount === amt
+                                                    ? "bg-blue-500 text-white border-blue-600"
+                                                    : amt > userPoints
+                                                        ? "bg-gray-100 text-gray-400 border-gray-200"
+                                                        : "bg-white border-black hover:bg-gray-50"
+                                                    }`}
+                                            >
+                                                {amt}
+                                            </button>
+                                        ))}
+                                        {/* Custom Amount Input */}
+                                        <div className="flex items-center gap-1">
+                                            <input
+                                                type="number"
+                                                value={wagerAmount}
+                                                onChange={(e) => {
+                                                    const val = e.target.value === "" ? "" : Math.min(Number(e.target.value), userPoints);
+                                                    setWagerAmount(val);
+                                                }}
+                                                min={1}
+                                                max={userPoints}
+                                                placeholder="Custom"
+                                                className="w-20 px-2 py-1.5 rounded-lg font-bold text-sm border-2 border-gray-300 focus:border-blue-500 outline-none text-center"
+                                            />
+                                            <span className="text-xs text-gray-400">pts</span>
+                                        </div>
+                                    </div>
+                                    <p className="text-[10px] text-gray-400">
+                                        Max: {userPoints.toLocaleString()} pts
+                                    </p>
                                 </div>
                             )}
 
-                            {/* Place Bet Button */}
+                            {/* Power-ups + Place Bet (Same Row) */}
                             {bet.status === "OPEN" && !isExpired && (!userWager || isEditing) && (
-                                <button
-                                    onClick={handlePlaceWager}
-                                    disabled={loading}
-                                    className="w-full py-3 bg-gradient-to-r from-green-400 to-emerald-500 text-white rounded-xl font-black text-base border-2 border-black shadow-[3px_3px_0_rgba(0,0,0,1)] hover:translate-y-[1px] hover:shadow-[2px_2px_0_rgba(0,0,0,1)] transition-all disabled:opacity-50"
-                                >
-                                    {loading ? "Processing..." : isEditing ? "Update Bet" : "Place Bet"}
-                                </button>
+                                <div className="flex items-center gap-2">
+                                    {/* Power-ups (Arcade mode) */}
+                                    {mode === "STANDARD" && powerUps && (
+                                        <CompactPowerBooster
+                                            powerUps={powerUps}
+                                            selectedPowerUp={selectedPowerUp}
+                                            onSelect={setSelectedPowerUp}
+                                        />
+                                    )}
+
+                                    {/* Place Bet Button */}
+                                    <button
+                                        onClick={handlePlaceWager}
+                                        disabled={loading}
+                                        className="flex-1 py-3 bg-gradient-to-r from-green-400 to-emerald-500 text-white rounded-xl font-black text-base border-2 border-black shadow-[3px_3px_0_rgba(0,0,0,1)] hover:translate-y-[1px] hover:shadow-[2px_2px_0_rgba(0,0,0,1)] transition-all disabled:opacity-50"
+                                    >
+                                        {loading ? "Processing..." : isEditing ? "Update Bet" : "Place Bet"}
+                                    </button>
+                                </div>
                             )}
 
                             {/* Already bet - show edit option */}
@@ -720,11 +951,11 @@ export function BetCardV2({
                                         </div>
                                     )}
 
-                                    {/* Generic LIVE badge if no score */}
+                                    {/* Fallback if no live score available */}
                                     {(!bet.liveScore || bet.liveScore.matchStatus === "NOT_STARTED") && (
-                                        <div className="inline-flex items-center gap-2 px-4 py-2 bg-amber-100 rounded-full border border-amber-300">
-                                            <span className="w-2 h-2 bg-red-500 rounded-full animate-pulse" />
-                                            <span className="text-sm font-bold text-amber-800">Event in Progress</span>
+                                        <div className="inline-flex items-center gap-2 px-4 py-2 bg-gray-100 rounded-lg border border-gray-200">
+                                            <Timer className="w-4 h-4 text-gray-400" />
+                                            <span className="text-sm font-bold text-gray-500">No live results for this bet</span>
                                         </div>
                                     )}
 
@@ -735,7 +966,7 @@ export function BetCardV2({
                                                 You predicted: <span className="font-black text-black">{getUserSelectionDisplay()}</span>
                                                 {userWager.powerUp && (
                                                     <span className={`ml-1 px-1.5 py-0.5 rounded text-[10px] font-black text-white ${userWager.powerUp === "x2" ? "bg-lime-500" :
-                                                            userWager.powerUp === "x3" ? "bg-orange-500" : "bg-red-500"
+                                                        userWager.powerUp === "x3" ? "bg-orange-500" : "bg-red-500"
                                                         }`}>
                                                         {userWager.powerUp}
                                                     </span>
@@ -745,9 +976,9 @@ export function BetCardV2({
                                             {/* Live Points Calculator - only for match bets with live scores */}
                                             {liveCalc && bet.liveScore && bet.liveScore.matchStatus !== "NOT_STARTED" && mode === "STANDARD" && (
                                                 <div className={`mt-3 p-3 rounded-xl border-2 ${liveCalc.tier === "exact" ? "bg-emerald-50 border-emerald-300" :
-                                                        liveCalc.tier === "diff" ? "bg-blue-50 border-blue-300" :
-                                                            liveCalc.tier === "winner" ? "bg-yellow-50 border-yellow-300" :
-                                                                "bg-red-50 border-red-300"
+                                                    liveCalc.tier === "diff" ? "bg-blue-50 border-blue-300" :
+                                                        liveCalc.tier === "winner" ? "bg-yellow-50 border-yellow-300" :
+                                                            "bg-red-50 border-red-300"
                                                     }`}>
                                                     <p className="text-[10px] uppercase font-bold text-gray-500 mb-2">
                                                         Live Point Calculator
@@ -832,6 +1063,149 @@ export function BetCardV2({
                                 </div>
                             )}
 
+                            {/* OWNER CONTROLS - For Locked bets ready for resolution */}
+                            {(effectiveStatus === "LOCKED" || (bet.status === "OPEN" && isExpired)) &&
+                                isOwnerOverride && isReadyForResolution() && (
+                                    <div className="mt-3 border-t border-dashed border-gray-200 pt-3">
+                                        {/* Toggle Button */}
+                                        <button
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                setShowOwnerControls(!showOwnerControls);
+                                            }}
+                                            className="w-full flex items-center justify-between p-2 rounded-lg bg-slate-100 hover:bg-slate-200 transition-colors text-left"
+                                        >
+                                            <div className="flex items-center gap-2">
+                                                <Shield className="w-4 h-4 text-slate-600" />
+                                                <span className="text-xs font-bold text-slate-700 uppercase">Owner Controls</span>
+                                            </div>
+                                            {showOwnerControls ? (
+                                                <ChevronUp className="w-4 h-4 text-slate-400" />
+                                            ) : (
+                                                <ChevronDown className="w-4 h-4 text-slate-400" />
+                                            )}
+                                        </button>
+
+                                        {/* Owner Controls Panel */}
+                                        <AnimatePresence>
+                                            {showOwnerControls && (
+                                                <motion.div
+                                                    initial={{ height: 0, opacity: 0 }}
+                                                    animate={{ height: "auto", opacity: 1 }}
+                                                    exit={{ height: 0, opacity: 0 }}
+                                                    transition={{ duration: 0.2 }}
+                                                    className="overflow-hidden"
+                                                >
+                                                    <div className="mt-2 space-y-2">
+                                                        {/* AI Resolve Button */}
+                                                        <button
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                handleAIResolve();
+                                                            }}
+                                                            disabled={aiResolving}
+                                                            className="w-full flex items-center justify-between p-2.5 bg-white border-2 border-purple-200 rounded-lg hover:border-purple-400 hover:shadow-sm transition-all"
+                                                        >
+                                                            <div className="flex items-center gap-2">
+                                                                <div className="w-6 h-6 rounded bg-purple-500 text-white flex items-center justify-center">
+                                                                    <BrainCircuit className="w-3.5 h-3.5" />
+                                                                </div>
+                                                                <span className="font-bold text-slate-700 text-sm">AI Auto-Resolve</span>
+                                                            </div>
+                                                            {aiResolving ? (
+                                                                <Loader2 className="w-4 h-4 animate-spin text-purple-500" />
+                                                            ) : (
+                                                                <span className="text-[10px] text-purple-500 font-bold uppercase">Fastest</span>
+                                                            )}
+                                                        </button>
+
+                                                        {/* Manual Entry Section */}
+                                                        <div className="p-2.5 bg-white border-2 border-gray-200 rounded-lg space-y-2">
+                                                            <div className="flex items-center gap-2 mb-2">
+                                                                <div className="w-6 h-6 rounded bg-blue-500 text-white flex items-center justify-center">
+                                                                    <Gavel className="w-3.5 h-3.5" />
+                                                                </div>
+                                                                <span className="font-bold text-slate-700 text-sm">Manual Entry</span>
+                                                            </div>
+
+                                                            {/* CHOICE bet - Dropdown */}
+                                                            {bet.type === "CHOICE" && bet.options && (
+                                                                <select
+                                                                    value={winningOption}
+                                                                    onChange={(e) => setWinningOption(e.target.value)}
+                                                                    onClick={(e) => e.stopPropagation()}
+                                                                    className="w-full p-2 text-sm font-bold border-2 border-gray-200 rounded-lg focus:border-blue-400 outline-none"
+                                                                >
+                                                                    <option value="">Select Winner...</option>
+                                                                    {bet.options.map((o: any, i: number) => (
+                                                                        <option key={i} value={String(i)}>{o.text}</option>
+                                                                    ))}
+                                                                </select>
+                                                            )}
+
+                                                            {/* MATCH bet - Score inputs */}
+                                                            {bet.type === "MATCH" && (
+                                                                <div className="flex items-center justify-center gap-2">
+                                                                    <input
+                                                                        type="number"
+                                                                        value={resHome}
+                                                                        onChange={(e) => setResHome(e.target.value === "" ? "" : Number(e.target.value))}
+                                                                        onClick={(e) => e.stopPropagation()}
+                                                                        placeholder="Home"
+                                                                        className="w-16 p-2 text-center font-bold border-2 border-gray-200 rounded-lg focus:border-blue-400 outline-none"
+                                                                    />
+                                                                    <span className="font-bold text-gray-400">-</span>
+                                                                    <input
+                                                                        type="number"
+                                                                        value={resAway}
+                                                                        onChange={(e) => setResAway(e.target.value === "" ? "" : Number(e.target.value))}
+                                                                        onClick={(e) => e.stopPropagation()}
+                                                                        placeholder="Away"
+                                                                        className="w-16 p-2 text-center font-bold border-2 border-gray-200 rounded-lg focus:border-blue-400 outline-none"
+                                                                    />
+                                                                </div>
+                                                            )}
+
+                                                            {/* RANGE bet - Value input */}
+                                                            {bet.type === "RANGE" && (
+                                                                <input
+                                                                    type="number"
+                                                                    value={winningRange}
+                                                                    onChange={(e) => setWinningRange(e.target.value === "" ? "" : Number(e.target.value))}
+                                                                    onClick={(e) => e.stopPropagation()}
+                                                                    placeholder={`Enter value ${bet.rangeUnit ? `(${bet.rangeUnit})` : ""}`}
+                                                                    className="w-full p-2 text-center font-bold border-2 border-gray-200 rounded-lg focus:border-blue-400 outline-none"
+                                                                />
+                                                            )}
+
+                                                            {/* Confirm Button */}
+                                                            {(winningOption !== "" || (resHome !== "" && resAway !== "") || (winningRange !== undefined && winningRange !== "")) && (
+                                                                <button
+                                                                    onClick={(e) => {
+                                                                        e.stopPropagation();
+                                                                        handleManualResolve();
+                                                                    }}
+                                                                    disabled={loading}
+                                                                    className="w-full py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-lg font-bold text-sm transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+                                                                >
+                                                                    {loading ? (
+                                                                        <Loader2 className="w-4 h-4 animate-spin" />
+                                                                    ) : (
+                                                                        <>
+                                                                            <Check className="w-4 h-4" />
+                                                                            Confirm Result
+                                                                        </>
+                                                                    )}
+                                                                </button>
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                </motion.div>
+                                            )}
+                                        </AnimatePresence>
+                                    </div>
+                                )}
+
                             {/* PROOFING state */}
                             {bet.status === "PROOFING" && bet.winningOutcome && (
                                 <div className="space-y-3">
@@ -868,29 +1242,256 @@ export function BetCardV2({
                                 </div>
                             )}
 
-                            {/* RESOLVED state */}
+                            {/* RESOLVED state - V1 Ticket Style */}
                             {bet.status === "RESOLVED" && (
-                                <div className={`p-4 rounded-xl text-center ${wagerResult === "WON" ? "bg-emerald-50 border border-emerald-200" :
-                                    wagerResult === "LOST" ? "bg-red-50 border border-red-200" :
-                                        "bg-gray-50 border border-gray-200"
+                                <div className={`p-4 rounded-xl ${wagerResult === "WON"
+                                    ? "bg-gradient-to-br from-emerald-100 via-green-50 to-emerald-50 border-2 border-emerald-300"
+                                    : wagerResult === "LOST"
+                                        ? "bg-gradient-to-br from-gray-100 to-gray-50 border border-gray-200"
+                                        : "bg-gray-50 border border-gray-200"
                                     }`}>
-                                    <div className={`inline-flex items-center justify-center w-12 h-12 rounded-full mb-2 ${wagerResult === "WON" ? "bg-emerald-500" : wagerResult === "LOST" ? "bg-red-500" : "bg-gray-500"
-                                        } text-white`}>
-                                        {wagerResult === "WON" ? <Trophy className="w-6 h-6" /> :
-                                            wagerResult === "LOST" ? <X className="w-6 h-6" /> :
-                                                <Check className="w-6 h-6" />}
+                                    {/* Result Header */}
+                                    {/* WIN/LOSS Badge + Final Result - Same Row */}
+                                    <div className="flex items-center justify-between mb-2">
+                                        {/* Win/Loss Badge */}
+                                        <div className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg ${wagerResult === "WON"
+                                            ? "bg-emerald-500 text-white"
+                                            : wagerResult === "LOST"
+                                                ? "bg-gray-400 text-white"
+                                                : "bg-gray-300 text-gray-700"
+                                            }`}>
+                                            {wagerResult === "WON" ? <Trophy className="w-3.5 h-3.5" /> :
+                                                wagerResult === "LOST" ? <X className="w-3.5 h-3.5" /> :
+                                                    <Check className="w-3.5 h-3.5" />}
+                                            <span className="font-black text-xs">
+                                                {wagerResult === "WON" ? "WIN" : wagerResult === "LOST" ? "LOSS" : wagerResult === "PUSH" ? "PUSH" : "DONE"}
+                                            </span>
+                                        </div>
+
+                                        {/* Final Result */}
+                                        <div className="text-right">
+                                            <p className="text-[10px] text-gray-400 uppercase font-bold">Final Result</p>
+                                            <p className="text-xl font-black text-gray-800">
+                                                {typeof bet.winningOutcome === "object"
+                                                    ? `${(bet.winningOutcome as any).home} - ${(bet.winningOutcome as any).away}`
+                                                    : bet.options?.[Number(bet.winningOutcome)]?.text || String(bet.winningOutcome)}
+                                            </p>
+                                        </div>
                                     </div>
-                                    <p className={`text-xl font-black ${wagerResult === "WON" ? "text-emerald-700" : wagerResult === "LOST" ? "text-red-600" : "text-gray-700"
-                                        }`}>
-                                        {wagerResult === "WON" ? `You Won +${userWager?.payout}!` :
-                                            wagerResult === "LOST" ? "You Lost" :
-                                                wagerResult === "PUSH" ? "Bet Pushed - Refunded" : "Resolved"}
-                                    </p>
-                                    <p className="text-sm text-gray-500 mt-1">
-                                        Final: {typeof bet.winningOutcome === "object"
-                                            ? `${(bet.winningOutcome as any).home} - ${(bet.winningOutcome as any).away}`
-                                            : bet.options?.[Number(bet.winningOutcome)]?.text || String(bet.winningOutcome)}
-                                    </p>
+
+                                    {/* Verification Source - Clickable Link */}
+                                    {bet.verification && (
+                                        <div className="flex items-center justify-between gap-2 mb-2 p-2 bg-white/80 rounded-lg border border-gray-200">
+                                            {/* Left: AI/API Badge + Date */}
+                                            <div className="flex items-center gap-2">
+                                                <div className={`px-2 py-0.5 rounded text-[10px] font-black uppercase ${bet.dataSource === "API" || bet.verification.source?.toLowerCase().includes("sportsdb") || bet.verification.source?.toLowerCase().includes("api")
+                                                    ? "bg-purple-100 text-purple-700"
+                                                    : bet.dataSource === "AI" || bet.verification.source?.toLowerCase().includes("ai")
+                                                        ? "bg-orange-100 text-orange-700"
+                                                        : "bg-gray-100 text-gray-600"
+                                                    }`}>
+                                                    {bet.dataSource === "API" ? "📡 API" :
+                                                        bet.dataSource === "AI" ? "🤖 AI" :
+                                                            bet.verification.method === "MANUAL" ? "✋ Manual" : "✓"}
+                                                </div>
+                                                {/* Resolved Date */}
+                                                {bet.verification.verifiedAt && (
+                                                    <span className="text-[10px] text-gray-400 font-medium">
+                                                        {new Date(bet.verification.verifiedAt).toLocaleDateString(undefined, {
+                                                            day: 'numeric',
+                                                            month: 'short',
+                                                            hour: '2-digit',
+                                                            minute: '2-digit'
+                                                        })}
+                                                    </span>
+                                                )}
+                                            </div>
+
+                                            {/* Right: Source Link */}
+                                            {bet.verification.url ? (
+                                                <a
+                                                    href={bet.verification.url}
+                                                    target="_blank"
+                                                    rel="noopener noreferrer"
+                                                    onClick={(e) => e.stopPropagation()}
+                                                    className="flex items-center gap-1 text-[10px] text-blue-600 hover:text-blue-800 hover:underline transition-colors"
+                                                >
+                                                    <span className="font-medium truncate max-w-[120px]">
+                                                        {bet.verification.source || "View Source"}
+                                                    </span>
+                                                    <ExternalLink className="w-3 h-3" />
+                                                </a>
+                                            ) : bet.verification.source && (
+                                                <span className="text-[10px] text-gray-500 font-medium truncate max-w-[120px]">
+                                                    {bet.verification.source}
+                                                </span>
+                                            )}
+                                        </div>
+                                    )}
+
+                                    {/* Cashout/Payout Display */}
+                                    {userWager && (
+                                        <div className={`p-3 rounded-lg text-center ${wagerResult === "WON"
+                                            ? "bg-white/80 border border-emerald-200"
+                                            : "bg-white/50 border border-gray-200"
+                                            }`}>
+                                            <p className="text-xs text-gray-500 mb-1">Your Bet: <span className="font-bold">{getUserSelectionDisplay()}</span></p>
+                                            {wagerResult === "WON" ? (
+                                                <>
+                                                    <p className="text-3xl font-black text-emerald-600">+{userWager.payout || 0}</p>
+                                                    <p className="text-xs text-emerald-600 font-bold">Points Won</p>
+                                                </>
+                                            ) : wagerResult === "LOST" ? (
+                                                <>
+                                                    <p className="text-2xl font-black text-gray-400">-{userWager.amount || 0}</p>
+                                                    <p className="text-xs text-gray-400">Points Lost</p>
+                                                </>
+                                            ) : wagerResult === "PUSH" ? (
+                                                <>
+                                                    <p className="text-xl font-black text-yellow-600">±0</p>
+                                                    <p className="text-xs text-yellow-600">Refunded</p>
+                                                </>
+                                            ) : (
+                                                <p className="text-sm text-gray-500">No wager placed</p>
+                                            )}
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+
+                            {/* ==================== ALL WAGERS SECTION ==================== */}
+                            {allWagers.length > 0 && (
+                                <div className="mt-4 pt-3 border-t border-dashed border-gray-200">
+                                    {/* Toggle Header */}
+                                    <button
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            setShowWagersSection(!showWagersSection);
+                                        }}
+                                        className="w-full flex items-center justify-between p-2 rounded-lg bg-gray-50 hover:bg-gray-100 transition-colors"
+                                    >
+                                        <div className="flex items-center gap-2">
+                                            <Users className="w-4 h-4 text-gray-500" />
+                                            <span className="text-xs font-bold text-gray-600 uppercase">
+                                                All Wagers ({allWagers.length})
+                                            </span>
+                                            {/* Quick summary */}
+                                            {bet.status === "RESOLVED" && (
+                                                <div className="flex items-center gap-2 text-[10px]">
+                                                    <span className="text-green-600 font-bold">
+                                                        {allWagers.filter(w => w.status === "WON").length} won
+                                                    </span>
+                                                    <span className="text-gray-300">|</span>
+                                                    <span className="text-gray-400 font-bold">
+                                                        {allWagers.filter(w => w.status === "LOST").length} lost
+                                                    </span>
+                                                </div>
+                                            )}
+                                        </div>
+                                        {showWagersSection ? (
+                                            <ChevronUp className="w-4 h-4 text-gray-400" />
+                                        ) : (
+                                            <ChevronDown className="w-4 h-4 text-gray-400" />
+                                        )}
+                                    </button>
+
+                                    {/* Wagers List - Expandable */}
+                                    <AnimatePresence>
+                                        {showWagersSection && (
+                                            <motion.div
+                                                initial={{ height: 0, opacity: 0 }}
+                                                animate={{ height: "auto", opacity: 1 }}
+                                                exit={{ height: 0, opacity: 0 }}
+                                                transition={{ duration: 0.2 }}
+                                                className="overflow-hidden"
+                                            >
+                                                <div className="mt-3 space-y-2 max-h-[300px] overflow-y-auto pr-1">
+                                                    {allWagers
+                                                        .sort((a, b) => (b.payout || 0) - (a.payout || 0))
+                                                        .map((wager, idx) => (
+                                                            <motion.div
+                                                                key={wager.id || idx}
+                                                                initial={{ opacity: 0, x: -10 }}
+                                                                animate={{ opacity: 1, x: 0 }}
+                                                                transition={{ delay: idx * 0.03 }}
+                                                                className={`flex items-center gap-3 p-2.5 rounded-lg border-2 transition-all ${wager.status === "WON"
+                                                                    ? "bg-green-50 border-green-200"
+                                                                    : wager.status === "LOST"
+                                                                        ? "bg-gray-50 border-gray-200"
+                                                                        : "bg-white border-gray-200"
+                                                                    }`}
+                                                            >
+                                                                {/* Avatar */}
+                                                                <div className="relative shrink-0">
+                                                                    {wager.userAvatar ? (
+                                                                        <img
+                                                                            src={wager.userAvatar}
+                                                                            alt={wager.userName}
+                                                                            className="w-9 h-9 rounded-full border-2 border-white shadow-sm object-cover"
+                                                                        />
+                                                                    ) : (
+                                                                        <div className="w-9 h-9 rounded-full bg-gradient-to-br from-purple-400 to-purple-600 flex items-center justify-center text-white font-bold text-xs border-2 border-white shadow-sm">
+                                                                            {wager.userName?.substring(0, 2).toUpperCase() || "??"}
+                                                                        </div>
+                                                                    )}
+                                                                    {/* Status Badge */}
+                                                                    {wager.status === "WON" && (
+                                                                        <div className="absolute -bottom-0.5 -right-0.5 bg-green-500 rounded-full p-0.5 border border-white">
+                                                                            <Trophy className="h-2 w-2 text-white" />
+                                                                        </div>
+                                                                    )}
+                                                                    {wager.status === "LOST" && (
+                                                                        <div className="absolute -bottom-0.5 -right-0.5 bg-gray-400 rounded-full p-0.5 border border-white">
+                                                                            <X className="h-2 w-2 text-white" />
+                                                                        </div>
+                                                                    )}
+                                                                </div>
+
+                                                                {/* Player Info */}
+                                                                <div className="flex-1 min-w-0">
+                                                                    <div className="font-bold text-xs truncate">{wager.userName || "Player"}</div>
+                                                                    <div className="text-[10px] text-gray-500 flex items-center gap-1.5 flex-wrap">
+                                                                        <span className="font-medium">Pick: {formatWagerSelection(wager)}</span>
+                                                                        {wager.powerUp && (
+                                                                            <span className="bg-orange-100 text-orange-600 px-1 py-0.5 rounded text-[9px] font-bold flex items-center gap-0.5">
+                                                                                <Zap className="h-2 w-2" />
+                                                                                {wager.powerUp}
+                                                                            </span>
+                                                                        )}
+                                                                    </div>
+                                                                </div>
+
+                                                                {/* Result */}
+                                                                <div className="text-right shrink-0">
+                                                                    {wager.status === "PENDING" ? (
+                                                                        <div className="text-[10px] font-bold text-gray-400 uppercase">Pending</div>
+                                                                    ) : (
+                                                                        <>
+                                                                            <div className={`text-sm font-black ${wager.status === "WON" ? "text-green-600" : "text-gray-400"}`}>
+                                                                                {wager.status === "WON" ? "+" : ""}{wager.payout || 0}
+                                                                            </div>
+                                                                            <div className="text-[9px] font-medium text-gray-400">
+                                                                                {wager.status === "WON" ? (
+                                                                                    <span className="flex items-center justify-end gap-0.5 text-green-500">
+                                                                                        <TrendingUp className="h-2.5 w-2.5" />
+                                                                                        Won
+                                                                                    </span>
+                                                                                ) : (
+                                                                                    <span className="flex items-center justify-end gap-0.5 text-gray-400">
+                                                                                        <TrendingDown className="h-2.5 w-2.5" />
+                                                                                        Lost
+                                                                                    </span>
+                                                                                )}
+                                                                            </div>
+                                                                        </>
+                                                                    )}
+                                                                </div>
+                                                            </motion.div>
+                                                        ))}
+                                                </div>
+                                            </motion.div>
+                                        )}
+                                    </AnimatePresence>
                                 </div>
                             )}
                         </div>

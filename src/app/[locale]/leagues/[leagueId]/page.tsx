@@ -800,33 +800,18 @@ function LeaguePageV1() {
                         {/* Action Icons */}
                         <div className="text-black text-xl font-bold flex items-center gap-1 shrink-0">
                             {isOwner && (
-                                <div className="flex items-center">
-                                    {(bet.wagerCount === 0 || !bet.wagerCount) && (
-                                        <div
-                                            role="button"
-                                            onClick={(e) => {
-                                                e.stopPropagation();
-                                                setBetToEdit(bet);
-                                                setIsBetModalOpen(true);
-                                            }}
-                                            className="p-1 hover:bg-blue-100 rounded-lg text-gray-300 hover:text-blue-500 transition-colors"
-                                            title="Edit Bet (No Wagers Yet)"
-                                        >
-                                            <Pencil className="h-4 w-4" />
-                                        </div>
-                                    )}
+                                <div className="flex items-center mr-1">
                                     <div
                                         role="button"
                                         onClick={(e) => {
                                             e.stopPropagation();
-                                            if (confirm("Delete this bet? ALL existing wagers will be refunded to players.")) {
-                                                handleDeleteBet(bet.id);
-                                            }
+                                            setBetToEdit(bet);
+                                            setIsBetModalOpen(true);
                                         }}
-                                        className="p-1 hover:bg-red-100 rounded-lg text-gray-300 hover:text-red-500 transition-colors"
-                                        title="Delete Bet (Refunds Players)"
+                                        className="p-1 hover:bg-blue-100 rounded-lg text-gray-300 hover:text-blue-500 transition-colors"
+                                        title="Edit Bet"
                                     >
-                                        <Trash2 className="h-4 w-4" />
+                                        <Pencil className="h-4 w-4" />
                                     </div>
                                 </div>
                             )}

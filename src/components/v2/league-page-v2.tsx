@@ -40,6 +40,7 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Responsi
 import { getDocs } from "firebase/firestore";
 import { ActivityTabContent } from "@/components/activity-tab-content";
 import { LiveStatusCard } from "@/components/v2/live-status-card";
+import { GroupedBetsByTime, BetTimeSection } from "@/components/grouped-bets";
 
 // ============================================
 // PILL STATS BAR COMPONENT
@@ -122,134 +123,145 @@ function PodiumLeaderboard({
     currentUserId,
     colorScheme
 }: {
-    members: LeagueMember[];
+    members: (LeagueMember & { livePoints?: number; positionChange?: number })[];
     hasLiveBets: boolean;
     currentUserId?: string;
     colorScheme: string;
 }) {
     const [showAll, setShowAll] = useState(false);
     const top3 = members.slice(0, 3);
-    const rest = members.slice(3);
     const colors = LEAGUE_COLOR_SCHEMES[(colorScheme || 'purple') as LeagueColorScheme];
 
+    const renderPodiumMember = (member: (LeagueMember & { livePoints?: number; positionChange?: number }), rank: number) => {
+        if (!member) return null;
+
+        const isMe = member.uid === currentUserId;
+        const displayPoints = member.livePoints ?? member.points;
+        const change = member.positionChange || 0;
+
+        // Styles based on rank
+        let containerClass = "flex flex-col items-center relative";
+        let avatarSize = "w-12 h-12";
+        let ringColor = isMe ? "border-yellow-400 ring-2 ring-yellow-200" : "border-black";
+        let cardBg = "bg-zinc-300";
+        let crown = null;
+        let animationDelay = 0.1;
+
+        if (rank === 0) { // 1st Place
+            avatarSize = "w-14 h-14";
+            cardBg = "bg-yellow-400";
+            ringColor = isMe ? "border-blue-500 ring-2 ring-blue-200" : "border-black";
+            crown = <Crown className="absolute -top-3 left-1/2 -translate-x-1/2 w-5 h-5 text-yellow-400 fill-yellow-300 drop-shadow-md" />;
+            animationDelay = 0;
+        } else if (rank === 2) { // 3rd Place
+            cardBg = "bg-orange-400";
+            animationDelay = 0.2;
+        }
+
+        return (
+            <motion.div
+                className={containerClass}
+                initial={{ y: 20, opacity: 0 }}
+                animate={{ y: 0, opacity: 1 }}
+                transition={{ delay: animationDelay }}
+            >
+                {crown}
+                <div className={`${avatarSize} rounded-full ${cardBg} border-2 ${ringColor} shadow-lg overflow-hidden flex items-center justify-center relative`}>
+                    {member.photoURL ? (
+                        <img src={member.photoURL} alt="" className="w-full h-full object-cover" />
+                    ) : (
+                        <UserIcon className="w-6 h-6 text-black/20" />
+                    )}
+                </div>
+
+                <div className={`${cardBg} rounded-t-lg mt-1 px-2 py-2 min-w-[80px] border-2 border-b-0 border-black text-center flex flex-col items-center justify-center`}>
+                    <span className="font-black text-[10px] block truncate max-w-[70px] leading-tight">{member.displayName}</span>
+                    <div className="flex items-center gap-1 mt-0.5">
+                        <span className="text-xs font-bold">{displayPoints.toLocaleString()}</span>
+                        {hasLiveBets && change !== 0 && (
+                            <span className={`text-[10px] font-black flex items-center ${change > 0 ? "text-green-700" : "text-red-700"}`}>
+                                {change > 0 ? "▲" : "▼"}{Math.abs(change)}
+                            </span>
+                        )}
+                    </div>
+                </div>
+            </motion.div>
+        );
+    };
+
     return (
-        <div className={`bg-gradient-to-br ${colors.from} ${colors.to} rounded-2xl border-4 border-black shadow-[6px_6px_0_rgba(0,0,0,1)] p-4 overflow-hidden`}>
+        <div className={`bg-gradient-to-br ${colors.from} ${colors.to} rounded-2xl border-4 border-black shadow-[6px_6px_0_rgba(0,0,0,1)] p-4`}>
             {/* Header */}
             <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center gap-2">
                     <Trophy className="w-5 h-5 text-yellow-300" />
                     <h3 className="text-white font-black uppercase tracking-wider text-sm">Standings</h3>
                     {hasLiveBets && (
-                        <span className="flex items-center gap-1 px-2 py-0.5 bg-red-500 rounded-full text-white text-[10px] font-bold">
-                            <span className="w-1.5 h-1.5 bg-white rounded-full animate-pulse" />
+                        <span className="flex items-center gap-1 px-2 py-0.5 bg-red-500 rounded-full text-white text-[10px] font-bold animate-pulse">
                             LIVE
                         </span>
                     )}
                 </div>
-                <button
-                    onClick={() => setShowAll(!showAll)}
-                    className="text-white/80 text-xs font-bold flex items-center gap-1 hover:text-white"
-                >
-                    {showAll ? "Less" : `+${rest.length} more`}
-                    <ChevronDown className={`w-4 h-4 transition-transform ${showAll ? "rotate-180" : ""}`} />
-                </button>
             </div>
 
             {/* Podium - Always Visible */}
-            <div className="flex items-end justify-center gap-1 mb-2">
-                {/* 2nd Place */}
-                {top3[1] && (
-                    <motion.div
-                        className="flex flex-col items-center"
-                        initial={{ y: 20, opacity: 0 }}
-                        animate={{ y: 0, opacity: 1 }}
-                        transition={{ delay: 0.1 }}
-                    >
-                        <div className={`w-12 h-12 rounded-full bg-zinc-300 border-2 ${top3[1].uid === currentUserId ? "border-yellow-400 ring-2 ring-yellow-200" : "border-black"} overflow-hidden flex items-center justify-center`}>
-                            {top3[1].photoURL ? (
-                                <img src={top3[1].photoURL} alt="" className="w-full h-full object-cover" />
-                            ) : (
-                                <UserIcon className="w-6 h-6 text-gray-500" />
-                            )}
-                        </div>
-                        <div className="bg-zinc-300 rounded-t-lg mt-1 px-3 py-5 border-2 border-b-0 border-black text-center min-w-[70px]">
-                            <span className="font-black text-[10px] block truncate max-w-[60px]">{top3[1].displayName}</span>
-                            <span className="text-xs font-bold">{top3[1].points?.toLocaleString()}</span>
-                        </div>
-                    </motion.div>
-                )}
-
-                {/* 1st Place */}
-                {top3[0] && (
-                    <motion.div
-                        className="flex flex-col items-center relative"
-                        initial={{ y: 20, opacity: 0 }}
-                        animate={{ y: 0, opacity: 1 }}
-                    >
-                        <Crown className="absolute -top-3 left-1/2 -translate-x-1/2 w-5 h-5 text-yellow-400 fill-yellow-300 drop-shadow-md" />
-                        <div className={`w-14 h-14 rounded-full bg-yellow-400 border-2 ${top3[0].uid === currentUserId ? "border-blue-500 ring-2 ring-blue-200" : "border-black"} shadow-lg overflow-hidden flex items-center justify-center`}>
-                            {top3[0].photoURL ? (
-                                <img src={top3[0].photoURL} alt="" className="w-full h-full object-cover" />
-                            ) : (
-                                <UserIcon className="w-7 h-7 text-yellow-700" />
-                            )}
-                        </div>
-                        <div className="bg-yellow-400 rounded-t-lg mt-1 px-4 py-7 border-2 border-b-0 border-black text-center min-w-[80px]">
-                            <span className="font-black text-xs block truncate max-w-[70px]">{top3[0].displayName}</span>
-                            <span className="text-sm font-bold">{top3[0].points?.toLocaleString()}</span>
-                        </div>
-                    </motion.div>
-                )}
-
-                {/* 3rd Place */}
-                {top3[2] && (
-                    <motion.div
-                        className="flex flex-col items-center"
-                        initial={{ y: 20, opacity: 0 }}
-                        animate={{ y: 0, opacity: 1 }}
-                        transition={{ delay: 0.2 }}
-                    >
-                        <div className={`w-12 h-12 rounded-full bg-orange-400 border-2 ${top3[2].uid === currentUserId ? "border-yellow-400 ring-2 ring-yellow-200" : "border-black"} overflow-hidden flex items-center justify-center`}>
-                            {top3[2].photoURL ? (
-                                <img src={top3[2].photoURL} alt="" className="w-full h-full object-cover" />
-                            ) : (
-                                <UserIcon className="w-6 h-6 text-orange-700" />
-                            )}
-                        </div>
-                        <div className="bg-orange-400 rounded-t-lg mt-1 px-3 py-3 border-2 border-b-0 border-black text-center min-w-[70px]">
-                            <span className="font-black text-[10px] block truncate max-w-[60px]">{top3[2].displayName}</span>
-                            <span className="text-xs font-bold">{top3[2].points?.toLocaleString()}</span>
-                        </div>
-                    </motion.div>
-                )}
+            <div className="flex items-end justify-center gap-2 mb-2">
+                {renderPodiumMember(top3[1], 1)}
+                {renderPodiumMember(top3[0], 0)}
+                {renderPodiumMember(top3[2], 2)}
             </div>
+
+            {/* Expand Arrow - Visible only if there are more than 3 members */}
+            {members.length > 3 && (
+                <button
+                    onClick={() => setShowAll(!showAll)}
+                    className="w-full flex items-center justify-center py-2 mt-1 text-white/90 hover:text-white hover:bg-white/10 rounded-lg transition-all group"
+                >
+                    <span className="text-xs font-bold mr-1 group-hover:underline">
+                        {showAll ? "Less" : `+${members.length - 3} more`}
+                    </span>
+                    <ChevronDown className={`w-4 h-4 transition-transform duration-300 ${showAll ? "rotate-180" : ""}`} />
+                </button>
+            )}
 
             {/* Rest of list (expandable) */}
             <AnimatePresence>
-                {showAll && rest.length > 0 && (
+                {showAll && members.length > 3 && (
                     <motion.div
                         initial={{ height: 0, opacity: 0 }}
                         animate={{ height: "auto", opacity: 1 }}
                         exit={{ height: 0, opacity: 0 }}
-                        className="mt-3 bg-white/10 rounded-xl overflow-hidden"
+                        className="mt-2 bg-white/10 rounded-xl overflow-hidden backdrop-blur-sm border border-white/10"
                     >
-                        {rest.map((member, i) => (
-                            <div
-                                key={member.uid}
-                                className={`flex items-center gap-3 p-2.5 border-b border-white/10 last:border-b-0 ${member.uid === currentUserId ? "bg-white/10" : ""}`}
-                            >
-                                <span className="font-bold text-white/60 text-sm w-5 text-center">{i + 4}</span>
-                                <div className="w-7 h-7 rounded-full bg-white/20 overflow-hidden flex items-center justify-center shrink-0">
-                                    {member.photoURL ? (
-                                        <img src={member.photoURL} alt="" className="w-full h-full object-cover" />
-                                    ) : (
-                                        <UserIcon className="w-4 h-4 text-white/50" />
-                                    )}
+                        {members.slice(3).map((member, i) => {
+                            const displayPoints = member.livePoints ?? member.points;
+                            const change = member.positionChange || 0;
+                            return (
+                                <div
+                                    key={member.uid || i}
+                                    className={`flex items-center gap-3 p-2.5 border-b border-white/10 last:border-b-0 ${member.uid === currentUserId ? "bg-white/10" : ""}`}
+                                >
+                                    <span className="font-bold text-white/60 text-sm w-6 text-center">{i + 4}</span>
+                                    <div className="w-8 h-8 rounded-full bg-white/20 overflow-hidden flex items-center justify-center shrink-0 border border-white/10">
+                                        {member.photoURL ? (
+                                            <img src={member.photoURL} alt="" className="w-full h-full object-cover" />
+                                        ) : (
+                                            <UserIcon className="w-4 h-4 text-white/50" />
+                                        )}
+                                    </div>
+                                    <span className="font-bold text-white flex-1 truncate text-sm">{member.displayName}</span>
+
+                                    <div className="flex flex-col items-end">
+                                        <span className="font-bold text-white text-sm">{displayPoints.toLocaleString()}</span>
+                                        {hasLiveBets && change !== 0 && (
+                                            <span className={`text-[10px] font-bold ${change > 0 ? "text-green-400" : "text-red-400"}`}>
+                                                {change > 0 ? "▲" : "▼"} {Math.abs(change)}
+                                            </span>
+                                        )}
+                                    </div>
                                 </div>
-                                <span className="font-bold text-white flex-1 truncate text-sm">{member.displayName}</span>
-                                <span className="font-bold text-white text-sm">{member.points?.toLocaleString()}</span>
-                            </div>
-                        ))}
+                            );
+                        })}
                     </motion.div>
                 )}
             </AnimatePresence>
@@ -337,7 +349,7 @@ function BetFilterTabs({
                     key={tab.key}
                     onClick={() => onChange(tab.key)}
                     className={`shrink-0 px-3 py-1.5 rounded-full font-bold text-xs border-2 transition-all ${selected === tab.key
-                        ? "bg-black text-white border-black shadow-[2px_2px_0_rgba(0,0,0,0.3)]"
+                        ? "bg-emerald-500 text-white border-emerald-600 shadow-[2px_2px_0_rgba(16,185,129,0.3)]"
                         : "bg-white text-gray-600 border-gray-200 hover:border-gray-400"
                         }`}
                 >
@@ -365,6 +377,7 @@ export function LeaguePageV2() {
     const [bets, setBets] = useState<Bet[]>([]);
     const [myWagers, setMyWagers] = useState<Record<string, Wager>>({});
     const [allMembersActiveWagers, setAllMembersActiveWagers] = useState<Record<string, number>>({});
+    const [allBetWagers, setAllBetWagers] = useState<Record<string, Wager[]>>({});  // All wagers per bet
     const [dataLoading, setDataLoading] = useState(true);
 
     // UI State
@@ -417,7 +430,8 @@ export function LeaguePageV2() {
         const unsubBets = onSnapshot(collection(db, "leagues", leagueId, "bets"), (snap) => {
             const betList = snap.docs.map(d => ({ id: d.id, leagueId, ...d.data() } as Bet));
             betList.sort((a, b) => {
-                const order: Record<BetStatus, number> = { OPEN: 0, LOCKED: 1, PROOFING: 2, DISPUTED: 2, RESOLVED: 3, INVALID: 4, DRAFT: 5, CANCELLED: 6 };
+                // Priority: LOCKED/PROOFING/DISPUTED -> OPEN -> RESOLVED/INVALID -> DRAFT -> CANCELLED
+                const order: Record<BetStatus, number> = { LOCKED: 0, PROOFING: 1, DISPUTED: 1, OPEN: 2, RESOLVED: 3, INVALID: 4, DRAFT: 5, CANCELLED: 6 };
                 const statusDiff = (order[a.status] ?? 99) - (order[b.status] ?? 99);
                 if (statusDiff !== 0) return statusDiff;
                 const aTime = a.closesAt?.seconds || 0;
@@ -435,33 +449,40 @@ export function LeaguePageV2() {
         };
     }, [user, leagueId, router]);
 
-    // Fetch user's wagers
+    // Fetch user's wagers and all wagers per bet
     useEffect(() => {
         if (!user || bets.length === 0) return;
 
         const fetchWagers = async () => {
             const wagersMap: Record<string, Wager> = {};
             const memberWagers: Record<string, number> = {};
+            const betWagersMap: Record<string, Wager[]> = {};
 
             for (const bet of bets) {
-                if (bet.status === "RESOLVED" || bet.status === "INVALID") continue;
-
                 const wagersSnap = await import("firebase/firestore").then(({ getDocs, collection }) =>
                     getDocs(collection(db, "leagues", leagueId, "bets", bet.id, "wagers"))
                 );
 
+                const wagers: Wager[] = [];
                 wagersSnap.docs.forEach(doc => {
-                    const wager = doc.data() as Wager;
+                    const wager = { id: doc.id, ...doc.data() } as Wager;
+                    wagers.push(wager);
+
                     if (doc.id === user.uid) {
                         wagersMap[bet.id] = wager;
                     }
-                    // Track all members' wagers for live leaderboard
-                    memberWagers[doc.id] = (memberWagers[doc.id] || 0) + (wager.amount || 0);
+                    // Track all members' wagers for live leaderboard (only for non-resolved)
+                    if (bet.status !== "RESOLVED" && bet.status !== "INVALID") {
+                        memberWagers[doc.id] = (memberWagers[doc.id] || 0) + (wager.amount || 0);
+                    }
                 });
+
+                betWagersMap[bet.id] = wagers;
             }
 
             setMyWagers(wagersMap);
             setAllMembersActiveWagers(memberWagers);
+            setAllBetWagers(betWagersMap);
         };
 
         fetchWagers();
@@ -805,26 +826,96 @@ export function LeaguePageV2() {
                             leagueSettings={league.matchSettings}
                         />
 
-                        {/* Bet List */}
-                        <div className="space-y-2">
+                        {/* Bet List - Grouped by Status and Time */}
+                        <div className="space-y-6">
                             {filteredBets.length === 0 ? (
                                 <div className="text-center py-8 text-gray-500">
                                     <p className="font-bold">No bets found</p>
                                     <p className="text-sm">Try a different filter or search</p>
                                 </div>
                             ) : (
-                                filteredBets.map(bet => (
-                                    <BetCardV2
-                                        key={bet.id}
-                                        bet={bet}
-                                        userPoints={myPoints}
-                                        userWager={myWagers[bet.id]}
-                                        mode={league.mode}
-                                        powerUps={myProfile?.powerUps || league.arcadePowerUpSettings}
-                                        onWagerSuccess={refreshData}
-                                        isOwnerOverride={isOwner}
-                                    />
-                                ))
+                                <>
+                                    {/* Helper to render a bet card with all wagers */}
+                                    {(() => {
+                                        const renderBetCard = (bet: Bet) => (
+                                            <BetCardV2
+                                                key={bet.id}
+                                                bet={bet}
+                                                userPoints={myPoints}
+                                                userWager={myWagers[bet.id]}
+                                                allWagers={allBetWagers[bet.id] || []}
+                                                mode={league.mode}
+                                                powerUps={myProfile?.powerUps || league.arcadePowerUpSettings}
+                                                onWagerSuccess={refreshData}
+                                                isOwnerOverride={isOwner}
+                                                onEdit={(bet) => {
+                                                    setBetToEdit(bet);
+                                                    setIsBetModalOpen(true);
+                                                }}
+                                            />
+                                        );
+
+                                        const now = new Date();
+
+                                        // Categorize bets
+                                        const openBets = filteredBets.filter(b =>
+                                            b.status === "OPEN" && (!b.closesAt || new Date(b.closesAt.seconds * 1000) > now)
+                                        );
+                                        const lockedBets = filteredBets.filter(b =>
+                                            b.status === "LOCKED" ||
+                                            (b.status === "OPEN" && b.closesAt && new Date(b.closesAt.seconds * 1000) <= now)
+                                        );
+                                        const proofingBets = filteredBets.filter(b =>
+                                            b.status === "PROOFING" || b.status === "DISPUTED"
+                                        );
+                                        const resolvedBets = filteredBets.filter(b =>
+                                            b.status === "RESOLVED" || b.status === "INVALID"
+                                        );
+
+                                        return (
+                                            <>
+                                                {/* OPEN Bets - Grouped by Time */}
+                                                {openBets.length > 0 && (
+                                                    <GroupedBetsByTime
+                                                        bets={openBets}
+                                                        getClosingDate={(bet) => bet.closesAt ? new Date(bet.closesAt.seconds * 1000) : null}
+                                                        renderBet={renderBetCard}
+                                                    />
+                                                )}
+
+                                                {/* LOCKED Bets */}
+                                                {lockedBets.length > 0 && (
+                                                    <BetTimeSection
+                                                        title="🔒 Locked (In Progress)"
+                                                        bets={lockedBets}
+                                                        defaultExpanded={true}
+                                                        renderBet={renderBetCard}
+                                                    />
+                                                )}
+
+                                                {/* PROOFING Bets */}
+                                                {proofingBets.length > 0 && (
+                                                    <BetTimeSection
+                                                        title="⏳ Proofing"
+                                                        bets={proofingBets}
+                                                        defaultExpanded={true}
+                                                        renderBet={renderBetCard}
+                                                    />
+                                                )}
+
+                                                {/* RESOLVED Bets */}
+                                                {resolvedBets.length > 0 && (
+                                                    <BetTimeSection
+                                                        title="✅ Resolved"
+                                                        bets={resolvedBets}
+                                                        defaultExpanded={false}
+                                                        renderBet={renderBetCard}
+                                                    />
+                                                )}
+                                            </>
+                                        );
+                                    })()}
+                                </>
                             )}
                         </div>
                     </div>

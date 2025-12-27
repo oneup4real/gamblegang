@@ -4,13 +4,14 @@ import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { X, Plus, Trash, Pencil, Loader2 } from "lucide-react";
 import { useAuth } from "@/components/auth-provider";
-import { createBet, BetType, Bet, updateBet } from "@/lib/services/bet-service";
+import { createBet, BetType, Bet, updateBet, deleteBet } from "@/lib/services/bet-service";
 import { Button } from "@/components/ui/button";
 import { AIProgressOverlay } from "@/components/ai-progress-overlay";
 import { HelpTooltip, LabelWithHelp } from "@/components/ui/help-tooltip";
 import { useTranslations } from "next-intl";
 
 import { LeagueMode } from "@/lib/services/league-service";
+import { deleteField } from "firebase/firestore";
 
 interface CreateBetModalProps {
     leagueId: string;
@@ -385,9 +386,9 @@ export function CreateBetModal({ leagueId, leagueMode, aiAutoConfirmEnabled, lea
                     ...(type === "RANGE" ? { rangeMin: Number(rangeMin), rangeMax: Number(rangeMax), rangeUnit } : {}),
                     ...(type === "MATCH" ? { matchDetails: { homeTeam: matchHome, awayTeam: matchAway, date: evDate.toISOString() } } : {}),
                     autoConfirm: aiAutoConfirmEnabled !== false, // Default true if undefined
-                    autoConfirmDelay: 180,
+                    autoConfirmDelay: 120,
                     // Include or clear arcade point settings based on toggle
-                    ...(arcadeSettings ? { arcadePointSettings: arcadeSettings } : { arcadePointSettings: undefined })
+                    ...(arcadeSettings ? { arcadePointSettings: arcadeSettings } : { arcadePointSettings: deleteField() as any })
                 });
                 alert("Draft Updated!");
             } else {
@@ -413,6 +414,23 @@ export function CreateBetModal({ leagueId, leagueMode, aiAutoConfirmEnabled, lea
         } catch (error) {
             console.error(error);
             alert("Failed to create bet");
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleDelete = async () => {
+        if (!betToEdit || !user) return;
+        if (!confirm("Are you sure you want to delete this bet? This cannot be undone and all wagers will be refunded.")) return;
+
+        setLoading(true);
+        try {
+            await deleteBet(leagueId, betToEdit.id);
+            if (onSuccess) onSuccess();
+            onClose();
+        } catch (error) {
+            console.error("Failed to delete bet:", error);
+            alert("Failed to delete bet.");
         } finally {
             setLoading(false);
         }
@@ -793,7 +811,17 @@ export function CreateBetModal({ leagueId, leagueMode, aiAutoConfirmEnabled, lea
                                             </div>
                                         )}
 
-                                        <div className="flex justify-end pt-4">
+                                        <div className="flex justify-end pt-4 gap-2">
+                                            {betToEdit && (
+                                                <button
+                                                    type="button"
+                                                    onClick={handleDelete}
+                                                    disabled={loading}
+                                                    className="px-4 bg-white text-red-500 border-2 border-red-500 rounded-xl hover:bg-red-50 shadow-[4px_4px_0px_0px_rgba(239,68,68,1)] active:translate-y-[2px] active:shadow-[2px_2px_0px_0px_rgba(239,68,68,1)] transition-all font-bold"
+                                                >
+                                                    <Trash className="w-5 h-5" />
+                                                </button>
+                                            )}
                                             <Button
                                                 type="submit"
                                                 disabled={loading}

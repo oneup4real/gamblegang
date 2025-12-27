@@ -127,8 +127,7 @@ export function LoadingOverlay({ message = "Loading..." }: LoadingOverlayProps) 
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: 0.3 }}
-                    className="mt-6 text-3xl md:text-4xl font-black text-white tracking-tight"
-                    style={{ fontFamily: "Comic Neue, cursive" }}
+                    className="mt-6 text-4xl md:text-5xl font-comic text-white tracking-widest uppercase"
                 >
                     <span className="bg-gradient-to-r from-yellow-400 via-orange-400 to-red-400 bg-clip-text text-transparent">
                         Gamble

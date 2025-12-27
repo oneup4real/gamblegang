@@ -190,6 +190,13 @@ function LiveBetCard({ liveBet, compact }: LiveBetCardProps) {
                     {liveScore?.homeScore ?? "—"} - {liveScore?.awayScore ?? "—"}
                 </div>
                 <div className="text-xs font-bold uppercase text-gray-500 truncate">{awayTeam}</div>
+
+                {/* Note for missing live data */}
+                {!liveScore && (
+                    <div className="mt-1 text-[10px] font-bold text-orange-500 flex items-center justify-center gap-1">
+                        <span>⚠️ No Ticker Data</span>
+                    </div>
+                )}
             </div>
 
             {/* User's Pick */}

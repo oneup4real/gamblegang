@@ -13,14 +13,17 @@
 import { useAuth } from "@/components/auth-provider";
 import { useEffect, useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
-import { Plus, Trophy, Target, Zap, CheckCircle2, XCircle, Clock, Flame, Search, ChevronRight, Settings, Award, TrendingUp } from "lucide-react";
+import { Plus, ChevronRight, Settings, Award, Search } from "lucide-react";
 import { getUserLeagues, League, LEAGUE_COLOR_SCHEMES } from "@/lib/services/league-service";
 import { getUserDashboardStats, DashboardStats, DashboardBetWithWager } from "@/lib/services/bet-service";
 import { CreateLeagueModal } from "@/components/create-league-modal";
 import { motion, AnimatePresence } from "framer-motion";
 import Link from "next/link";
-import { TeamLogo } from "@/components/team-logo";
 import { LoadingOverlay } from "@/components/loading-overlay";
+import { StatsGauges, ActivityFeed, ActivityItem } from "@/components/dashboard";
+import { LeagueCard } from "@/components/dashboard/league-card";
+import { LiveBetsSection } from "@/components/live-bets-section";
+import { subDays } from "date-fns";
 
 // ============================================
 // COMPACT ACTION BADGES
@@ -66,66 +69,6 @@ function CompactActionBadges({
 }
 
 // ============================================
-// GLOBAL STATS PILLS
-// ============================================
-function GlobalStatsPills({
-    totalPoints,
-    wins,
-    losses,
-    activeBets,
-    winRate,
-    streak
-}: {
-    totalPoints: number;
-    wins: number;
-    losses: number;
-    activeBets: number;
-    winRate: number;
-    streak: number;
-}) {
-    return (
-        <div className="overflow-x-auto scrollbar-hide -mx-4 px-4">
-            <div className="flex gap-2 py-2">
-                {/* Total Points */}
-                <div className="shrink-0 rounded-full px-3 py-1.5 flex items-center gap-1.5 border-2 border-black shadow-[2px_2px_0_rgba(0,0,0,1)] bg-yellow-400">
-                    <Trophy className="w-3.5 h-3.5" />
-                    <span className="font-black text-sm text-black">{totalPoints.toLocaleString()}</span>
-                </div>
-
-                {/* Win Rate */}
-                <div className="shrink-0 rounded-full px-3 py-1.5 flex items-center gap-1.5 border-2 border-black shadow-[2px_2px_0_rgba(0,0,0,1)] bg-green-400">
-                    <Target className="w-3.5 h-3.5" />
-                    <span className="font-black text-sm text-black">{winRate}%</span>
-                </div>
-
-                {/* W/L */}
-                <div className="shrink-0 rounded-full px-3 py-1.5 flex items-center gap-1.5 border-2 border-black shadow-[2px_2px_0_rgba(0,0,0,1)] bg-white">
-                    <span className="font-black text-sm text-green-600">{wins}W</span>
-                    <span className="text-gray-400">/</span>
-                    <span className="font-black text-sm text-red-500">{losses}L</span>
-                </div>
-
-                {/* Active Bets */}
-                {activeBets > 0 && (
-                    <div className="shrink-0 rounded-full px-3 py-1.5 flex items-center gap-1.5 border-2 border-black shadow-[2px_2px_0_rgba(0,0,0,1)] bg-purple-400">
-                        <Zap className="w-3.5 h-3.5" />
-                        <span className="font-black text-sm text-black">{activeBets}</span>
-                    </div>
-                )}
-
-                {/* Streak */}
-                {streak !== 0 && (
-                    <div className={`shrink-0 rounded-full px-3 py-1.5 flex items-center gap-1.5 border-2 border-black shadow-[2px_2px_0_rgba(0,0,0,1)] ${streak > 0 ? 'bg-orange-400' : 'bg-blue-300'}`}>
-                        {streak > 0 ? <Flame className="w-3.5 h-3.5" /> : <span>❄️</span>}
-                        <span className="font-black text-sm text-black">{Math.abs(streak)}</span>
-                    </div>
-                )}
-            </div>
-        </div>
-    );
-}
-
-// ============================================
 // LEAGUE PILLS SELECTOR
 // ============================================
 function LeaguePillsSelector({
@@ -141,13 +84,13 @@ function LeaguePillsSelector({
 }) {
     return (
         <div className="overflow-x-auto scrollbar-hide -mx-4 px-4">
-            <div className="flex gap-2 py-2">
+            <div className="flex gap-2 pb-1">
                 {/* All button */}
                 <button
                     onClick={() => onSelect(null)}
-                    className={`shrink-0 px-4 py-2 rounded-xl font-bold text-sm border-2 transition-all ${selectedLeagueId === null
-                        ? "bg-black text-white border-black shadow-[2px_2px_0_rgba(0,0,0,0.3)]"
-                        : "bg-white border-gray-200 hover:border-gray-400"
+                    className={`shrink-0 px-3 py-1.5 rounded-lg font-bold text-xs border-2 transition-all ${selectedLeagueId === null
+                        ? "bg-white text-black border-black shadow-[2px_2px_0_rgba(0,0,0,1)]"
+                        : "bg-white text-gray-500 border-gray-200 hover:border-gray-400 hover:text-black"
                         }`}
                 >
                     All Leagues
@@ -161,9 +104,9 @@ function LeaguePillsSelector({
                         <button
                             key={league.id}
                             onClick={() => onSelect(league.id || null)}
-                            className={`shrink-0 px-4 py-2 rounded-xl font-bold text-sm border-2 transition-all flex items-center gap-2 ${isSelected
+                            className={`shrink-0 px-3 py-1.5 rounded-lg font-bold text-xs border-2 transition-all flex items-center gap-1.5 ${isSelected
                                 ? `bg-gradient-to-r ${colors.from} ${colors.to} text-white border-black shadow-[2px_2px_0_rgba(0,0,0,1)]`
-                                : "bg-white border-gray-200 hover:border-gray-400"
+                                : "bg-white text-gray-500 border-gray-200 hover:border-gray-400 hover:text-black"
                                 }`}
                         >
                             {league.name}
@@ -171,15 +114,6 @@ function LeaguePillsSelector({
                         </button>
                     );
                 })}
-
-                {/* Create new */}
-                <button
-                    onClick={onCreateNew}
-                    className="shrink-0 px-3 py-2 rounded-xl font-bold text-sm border-2 border-dashed border-gray-300 text-gray-400 hover:border-gray-500 hover:text-gray-600 flex items-center gap-1"
-                >
-                    <Plus className="w-4 h-4" />
-                    New
-                </button>
             </div>
         </div>
     );
@@ -283,58 +217,67 @@ function CompactBetRow({ bet }: { bet: DashboardBetWithWager }) {
 }
 
 // ============================================
-// BET SECTION
+// BET FILTER SECTION
 // ============================================
-function BetSection({
-    title,
-    bets,
-    emptyMessage,
-    showViewAll = false,
-    limit = 5
+function BetFilterSection({
+    activeTab,
+    setActiveTab,
+    searchQuery,
+    setSearchQuery,
+    stats
 }: {
-    title: string;
-    bets: DashboardBetWithWager[];
-    emptyMessage: string;
-    showViewAll?: boolean;
-    limit?: number;
+    activeTab: "active" | "available" | "history";
+    setActiveTab: (t: "active" | "available" | "history") => void;
+    searchQuery: string;
+    setSearchQuery: (q: string) => void;
+    stats: DashboardStats | null;
 }) {
-    const [showAll, setShowAll] = useState(false);
-    const displayBets = showAll ? bets : bets.slice(0, limit);
-
-    if (bets.length === 0) {
-        return (
-            <div className="text-center py-6 text-gray-400">
-                <p className="text-sm">{emptyMessage}</p>
-            </div>
-        );
-    }
+    const tabs = [
+        { key: "active", label: "Active", count: stats?.activeBets || 0, icon: "⚡" },
+        { key: "available", label: "Open", count: stats?.availableBets || 0, icon: "🎮" },
+        { key: "history", label: "History", count: (stats?.wonBets || 0) + (stats?.lostBets || 0), icon: "📜" },
+    ] as const;
 
     return (
         <div className="space-y-2">
-            <div className="flex items-center justify-between">
-                <h3 className="font-black text-sm text-gray-700">{title}</h3>
-                {bets.length > limit && !showAll && (
-                    <button
-                        onClick={() => setShowAll(true)}
-                        className="text-xs font-bold text-blue-600"
-                    >
-                        View all ({bets.length})
-                    </button>
-                )}
+            {/* Search Bar - More concise */}
+            <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                <input
+                    type="text"
+                    value={searchQuery}
+                    onChange={e => setSearchQuery(e.target.value)}
+                    placeholder="Find a bet..."
+                    className="w-full py-2.5 pl-9 pr-4 bg-white border-2 border-black rounded-xl text-sm font-bold shadow-[2px_2px_0_0_rgba(0,0,0,1)] focus:shadow-[4px_4px_0_0_rgba(0,0,0,1)] focus:-translate-y-0.5 transition-all outline-none"
+                />
             </div>
-            <div className="space-y-2">
-                {displayBets.map(bet => (
-                    <CompactBetRow key={bet.id} bet={bet} />
-                ))}
+
+            {/* Concise Tabs */}
+            <div className="flex gap-1.5 bg-gray-100 p-1.5 rounded-xl border border-black/5">
+                {tabs.map(tab => {
+                    const isActive = activeTab === tab.key;
+                    return (
+                        <button
+                            key={tab.key}
+                            onClick={() => setActiveTab(tab.key)}
+                            className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-sm font-bold transition-all ${isActive
+                                ? "bg-white text-black shadow-sm border border-black/10"
+                                : "text-gray-500 hover:text-black hover:bg-white/50"
+                                }`}
+                        >
+                            <span className="text-base">{tab.icon}</span>
+                            <span>{tab.label}</span>
+                            {/* Simple Count */}
+                            {tab.count > 0 && (
+                                <span className={`ml-0.5 text-[10px] px-1.5 py-0.5 rounded-full font-black ${isActive ? "bg-black text-white" : "bg-gray-200 text-gray-600"
+                                    }`}>
+                                    {tab.count}
+                                </span>
+                            )}
+                        </button>
+                    );
+                })}
             </div>
-            {showAll && bets.length > limit && (
-                <button
-                    onClick={() => setShowAll(false)}
-                    className="w-full text-xs font-bold text-gray-500 py-2"
-                >
-                    Show less
-                </button>
-            )}
         </div>
     );
 }
@@ -384,6 +327,7 @@ export function DashboardPageV2() {
     const [leagues, setLeagues] = useState<League[]>([]);
     const [stats, setStats] = useState<DashboardStats | null>(null);
     const [dataLoading, setDataLoading] = useState(true);
+    const [activityItems, setActivityItems] = useState<ActivityItem[]>([]);
 
     // UI state
     const [selectedLeagueId, setSelectedLeagueId] = useState<string | null>(null);
@@ -409,36 +353,136 @@ export function DashboardPageV2() {
         if (user) fetchLeagues();
     }, [user]);
 
-    // Fetch stats
+    // Fetch stats and generate activity
     useEffect(() => {
         async function fetchStats() {
             if (user && leagues.length > 0) {
                 const s = await getUserDashboardStats(user, leagues);
                 setStats(s);
+
+                // Helper to get league color (hex value from colorScheme)
+                const getLeagueColor = (leagueId: string) => {
+                    const league = leagues.find(l => l.id === leagueId);
+                    const scheme = league?.colorScheme || 'purple';
+                    // Map color scheme to a solid hex color
+                    const colorMap: Record<string, string> = {
+                        purple: '#8b5cf6',
+                        blue: '#3b82f6',
+                        green: '#22c55e',
+                        orange: '#f97316',
+                        gold: '#eab308',
+                        dark: '#374151',
+                        sunset: '#ec4899',
+                        ocean: '#14b8a6'
+                    };
+                    return colorMap[scheme] || '#6b7280';
+                };
+
+                // Generate activity items
+                const items: ActivityItem[] = [];
+
+                // Add won bets
+                s.wonBetsList.slice(0, 3).forEach((bet, idx) => {
+                    items.push({
+                        id: `won-${bet.id}`,
+                        type: "won",
+                        title: `Won: ${bet.question}`,
+                        points: bet.wager?.payout || 0,
+                        timestamp: subDays(new Date(), idx),
+                        leagueId: bet.leagueId,
+                        leagueName: bet.leagueName,
+                        leagueColor: getLeagueColor(bet.leagueId),
+                        betId: bet.id
+                    });
+                });
+
+                // Add lost bets
+                s.lostBetsList.slice(0, 2).forEach((bet, idx) => {
+                    items.push({
+                        id: `lost-${bet.id}`,
+                        type: "lost",
+                        title: `Lost: ${bet.question}`,
+                        points: -(bet.wager?.amount || 0),
+                        timestamp: subDays(new Date(), idx + 1),
+                        leagueId: bet.leagueId,
+                        leagueName: bet.leagueName,
+                        leagueColor: getLeagueColor(bet.leagueId),
+                        betId: bet.id
+                    });
+                });
+
+                // Add refunded bets
+                s.refundedBetsList.slice(0, 2).forEach((bet, idx) => {
+                    items.push({
+                        id: `refund-${bet.id}`,
+                        type: "resolved",
+                        title: `Refunded: ${bet.question}`,
+                        points: 0,
+                        timestamp: bet.resolvedAt?.toDate() || new Date(),
+                        leagueId: bet.leagueId,
+                        leagueName: bet.leagueName,
+                        leagueColor: getLeagueColor(bet.leagueId),
+                        betId: bet.id
+                    });
+                });
+
+                // Add pending proofing
+                s.pendingResultsList.filter(b => b.status === "PROOFING").slice(0, 2).forEach((bet, idx) => {
+                    items.push({
+                        id: `proofing-${bet.id}`,
+                        type: "vote_needed",
+                        title: `Vote needed: ${bet.question}`,
+                        timestamp: subDays(new Date(), idx),
+                        leagueId: bet.leagueId,
+                        leagueName: bet.leagueName,
+                        leagueColor: getLeagueColor(bet.leagueId),
+                        betId: bet.id
+                    });
+                });
+
+                items.sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
+                setActivityItems(items);
                 setDataLoading(false);
             }
         }
         fetchStats();
     }, [user, leagues]);
 
-    // Derived stats
-    const totalPoints = useMemo(() => {
-        return leagues.reduce((sum, l) => {
-            // This would need league member data - approximate for now
-            return sum;
-        }, 0);
-    }, [leagues]);
-
-    const wins = stats?.wonBets || 0;
-    const losses = stats?.lostBets || 0;
-    const winRate = wins + losses > 0 ? Math.round((wins / (wins + losses)) * 100) : 0;
-    const activeBets = stats?.activeBets || 0;
-
     // Filter bets by league
     const filterByLeague = (bets: DashboardBetWithWager[]) => {
         if (!selectedLeagueId) return bets;
         return bets.filter(b => b.leagueId === selectedLeagueId);
     };
+
+    // Compute filtered stats based on selected league
+    const filteredStats = useMemo(() => {
+        if (!stats) return null;
+
+        const activeBetsList = filterByLeague([...stats.activeBetsList, ...stats.pendingResultsList]);
+        const availableBetsList = filterByLeague(stats.availableBetsList);
+        const wonBetsList = filterByLeague(stats.wonBetsList);
+        const lostBetsList = filterByLeague(stats.lostBetsList);
+        const refundedBetsList = filterByLeague(stats.refundedBetsList);
+
+        return {
+            ...stats,
+            activeBets: activeBetsList.length,
+            availableBets: availableBetsList.length,
+            wonBets: wonBetsList.length,
+            lostBets: lostBetsList.length,
+        };
+    }, [stats, selectedLeagueId]);
+
+    // Derived stats
+    const totalPoints = useMemo(() => {
+        return leagues.reduce((sum, l) => sum, 0); // Placeholder
+    }, [leagues]);
+
+    const wins = filteredStats?.wonBets || 0;
+    const losses = filteredStats?.lostBets || 0;
+    const winRate = wins + losses > 0 ? Math.round((wins / (wins + losses)) * 100) : 0;
+    const activeBets = filteredStats?.activeBets || 0;
+    const pointsGained = filterByLeague(stats?.wonBetsList || []).reduce((sum, b) => sum + (b.wager?.payout || 0) - (b.wager?.amount || 0), 0);
 
     // Get current tab bets
     const getCurrentBets = () => {
@@ -460,7 +504,8 @@ export function DashboardPageV2() {
             const q = searchQuery.toLowerCase();
             bets = bets.filter(b => b.question.toLowerCase().includes(q));
         }
-        return bets;
+        // Deduplicate
+        return Array.from(new Map(bets.map(b => [b.id, b])).values());
     };
 
     if (loading || dataLoading) {
@@ -468,6 +513,11 @@ export function DashboardPageV2() {
     }
 
     if (!user) return null;
+
+    // Fix for duplicate badges: Calculate proofing count excluding items in toResolve list
+    const voteNeededCount = stats?.pendingResultsList.filter(b => b.status === "PROOFING").length || 0;
+    const toResolveListIds = new Set(stats?.toResolveList.map(b => b.id) || []);
+    const proofingCount = (stats?.pendingResultsList.filter(b => !toResolveListIds.has(b.id)).length) || 0;
 
     return (
         <div className="min-h-screen pb-24">
@@ -493,92 +543,66 @@ export function DashboardPageV2() {
                 {/* Action Badges */}
                 {stats && (
                     <CompactActionBadges
-                        voteNeeded={stats.pendingResultsList.filter(b => b.status === "PROOFING").length}
-                        proofing={stats.pendingResults}
+                        voteNeeded={voteNeededCount}
+                        proofing={proofingCount}
                         toResolve={stats.toResolve}
                         onNavigate={(leagueId, betId) => router.push(`/leagues/${leagueId}?bet=${betId}`)}
                     />
                 )}
 
-                {/* Stats Pills */}
-                <GlobalStatsPills
-                    totalPoints={totalPoints}
-                    wins={wins}
-                    losses={losses}
-                    activeBets={activeBets}
+
+
+                {/* 🔴 Live Bets Section */}
+                <LiveBetsSection userId={user.uid} />
+
+                {/* Stats Gauges (Bigger Indicators) */}
+                <StatsGauges
                     winRate={winRate}
-                    streak={0}
+                    activeBets={activeBets}
+                    maxActiveBets={Math.max(activeBets, 10)}
+                    pointsTrend={pointsGained > 0 ? Math.min(Math.round((pointsGained / 100) * 10), 100) : Math.max(Math.round((pointsGained / 100) * 10), -100)}
+                    winStreak={Math.min(wins, 5)}
                 />
 
-                {/* League Selector */}
-                <LeaguePillsSelector
-                    leagues={leagues}
-                    selectedLeagueId={selectedLeagueId}
-                    onSelect={setSelectedLeagueId}
-                    onCreateNew={() => setIsCreateModalOpen(true)}
-                />
-
-                {/* Leagues Quick Access */}
-                {leagues.length > 0 && !selectedLeagueId && (
-                    <div className="space-y-2">
-                        <h3 className="font-black text-sm text-gray-700">Your Leagues</h3>
-                        <div className="grid gap-2">
-                            {leagues.slice(0, 3).map(league => {
-                                const colors = LEAGUE_COLOR_SCHEMES[league.colorScheme || 'purple'];
-                                return (
-                                    <Link
-                                        key={league.id}
-                                        href={`/leagues/${league.id}`}
-                                        className={`flex items-center gap-3 p-3 rounded-xl bg-gradient-to-r ${colors.from} ${colors.to} border-2 border-black shadow-[2px_2px_0_rgba(0,0,0,1)] hover:translate-y-[1px] hover:shadow-[1px_1px_0_rgba(0,0,0,1)] transition-all`}
-                                    >
-                                        <div className="flex-1 min-w-0 text-white">
-                                            <p className="font-black text-sm truncate">{league.name}</p>
-                                            <p className="text-xs opacity-80">
-                                                {league.mode === "STANDARD" ? "🎮 Arcade" : "💰 Zero-Sum"}
-                                            </p>
-                                        </div>
-                                        <ChevronRight className="w-5 h-5 text-white/80" />
-                                    </Link>
-                                );
-                            })}
-                            {leagues.length > 3 && (
-                                <button className="text-sm font-bold text-gray-500 py-2">
-                                    View all {leagues.length} leagues
-                                </button>
-                            )}
-                        </div>
+                {/* Your Leagues Carousel */}
+                <div>
+                    <h2 className="text-lg font-black uppercase mb-3 px-1">Your Leagues</h2>
+                    <div className="flex gap-4 overflow-x-auto pb-4 -mx-4 px-4 scrollbar-hide snap-x">
+                        {leagues.map((league, idx) => (
+                            <div key={league.id} className="min-w-[280px] snap-center">
+                                <LeagueCard
+                                    league={league}
+                                    rank={idx + 1}
+                                    points={500} // Placeholder until points are fetched per league
+                                    activeBets={stats?.activeBetsList.filter(b => b.leagueId === league.id).length}
+                                    pendingBets={stats?.pendingResultsList.filter(b => b.leagueId === league.id).length}
+                                    winRate={winRate}
+                                />
+                            </div>
+                        ))}
                     </div>
-                )}
-
-                {/* Bet Tabs */}
-                <div className="flex gap-1 p-1 bg-gray-100 rounded-xl">
-                    {[
-                        { key: "active", label: "Active", count: stats?.activeBets || 0 },
-                        { key: "available", label: "Available", count: stats?.availableBets || 0 },
-                        { key: "history", label: "History", count: (stats?.wonBets || 0) + (stats?.lostBets || 0) },
-                    ].map(tab => (
-                        <button
-                            key={tab.key}
-                            onClick={() => setActiveTab(tab.key as any)}
-                            className={`flex-1 py-2 rounded-lg font-bold text-xs transition-all ${activeTab === tab.key
-                                ? "bg-white text-black shadow border border-gray-200"
-                                : "text-gray-500"
-                                }`}
-                        >
-                            {tab.label} {tab.count > 0 && `(${tab.count})`}
-                        </button>
-                    ))}
                 </div>
 
-                {/* Search */}
-                <div className="relative">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-                    <input
-                        type="text"
-                        value={searchQuery}
-                        onChange={e => setSearchQuery(e.target.value)}
-                        placeholder="Search bets..."
-                        className="w-full pl-9 pr-4 py-2 bg-gray-50 border-2 border-gray-200 rounded-xl text-sm focus:border-black outline-none"
+                {/* Activity Feed */}
+                <div className="pt-2">
+                    <ActivityFeed items={activityItems} maxItems={5} />
+                </div>
+
+                {/* Filter Group */}
+                <div className="space-y-1">
+                    <LeaguePillsSelector
+                        leagues={leagues}
+                        selectedLeagueId={selectedLeagueId}
+                        onSelect={setSelectedLeagueId}
+                        onCreateNew={() => setIsCreateModalOpen(true)}
+                    />
+
+                    <BetFilterSection
+                        activeTab={activeTab}
+                        setActiveTab={setActiveTab}
+                        searchQuery={searchQuery}
+                        setSearchQuery={setSearchQuery}
+                        stats={filteredStats}
                     />
                 </div>
 

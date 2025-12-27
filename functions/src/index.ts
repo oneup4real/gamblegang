@@ -51,6 +51,7 @@ interface Bet {
     status: string;
     // Smart Routing fields
     dataSource?: "API" | "AI";
+    eventEndDate?: any; // Added support for eventEndDate
     sportsDbEventId?: string;
     sportsDbLeagueId?: string;
     sportsDbTeamId?: string;
@@ -578,7 +579,17 @@ export const autoResolveBets = onSchedule(
                 // AI mode: Use traditional delay buffer
                 const delayMinutes = bet.autoConfirmDelay || 180;
                 const delayMs = delayMinutes * 60 * 1000;
-                const resolveTime = eventDate.getTime() + delayMs;
+
+                // Use eventEndDate if available, otherwise eventDate
+                let resolutionBaseDate = eventDate;
+                if (bet.eventEndDate) {
+                    const endD = bet.eventEndDate.toDate ? bet.eventEndDate.toDate() : new Date(bet.eventEndDate);
+                    if (endD && !isNaN(endD.getTime())) {
+                        resolutionBaseDate = endD;
+                    }
+                }
+
+                const resolveTime = resolutionBaseDate.getTime() + delayMs;
 
                 if (now < resolveTime) {
                     const waitMin = Math.ceil((resolveTime - now) / 60000);
