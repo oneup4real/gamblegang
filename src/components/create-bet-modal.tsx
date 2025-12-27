@@ -49,11 +49,11 @@ export function CreateBetModal({ leagueId, leagueMode, aiAutoConfirmEnabled, lea
 
     // Per-bet Arcade Point Settings (Optional Override)
     const [useCustomPoints, setUseCustomPoints] = useState(false);
-    const [customExactPts, setCustomExactPts] = useState(leagueMatchSettings?.exact || 3);
-    const [customDiffPts, setCustomDiffPts] = useState(leagueMatchSettings?.diff || 2);
-    const [customWinnerPts, setCustomWinnerPts] = useState(leagueMatchSettings?.winner || 1);
-    const [customChoicePts, setCustomChoicePts] = useState(leagueMatchSettings?.choice || 1);
-    const [customRangePts, setCustomRangePts] = useState(leagueMatchSettings?.range || 1);
+    const [customExactPts, setCustomExactPts] = useState<number | "">(leagueMatchSettings?.exact || 3);
+    const [customDiffPts, setCustomDiffPts] = useState<number | "">(leagueMatchSettings?.diff || 2);
+    const [customWinnerPts, setCustomWinnerPts] = useState<number | "">(leagueMatchSettings?.winner || 1);
+    const [customChoicePts, setCustomChoicePts] = useState<number | "">(leagueMatchSettings?.choice || 1);
+    const [customRangePts, setCustomRangePts] = useState<number | "">(leagueMatchSettings?.range || 1);
     const [customExcludeDrawDiff, setCustomExcludeDrawDiff] = useState(leagueMatchSettings?.excludeDrawDiff || false);
 
     // Choice Logic
@@ -366,12 +366,13 @@ export function CreateBetModal({ leagueId, leagueMode, aiAutoConfirmEnabled, lea
             const evEndDate = eventEndDateStr ? new Date(eventEndDateStr) : undefined;
 
             // Build arcade point settings object (only if custom points enabled in arcade mode)
+            // Convert empty strings to 0 for the final values
             const arcadeSettings = (leagueMode === "STANDARD" && useCustomPoints) ? {
-                exact: customExactPts,
-                diff: customDiffPts,
-                winner: customWinnerPts,
-                choice: customChoicePts,
-                range: customRangePts,
+                exact: customExactPts === "" ? 0 : customExactPts,
+                diff: customDiffPts === "" ? 0 : customDiffPts,
+                winner: customWinnerPts === "" ? 0 : customWinnerPts,
+                choice: customChoicePts === "" ? 0 : customChoicePts,
+                range: customRangePts === "" ? 0 : customRangePts,
                 excludeDrawDiff: customExcludeDrawDiff
             } : undefined;
 
@@ -624,7 +625,7 @@ export function CreateBetModal({ leagueId, leagueMode, aiAutoConfirmEnabled, lea
                                                                             type="number"
                                                                             min={0}
                                                                             value={customExactPts}
-                                                                            onChange={(e) => setCustomExactPts(Number(e.target.value))}
+                                                                            onChange={(e) => setCustomExactPts(e.target.value === "" ? "" : Number(e.target.value))}
                                                                             className="w-full h-10 px-2 rounded-lg border-2 border-black font-bold text-center"
                                                                         />
                                                                     </div>
@@ -637,7 +638,7 @@ export function CreateBetModal({ leagueId, leagueMode, aiAutoConfirmEnabled, lea
                                                                             type="number"
                                                                             min={0}
                                                                             value={customDiffPts}
-                                                                            onChange={(e) => setCustomDiffPts(Number(e.target.value))}
+                                                                            onChange={(e) => setCustomDiffPts(e.target.value === "" ? "" : Number(e.target.value))}
                                                                             className="w-full h-10 px-2 rounded-lg border-2 border-black font-bold text-center"
                                                                         />
                                                                     </div>
@@ -650,7 +651,7 @@ export function CreateBetModal({ leagueId, leagueMode, aiAutoConfirmEnabled, lea
                                                                             type="number"
                                                                             min={0}
                                                                             value={customWinnerPts}
-                                                                            onChange={(e) => setCustomWinnerPts(Number(e.target.value))}
+                                                                            onChange={(e) => setCustomWinnerPts(e.target.value === "" ? "" : Number(e.target.value))}
                                                                             className="w-full h-10 px-2 rounded-lg border-2 border-black font-bold text-center"
                                                                         />
                                                                     </div>
@@ -681,7 +682,7 @@ export function CreateBetModal({ leagueId, leagueMode, aiAutoConfirmEnabled, lea
                                                                     type="number"
                                                                     min={0}
                                                                     value={customChoicePts}
-                                                                    onChange={(e) => setCustomChoicePts(Number(e.target.value))}
+                                                                    onChange={(e) => setCustomChoicePts(e.target.value === "" ? "" : Number(e.target.value))}
                                                                     className="w-full h-10 px-2 rounded-lg border-2 border-black font-bold text-center"
                                                                 />
                                                             </div>
@@ -694,7 +695,7 @@ export function CreateBetModal({ leagueId, leagueMode, aiAutoConfirmEnabled, lea
                                                                     type="number"
                                                                     min={0}
                                                                     value={customRangePts}
-                                                                    onChange={(e) => setCustomRangePts(Number(e.target.value))}
+                                                                    onChange={(e) => setCustomRangePts(e.target.value === "" ? "" : Number(e.target.value))}
                                                                     className="w-full h-10 px-2 rounded-lg border-2 border-black font-bold text-center"
                                                                 />
                                                             </div>

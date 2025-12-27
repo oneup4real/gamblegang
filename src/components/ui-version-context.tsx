@@ -23,7 +23,7 @@ const UIVersionContext = createContext<UIVersionContextType | undefined>(undefin
 const STORAGE_KEY = "gamblegang_ui_version";
 
 export function UIVersionProvider({ children }: { children: ReactNode }) {
-    const [version, setVersionState] = useState<UIVersion>("v1");
+    const [version, setVersionState] = useState<UIVersion>("v2");
     const [isHydrated, setIsHydrated] = useState(false);
 
     // Load saved preference on mount

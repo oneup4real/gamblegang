@@ -20,6 +20,7 @@ import { db } from "@/lib/firebase/config";
 import { League, LeagueMember, LEAGUE_COLOR_SCHEMES, LeagueColorScheme } from "@/lib/services/league-service";
 import { Bet, Wager, BetStatus } from "@/lib/services/bet-service";
 import { BetCardV2 } from "@/components/v2/bet-card-v2";
+import { BetCarousel } from "./bet-carousel";
 import { motion, AnimatePresence } from "framer-motion";
 import { useTranslations } from "next-intl";
 import { useLiveLeaderboard } from "@/hooks/use-live-leaderboard";
@@ -27,7 +28,7 @@ import {
     ArrowLeft, Crown, User as UserIcon, Settings, Plus, Flag,
     Coins, Trophy, Megaphone, MessageSquare, Activity, Target,
     TrendingUp, ChevronDown, ChevronUp, QrCode, Flame, Zap,
-    Users, Search
+    Users, Search, GalleryHorizontal, List
 } from "lucide-react";
 import Link from "next/link";
 import QRCode from "react-qr-code";
@@ -338,7 +339,7 @@ function BetFilterTabs({
     const tabs = [
         { key: "all", label: "All", count: counts.all },
         { key: "open", label: "Open", count: counts.open },
-        { key: "active", label: "My Bets", count: counts.active },
+        { key: "active", label: "Active Bets", count: counts.active },
         { key: "resolved", label: "History", count: counts.resolved },
     ];
 
@@ -394,6 +395,9 @@ export function LeaguePageV2() {
     const [analyticsMetric, setAnalyticsMetric] = useState<"profit" | "roi" | "rank">("profit");
     const [analyticsData, setAnalyticsData] = useState<any[]>([]);
     const [analyticsLoading, setAnalyticsLoading] = useState(false);
+
+    // Bet View Layout (List vs Carousel)
+    const [betLayout, setBetLayout] = useState<"list" | "carousel">("list");
 
     // Live leaderboard
     const { members: liveMembers, hasLiveBets } = useLiveLeaderboard(leagueId, members, allMembersActiveWagers);
@@ -552,7 +556,7 @@ export function LeaguePageV2() {
         if (betFilter === "open") {
             filtered = filtered.filter(b => b.status === "OPEN");
         } else if (betFilter === "active") {
-            filtered = filtered.filter(b => myWagers[b.id]);
+            filtered = filtered.filter(b => myWagers[b.id] && b.status !== "RESOLVED" && b.status !== "INVALID");
         } else if (betFilter === "resolved") {
             filtered = filtered.filter(b => b.status === "RESOLVED" || b.status === "INVALID");
         }
@@ -570,7 +574,7 @@ export function LeaguePageV2() {
     const filterCounts = useMemo(() => ({
         all: bets.filter(b => b.status !== "DRAFT").length,
         open: bets.filter(b => b.status === "OPEN").length,
-        active: Object.keys(myWagers).length,
+        active: bets.filter(b => myWagers[b.id] && b.status !== "RESOLVED" && b.status !== "INVALID").length,
         resolved: bets.filter(b => b.status === "RESOLVED" || b.status === "INVALID").length
     }), [bets, myWagers]);
 
@@ -611,6 +615,25 @@ export function LeaguePageV2() {
     const refreshData = () => {
         // Triggers re-fetch through listeners
     };
+
+    const renderBetCard = (bet: Bet, forceExpanded?: boolean) => (
+        <BetCardV2
+            key={bet.id}
+            bet={bet}
+            userPoints={myPoints}
+            userWager={myWagers[bet.id]}
+            allWagers={allBetWagers[bet.id] || []}
+            mode={league.mode}
+            powerUps={myProfile?.powerUps || league.arcadePowerUpSettings}
+            onWagerSuccess={refreshData}
+            isOwnerOverride={isOwner}
+            onEdit={(bet) => {
+                setBetToEdit(bet);
+                setIsBetModalOpen(true);
+            }}
+            initialExpanded={forceExpanded ?? false}
+        />
+    );
 
     return (
         <div className="min-h-screen pb-24">
@@ -799,15 +822,39 @@ export function LeaguePageV2() {
                 ) : (
                     <div className="space-y-3">
                         {/* Search */}
-                        <div className="relative">
-                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-                            <input
-                                type="text"
-                                value={searchQuery}
-                                onChange={e => setSearchQuery(e.target.value)}
-                                placeholder="Search bets..."
-                                className="w-full pl-9 pr-4 py-2 bg-gray-50 border-2 border-gray-200 rounded-xl text-sm focus:border-black outline-none"
-                            />
+                        <div className="flex items-center gap-2">
+                            <div className="relative flex-1">
+                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                                <input
+                                    type="text"
+                                    value={searchQuery}
+                                    onChange={e => setSearchQuery(e.target.value)}
+                                    placeholder="Search bets..."
+                                    className="w-full pl-9 pr-4 py-2 bg-gray-50 border-2 border-gray-200 rounded-xl text-sm focus:border-black outline-none"
+                                />
+                            </div>
+                            <div className="flex items-center bg-gray-100 p-1 rounded-lg border border-gray-200 shrink-0">
+                                <button
+                                    onClick={() => setBetLayout("list")}
+                                    className={`p-1.5 rounded-md transition-all ${betLayout === 'list'
+                                        ? "bg-white text-black shadow-sm"
+                                        : "text-gray-400 hover:text-gray-600"
+                                        }`}
+                                    title="List View"
+                                >
+                                    <List className="w-4 h-4" />
+                                </button>
+                                <button
+                                    onClick={() => setBetLayout("carousel")}
+                                    className={`p-1.5 rounded-md transition-all ${betLayout === 'carousel'
+                                        ? "bg-white text-black shadow-sm"
+                                        : "text-gray-400 hover:text-gray-600"
+                                        }`}
+                                    title="Carousel View"
+                                >
+                                    <GalleryHorizontal className="w-4 h-4" />
+                                </button>
+                            </div>
                         </div>
 
                         {/* Filter Tabs */}
@@ -833,28 +880,16 @@ export function LeaguePageV2() {
                                     <p className="font-bold">No bets found</p>
                                     <p className="text-sm">Try a different filter or search</p>
                                 </div>
+                            ) : betLayout === "carousel" ? (
+                                <div className="py-2">
+                                    <BetCarousel
+                                        items={filteredBets}
+                                        renderItem={(bet: Bet) => renderBetCard(bet, true)}
+                                    />
+                                </div>
                             ) : (
                                 <>
-                                    {/* Helper to render a bet card with all wagers */}
                                     {(() => {
-                                        const renderBetCard = (bet: Bet) => (
-                                            <BetCardV2
-                                                key={bet.id}
-                                                bet={bet}
-                                                userPoints={myPoints}
-                                                userWager={myWagers[bet.id]}
-                                                allWagers={allBetWagers[bet.id] || []}
-                                                mode={league.mode}
-                                                powerUps={myProfile?.powerUps || league.arcadePowerUpSettings}
-                                                onWagerSuccess={refreshData}
-                                                isOwnerOverride={isOwner}
-                                                onEdit={(bet) => {
-                                                    setBetToEdit(bet);
-                                                    setIsBetModalOpen(true);
-                                                }}
-                                            />
-                                        );
-
                                         const now = new Date();
 
                                         // Categorize bets

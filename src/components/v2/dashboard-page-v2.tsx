@@ -13,7 +13,9 @@
 import { useAuth } from "@/components/auth-provider";
 import { useEffect, useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
-import { Plus, ChevronRight, Settings, Award, Search } from "lucide-react";
+import { Plus, ChevronRight, Settings, Award, Search, List, GalleryHorizontal } from "lucide-react";
+import { BetCarousel } from "./bet-carousel";
+import { BetCardV2 } from "@/components/v2/bet-card-v2";
 import { getUserLeagues, League, LEAGUE_COLOR_SCHEMES } from "@/lib/services/league-service";
 import { getUserDashboardStats, DashboardStats, DashboardBetWithWager } from "@/lib/services/bet-service";
 import { CreateLeagueModal } from "@/components/create-league-modal";
@@ -224,13 +226,17 @@ function BetFilterSection({
     setActiveTab,
     searchQuery,
     setSearchQuery,
-    stats
+    stats,
+    layout,
+    setLayout
 }: {
     activeTab: "active" | "available" | "history";
     setActiveTab: (t: "active" | "available" | "history") => void;
     searchQuery: string;
     setSearchQuery: (q: string) => void;
     stats: DashboardStats | null;
+    layout: "list" | "carousel";
+    setLayout: (l: "list" | "carousel") => void;
 }) {
     const tabs = [
         { key: "active", label: "Active", count: stats?.activeBets || 0, icon: "⚡" },
@@ -252,31 +258,57 @@ function BetFilterSection({
                 />
             </div>
 
-            {/* Concise Tabs */}
-            <div className="flex gap-1.5 bg-gray-100 p-1.5 rounded-xl border border-black/5">
-                {tabs.map(tab => {
-                    const isActive = activeTab === tab.key;
-                    return (
-                        <button
-                            key={tab.key}
-                            onClick={() => setActiveTab(tab.key)}
-                            className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-sm font-bold transition-all ${isActive
-                                ? "bg-white text-black shadow-sm border border-black/10"
-                                : "text-gray-500 hover:text-black hover:bg-white/50"
-                                }`}
-                        >
-                            <span className="text-base">{tab.icon}</span>
-                            <span>{tab.label}</span>
-                            {/* Simple Count */}
-                            {tab.count > 0 && (
-                                <span className={`ml-0.5 text-[10px] px-1.5 py-0.5 rounded-full font-black ${isActive ? "bg-black text-white" : "bg-gray-200 text-gray-600"
-                                    }`}>
-                                    {tab.count}
-                                </span>
-                            )}
-                        </button>
-                    );
-                })}
+            <div className="flex gap-2">
+                {/* Concise Tabs */}
+                <div className="flex-1 flex gap-1.5 bg-gray-100 p-1.5 rounded-xl border border-black/5">
+                    {tabs.map(tab => {
+                        const isActive = activeTab === tab.key;
+                        return (
+                            <button
+                                key={tab.key}
+                                onClick={() => setActiveTab(tab.key)}
+                                className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-sm font-bold transition-all ${isActive
+                                    ? "bg-white text-black shadow-sm border border-black/10"
+                                    : "text-gray-500 hover:text-black hover:bg-white/50"
+                                    }`}
+                            >
+                                <span className="text-base">{tab.icon}</span>
+                                <span>{tab.label}</span>
+                                {/* Simple Count */}
+                                {tab.count > 0 && (
+                                    <span className={`ml-0.5 text-[10px] px-1.5 py-0.5 rounded-full font-black ${isActive ? "bg-black text-white" : "bg-gray-200 text-gray-600"
+                                        }`}>
+                                        {tab.count}
+                                    </span>
+                                )}
+                            </button>
+                        );
+                    })}
+                </div>
+
+                {/* Layout Toggle */}
+                <div className="flex items-center bg-gray-100 p-1.5 rounded-xl border border-black/5">
+                    <button
+                        onClick={() => setLayout("list")}
+                        className={`p-2 rounded-lg transition-all ${layout === 'list'
+                            ? "bg-white text-black shadow-sm border border-black/10"
+                            : "text-gray-400 hover:text-gray-600"
+                            }`}
+                        title="List View"
+                    >
+                        <List className="w-5 h-5" />
+                    </button>
+                    <button
+                        onClick={() => setLayout("carousel")}
+                        className={`p-2 rounded-lg transition-all ${layout === 'carousel'
+                            ? "bg-white text-black shadow-sm border border-black/10"
+                            : "text-gray-400 hover:text-gray-600"
+                            }`}
+                        title="Carousel View"
+                    >
+                        <GalleryHorizontal className="w-5 h-5" />
+                    </button>
+                </div>
             </div>
         </div>
     );
@@ -333,6 +365,7 @@ export function DashboardPageV2() {
     const [selectedLeagueId, setSelectedLeagueId] = useState<string | null>(null);
     const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
     const [activeTab, setActiveTab] = useState<"active" | "available" | "history">("active");
+    const [layout, setLayout] = useState<"list" | "carousel">("list");
     const [searchQuery, setSearchQuery] = useState("");
 
     // Auth check
@@ -603,6 +636,8 @@ export function DashboardPageV2() {
                         searchQuery={searchQuery}
                         setSearchQuery={setSearchQuery}
                         stats={filteredStats}
+                        layout={layout}
+                        setLayout={setLayout}
                     />
                 </div>
 
@@ -618,6 +653,26 @@ export function DashboardPageV2() {
                             <p className="text-sm">
                                 {activeTab === "available" ? "Join a league to see bets" : "Check back later"}
                             </p>
+                        </div>
+                    ) : layout === "carousel" ? (
+                        <div className="py-2">
+                            <BetCarousel
+                                items={getCurrentBets()}
+                                renderItem={(bet) => {
+                                    const league = leagues.find(l => l.id === bet.leagueId);
+                                    return (
+                                        <BetCardV2
+                                            key={bet.id}
+                                            bet={bet}
+                                            userPoints={0} // Placeholder as we don't track points in dashboard
+                                            userWager={bet.wager as any}
+                                            mode={league?.mode || "STANDARD"}
+                                            onWagerSuccess={() => { }}
+                                            initialExpanded={true}
+                                        />
+                                    );
+                                }}
+                            />
                         </div>
                     ) : (
                         getCurrentBets().map(bet => (

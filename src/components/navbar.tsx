@@ -11,12 +11,18 @@ import { UIVersionToggleCompact } from "@/components/ui-version-toggle";
 import { doc, getDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase/config";
 
+import { useParams } from "next/navigation";
+
 export function NavBar() {
     const { user } = useAuth();
+    const params = useParams();
+    const leagueId = params?.leagueId as string | undefined;
+
     const [isManualOpen, setIsManualOpen] = useState(false);
     const [isSettingsOpen, setIsSettingsOpen] = useState(false);
     const [userPhotoURL, setUserPhotoURL] = useState<string | null>(null);
     const [isSuperAdmin, setIsSuperAdmin] = useState(false);
+    const [isLeagueOwner, setIsLeagueOwner] = useState(false);
 
     // Fetch user's photoURL and admin status from Firestore
     useEffect(() => {
@@ -40,6 +46,29 @@ export function NavBar() {
 
         fetchUserProfile();
     }, [user]);
+
+    // Check league ownership if in league context
+    useEffect(() => {
+        async function checkLeagueOwnership() {
+            if (!user || !leagueId) {
+                setIsLeagueOwner(false);
+                return;
+            }
+
+            try {
+                const leagueDoc = await getDoc(doc(db, "leagues", leagueId));
+                if (leagueDoc.exists() && leagueDoc.data().ownerId === user.uid) {
+                    setIsLeagueOwner(true);
+                } else {
+                    setIsLeagueOwner(false);
+                }
+            } catch (e) {
+                console.error("Error checking league owner", e);
+                setIsLeagueOwner(false);
+            }
+        }
+        checkLeagueOwnership();
+    }, [user, leagueId]);
 
     if (!user) return null;
 
@@ -73,7 +102,7 @@ export function NavBar() {
                             <HelpCircle className="w-6 h-6 text-black" />
                         </button>
 
-                        <UIVersionToggleCompact />
+                        {(isSuperAdmin || isLeagueOwner) && <UIVersionToggleCompact />}
 
                         <NotificationBell />
 
